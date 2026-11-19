@@ -32,6 +32,7 @@ AudioPanel::AudioPanel (AudioEngine& e)
     style::body (playLabel, "Play-through");
     style::body (toneLabel, "Test tone on return");
     style::body (dropoutLabel, {});
+    style::body (glitchLabel, {});
     style::body (inputsLabel, "Inputs");
     style::body (returnsLabel, "Returns");
     inputsLabel.setColour (juce::Label::textColourId, style::textDim);
@@ -91,6 +92,11 @@ AudioPanel::AudioPanel (AudioEngine& e)
     sweepButton.onClick   = [this] { engine.measure (sweepSizes); };
     resetButton.onClick   = [this] { engine.resetDropoutStats(); updateDropoutLine(); };
 
+    glitchButton.setTooltip ("Sends a steady tone out to the mixer and counts every break in it as it comes back. "
+                             "Play-through is silent while this is on.");
+    glitchButton.setColour (juce::TextButton::buttonOnColourId, style::green.darker (0.3f));
+    glitchButton.onClick  = [this] { engine.setGlitchCheck (! engine.glitchCheckOn()); updateGlitchLine(); };
+
     for (int r = 0; r < numReturns; ++r)
     {
         auto* button = toneButtons.add (new juce::TextButton (juce::String (r + 1)));
@@ -110,6 +116,7 @@ AudioPanel::AudioPanel (AudioEngine& e)
     for (auto* c : std::initializer_list<juce::Component*> { &deviceLabel, &deviceBox, &bufferLabel, &bufferBox, &panelButton,
                                                              &verdict, &measureButton, &sweepButton, &pingLabel, &pingBox,
                                                              &playLabel, &playBox, &resetButton, &dropoutLabel,
+                                                             &glitchButton, &glitchLabel,
                                                              &toneLabel, &inputsLabel, &inputMeters, &returnsLabel,
                                                              &returnMeters, &resultsView })
         addAndMakeVisible (c);
@@ -164,6 +171,11 @@ void AudioPanel::resized()
     resetButton.setBounds (r.removeFromRight (120));
     r.removeFromRight (10);
     dropoutLabel.setBounds (r);
+
+    r = row();
+    glitchButton.setBounds (r.removeFromLeft (150));
+    r.removeFromLeft (10);
+    glitchLabel.setBounds (r);
 
     auto meters = area.removeFromTop (64);
     area.removeFromTop (8);
@@ -233,6 +245,7 @@ void AudioPanel::syncToEngine()
     setControlsEnabled();
     updateVerdict();
     updateDropoutLine();
+    updateGlitchLine();
 }
 
 void AudioPanel::setControlsEnabled()
@@ -248,6 +261,7 @@ void AudioPanel::setControlsEnabled()
     pingBox.setEnabled (free);
     playBox.setEnabled (open && free);
     resetButton.setEnabled (open);
+    glitchButton.setEnabled (open && free);
 
     for (auto* button : toneButtons)
         button->setEnabled (open && free);
@@ -372,6 +386,50 @@ void AudioPanel::updateDropoutLine()
                           juce::dontSendNotification);
 }
 
+void AudioPanel::updateGlitchLine()
+{
+    using State = GlitchStats::State;
+    const auto found = engine.glitchStats();
+    const bool on = engine.isOpen() && found.state != State::off;
+
+    glitchButton.setToggleState (on, juce::dontSendNotification);
+    glitchButton.setButtonText (on ? "Stop glitch check" : "Glitch check");
+
+    auto colour = style::textDim;
+    juce::String text;
+
+    if (! engine.isOpen())
+    {
+    }
+    else if (! on)
+    {
+        text = "Off. Sends a steady tone round the mixer and counts every break in it. Play-through is silent while it runs.";
+    }
+    else if (found.state == State::notHeard)
+    {
+        colour = style::amber;
+        text = "The tone is not coming back cleanly. On the CQ, check the USB stereo channel's fader is up and not muted.";
+    }
+    else if (found.state == State::listening)
+    {
+        colour = found.seconds > 0.0 ? style::amber : style::textMain;
+        text = found.seconds > 0.0 ? "The tone has gone missing: listening for it again.     Glitches so far: " + juce::String (found.glitches)
+                                   : juce::String ("Listening for the tone...");
+    }
+    else
+    {
+        const auto seconds = (int) found.seconds;
+        colour = found.glitches == 0 ? style::textMain : style::amber;
+        text = "Tone watched  " + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
+                 + "     Glitches: " + juce::String (found.glitches)
+                 + "     Heard on " + inputName (found.input, engine.isCQ())
+                 + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB";
+    }
+
+    glitchLabel.setColour (juce::Label::textColourId, colour);
+    glitchLabel.setText (text, juce::dontSendNotification);
+}
+
 void AudioPanel::timerCallback()
 {
     engine.tick();
@@ -405,6 +463,7 @@ void AudioPanel::timerCallback()
     if (++ticks % 10 == 0)
     {
         updateDropoutLine();
+        updateGlitchLine();
 
         if (! measuring && engine.isOpen() && engine.bufferSize() != bufferBox.getSelectedId())
             syncToEngine();     // the driver changed its own buffer size (from its settings window)

@@ -64,6 +64,19 @@ If the box says **NOT HEARD**, the chirp is not reaching the main output: check 
 
 If the sound ever sticks at full level, the app switches play-through off by itself and says so.
 
+### Part B2: the glitch check (leave it running, no playing needed)
+
+Some glitches happen in the driver or the USB link, where the Dropout watch cannot see them. The glitch check catches those too. It sends a steady two-note tone out to the mixer, listens for it coming back, and counts every break in it.
+
+1. No cable is needed. On the CQ, keep the **USB** stereo channel's fader up, and pull the faders for channels 1 to 10 right down.
+2. Turn your speakers down or off if you do not want to listen to the tone. The check works either way.
+3. In the app, click **Glitch check**. Within a couple of seconds the line beside it should read **Tone watched**, with a running time and **Glitches: 0**.
+4. Leave it for 30 minutes and use the laptop as you normally would at a gig.
+5. Click **Copy report** and paste it to Claude. The report lists how many glitches there were and when each one happened.
+6. Click **Stop glitch check** when you are done. Play-through is silent while the check runs and comes back when you stop it.
+
+If the line says the tone is not coming back cleanly, check the USB stereo channel is not muted and its fader is up.
+
 ### Part C: check each return arrives where it should (about 10 minutes)
 
 This part changes where some CQ channels take their sound from, so **save your scene on the CQ first** and recall it afterwards.
@@ -111,6 +124,7 @@ GigRig --report report.txt      # write the device report, no window
 | --- | --- |
 | `src/AudioEngine.*` | Opens the audio device, passes audio through, runs latency measurements and counts dropouts |
 | `src/LatencyProbe.*` | Plays a chirp, records every input and finds how many samples later it came back |
+| `src/GlitchWatch.*` | Sends a steady two-note tone, cancels it from what comes back and counts every break |
 | `src/AudioPanel.*` | The stage 1 tab |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |

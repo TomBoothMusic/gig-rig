@@ -330,6 +330,97 @@ juce::String runSelfTest (bool& passed)
         check (outData[10][5] <= 1.0f && juce::approximatelyEqual (outData[10][5], 0.0f), "and the output is silent afterwards");
     }
 
+    // --- The glitch check against a pretend cable --------------------------------
+    {
+        constexpr int ins = 16, outs = 16, block = 64, cableDelay = 606;
+        constexpr int cableFrom = 12, cableTo = 9;
+
+        AudioEngine engine;
+        engine.openSimulated (96000.0, block, ins, outs);
+
+        std::vector<std::vector<float>> inData (ins, std::vector<float> (block, 0.0f)),
+                                        outData (outs, std::vector<float> (block, 0.0f));
+        std::vector<const float*> inPointers;
+        std::vector<float*> outPointers;
+
+        for (auto& channel : inData)   inPointers.push_back (channel.data());
+        for (auto& channel : outData)  outPointers.push_back (channel.data());
+
+        std::vector<float> cable (cableDelay, 0.0f);
+        size_t cablePosition = 0;
+        float cableGain = 0.5f;
+        juce::Random hiss (7);
+
+        // fault: 0 = none, 1 = one block of silence arrives, 2 = 96 samples go missing
+        const auto runBlocks = [&] (int blocks, int fault = 0)
+        {
+            for (int b = 0; b < blocks; ++b)
+            {
+                if (fault == 2 && b == blocks / 2)
+                    cablePosition = (cablePosition + 96) % cable.size();
+
+                for (int i = 0; i < block; ++i)
+                {
+                    const auto sound = fault == 1 && b == blocks / 2 ? 0.0f : cable[(cablePosition + (size_t) i) % cable.size()];
+                    inData[cableTo][(size_t) i] = sound + 0.00002f * (hiss.nextFloat() - 0.5f);
+                    inData[0][(size_t) i] = 0.05f * (hiss.nextFloat() - 0.5f);     // an open microphone on input 1
+                }
+
+                engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, block);
+
+                for (int i = 0; i < block; ++i)
+                    cable[(cablePosition + (size_t) i) % cable.size()] = cableGain * outData[cableFrom][(size_t) i];
+
+                cablePosition = (cablePosition + (size_t) block) % cable.size();
+            }
+        };
+
+        using State = GlitchStats::State;
+        check (engine.glitchStats().state == State::off, "the glitch check is off to begin with");
+
+        engine.setPlayThrough (PlayThrough::mixToUsb);
+        engine.setGlitchCheck (true);
+        runBlocks (3000);   // two seconds
+
+        auto found = engine.glitchStats();
+        check (found.state == State::locked && found.input == cableTo && found.analogue,
+               "the glitch check finds its tone on the cable, not on a noisy microphone");
+        check (found.glitches == 0, "a clean tone counts no glitches");
+        check (std::abs (found.levelDb - (-32.0f)) < 1.0f, "and reports how loud the tone came back");
+
+        float peak = 0.0f;
+        for (int i = 0; i < block; ++i)
+            peak = juce::jmax (peak, std::abs (outData[cableFrom][(size_t) i]));
+        check (peak > 0.01f && peak <= 0.1001f, "play-through is silent while the glitch check runs: only the tone goes out");
+
+        runBlocks (45000);  // thirty seconds of clean tone
+        check (engine.glitchStats().glitches == 0, "thirty clean seconds still count no glitches");
+
+        runBlocks (1500, 1);
+        check (engine.glitchStats().glitches == 1, "one block of silence counts as one glitch");
+
+        runBlocks (1500, 2);
+        found = engine.glitchStats();
+        check (found.glitches == 2, "96 samples going missing counts as one more");
+        check (found.times.size() == 2 && found.times[0] > 31.0 && found.times[0] < 33.0, "each glitch is timed");
+        check (engine.reportText().contains ("Glitches heard: 2"), "the report gives the glitch count");
+
+        engine.resetDropoutStats();
+        runBlocks (1500);
+        check (engine.glitchStats().glitches == 0, "Reset count clears the glitch count");
+
+        cableGain = 0.0f;   // the fader is pulled down
+        runBlocks (6000);
+        check (engine.glitchStats().state != State::locked, "a tone that goes away is reported as missing");
+
+        cableGain = 0.5f;
+        runBlocks (3000);
+        check (engine.glitchStats().state == State::locked, "and it is found again when it comes back");
+
+        engine.measure ({});
+        check (! engine.glitchCheckOn(), "starting a latency measurement stops the glitch check");
+    }
+
     passed = failures == 0;
     log.add ({});
     log.add (passed ? "Self-test: passed (" + juce::String (log.size() - 1) + " checks)"

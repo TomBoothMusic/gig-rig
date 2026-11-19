@@ -2,6 +2,7 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include "GlitchWatch.h"
 #include "LatencyProbe.h"
 
 #include <array>
@@ -137,6 +138,12 @@ public:
     void setToneReturn (int returnIndex) noexcept   { toneReturn.store (returnIndex); }
     int toneReturnIndex() const noexcept            { return toneReturn.load(); }
 
+    /** The glitch check: a steady tone on the ping returns, and a count of every
+        break in it as it comes back. Play-through and the return tone are silent while it runs. */
+    void setGlitchCheck (bool shouldBeOn) noexcept;
+    bool glitchCheckOn() const noexcept             { return glitch.isOn(); }
+    GlitchStats glitchStats() const                 { return glitch.stats(); }
+
     DropoutStats dropoutStats() const;
     void resetDropoutStats() noexcept;
 
@@ -179,6 +186,7 @@ private:
 
     // ---- shared with the audio thread ----
     LatencyProbe probe;
+    GlitchWatch glitch;
     std::atomic<int> pingMask { 0b00110000 };   // returns 5 and 6: the CQ's USB stereo channel
     std::atomic<int> playMode { (int) PlayThrough::off };
     std::atomic<int> toneReturn { -1 };

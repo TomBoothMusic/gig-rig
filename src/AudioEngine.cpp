@@ -250,6 +250,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     scratch.assign ((size_t) scratchSize, 0.0f);
     mix.assign ((size_t) scratchSize, 0.0f);
     probe.prepare (rate, ins);
+    glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
     tonePhase = 0.0;
     hotSamples = 0;
     resetDropoutStats();
@@ -311,8 +312,17 @@ void AudioEngine::setPlayThrough (PlayThrough mode) noexcept
     playMode.store ((int) mode);
 }
 
+void AudioEngine::setGlitchCheck (bool shouldBeOn) noexcept
+{
+    if (shouldBeOn)
+        toneReturn.store (-1);
+
+    glitch.setOn (shouldBeOn);
+}
+
 void AudioEngine::resetDropoutStats() noexcept
 {
+    glitch.resetCount();
     statsSince = juce::Time::getCurrentTime();
     driverDropoutsAtReset = device != nullptr ? juce::jmax (0, device->getXRunCount()) : 0;
     statsResetRequested.store (true);
@@ -366,6 +376,7 @@ void AudioEngine::measure (std::vector<int> bufferSizes)
     job.originalSize = currentBufferSize;
 
     toneReturn.store (-1);
+    glitch.setOn (false);
     measuring.store (true);
     startRow();
 }
@@ -566,9 +577,23 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
                     juce::FloatVectorOperations::copy (out, scratch.data(), numSamples);
     }
 
-    // ---- play-through (silent while measuring, so nothing can loop round) ----
+    // ---- the glitch check: its tone goes where the ping goes ------------------
+    const bool checking = glitch.isOn() && ! pinging && ! measuring.load();
+
+    if (checking)
+    {
+        glitch.process (inputs, numIns, scratch.data(), numSamples);
+        const auto mask = numOuts >= 16 ? pingMask.load() : 0xff;
+
+        for (int r = 0; r < numReturns; ++r)
+            if ((mask & (1 << r)) != 0)
+                if (auto* out = output (r))
+                    juce::FloatVectorOperations::copy (out, scratch.data(), numSamples);
+    }
+
+    // ---- play-through (silent while measuring or checking, so nothing can loop round) ----
     const auto mode = (PlayThrough) playMode.load();
-    const bool playing = mode != PlayThrough::off && ! pinging && ! measuring.load();
+    const bool playing = mode != PlayThrough::off && ! pinging && ! checking && ! measuring.load();
 
     if (playing && mode == PlayThrough::straight)
     {
@@ -594,7 +619,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
     }
 
     // ---- the return check tone ----------------------------------------------
-    if (const auto r = toneReturn.load(); r >= 0 && ! pinging && ! measuring.load())
+    if (const auto r = toneReturn.load(); r >= 0 && ! pinging && ! checking && ! measuring.load())
     {
         if (auto* out = output (r))
         {
@@ -742,6 +767,47 @@ juce::String AudioEngine::dropoutText() const
     add ("  Late blocks of audio: " + juce::String (stats.lateCallbacks)
            + " (longest wait " + ms (stats.worstGapMs) + ", normal is " + ms (stats.expectedGapMs) + ")");
     add ("  Busiest moment: " + juce::String (stats.peakLoad * 100.0, 1) + "% of the time available");
+
+    const auto found = glitchStats();
+    const auto clock = [] (double s) { const auto whole = (int) s; return juce::String (whole / 60) + ":" + juce::String (whole % 60).paddedLeft ('0', 2); };
+
+    if (found.state == GlitchStats::State::off)
+    {
+        add ("Glitch check: off.");
+    }
+    else if (found.state == GlitchStats::State::notHeard)
+    {
+        add ("Glitch check: on, but the tone is not coming back cleanly on any input.");
+    }
+    else if (found.state == GlitchStats::State::listening && found.seconds <= 0.0)
+    {
+        add ("Glitch check: on, listening for the tone.");
+    }
+    else
+    {
+        add ("Glitch check, tone watched for " + clock (found.seconds) + ", heard on " + inputName (found.input, deviceIsCQ)
+               + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB (background "
+               + juce::String (found.backgroundPercent, 2) + "% of the tone):");
+        add ("  Glitches heard: " + juce::String (found.glitches)
+               + (found.lostSeconds >= 0.05 ? "; tone missing altogether for " + juce::String (found.lostSeconds, 1) + " s" : juce::String()));
+
+        if (! found.times.empty())
+        {
+            juce::StringArray when;
+
+            for (auto t : found.times)
+                when.add (clock (t));
+
+            add ("  At (min:sec into the check): " + when.joinIntoString (", ")
+                   + (found.glitches > (int) found.times.size() ? ", and more" : ""));
+        }
+
+        if (! found.analogue && deviceIsCQ)
+            add ("  NOTE: heard on the copy inside the mixer, not through a cable. That still covers the USB link both ways.");
+
+        if (found.state == GlitchStats::State::listening)
+            add ("  The tone has gone missing: listening for it again.");
+    }
 
     return lines.joinIntoString ("\n") + "\n";
 }
