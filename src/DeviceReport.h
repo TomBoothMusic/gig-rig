@@ -15,6 +15,7 @@ struct AudioDeviceEntry
     juce::Array<double> sampleRates;
     juce::Array<int> bufferSizes;
     juce::String problem;   // empty when the device answered normally
+    juce::String note;      // set when the device was listed but deliberately not opened
 };
 
 /** The answer to one of the stage 0 questions, in plain words. */

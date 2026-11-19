@@ -11,7 +11,7 @@ namespace
     constexpr int usbStereoMask = 0b00110000;
     constexpr double targetMs = 10.0;
 
-    const std::vector<int> sweepSizes { 32, 64, 128, 256 };
+    const std::vector<int> sweepSizes { 8, 16, 32, 64, 128, 256 };
 
     void styleBox (juce::ComboBox& box)
     {
@@ -297,12 +297,12 @@ void AudioPanel::updateVerdict()
 
         if (row.best < 0)
         {
-            parts.add ("not heard at " + juce::String (row.bufferSize));
+            parts.add ("at " + juce::String (row.bufferSize) + ": not heard");
             continue;
         }
 
         const auto time = row.ms (row.heard[(size_t) row.best].medianSamples);
-        parts.add (oneDecimal (time) + " ms at " + juce::String (row.bufferSize));
+        parts.add ("at " + juce::String (row.bufferSize) + ": " + oneDecimal (time));
         anyHeard = &row;
 
         // Judge on the 64-sample row when there is one, otherwise the first that was heard.
@@ -320,7 +320,7 @@ void AudioPanel::updateVerdict()
 
     const auto& best = judged->heard[(size_t) judged->best];
     const auto time = judged->ms (best.medianSamples);
-    const auto headline = "Round trip: " + parts.joinIntoString (", ");
+    const auto headline = "Round trip in ms    " + parts.joinIntoString (",   ");
 
     if (! judged->bestIsAnalogue)
     {

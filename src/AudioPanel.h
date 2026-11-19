@@ -39,7 +39,7 @@ private:
     juce::Label deviceLabel, bufferLabel, pingLabel, playLabel, toneLabel, dropoutLabel, inputsLabel, returnsLabel;
     juce::ComboBox deviceBox, bufferBox, pingBox, playBox;
     juce::TextButton panelButton { "Driver settings" }, measureButton { "Measure latency" },
-                     sweepButton { "Measure at 32, 64, 128 and 256" }, resetButton { "Reset count" };
+                     sweepButton { "Measure every size, 8 to 256" }, resetButton { "Reset count" };
     juce::OwnedArray<juce::TextButton> toneButtons;
     StatusRow verdict;
     MeterStrip inputMeters { numMeteredInputs, 1 }, returnMeters { numReturns, 1 };

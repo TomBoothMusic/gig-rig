@@ -48,7 +48,7 @@ they arrive like this:
 2. On the CQ, for that input channel: make sure **48V** is off, turn its **Gain** right down, and pull its **fader right down** (use the fader, not mute). That stops the sound going round in a circle inside the mixer.
 3. On the CQ, find the **USB** stereo channel (in the stereo inputs bank). Unmute it and set its fader to 0 dB. Set the main fader to 0 dB.
 4. Open the app. The box near the top should say **READY** and "Running: 48 kHz".
-5. Click **Measure at 32, 64, 128 and 256**. You will hear about 25 short chirps over half a minute. Leave everything alone until the box changes.
+5. Click **Measure every size, 8 to 256**. You will hear about 36 short chirps over 45 seconds or so. Leave everything alone until the box changes.
 6. The box now shows the round trip at each buffer size. Click **Copy report** (top right) and paste the result to Claude.
 
 If the box says **NOT HEARD**, the chirp is not reaching the main output: check step 3. If it says **NO CABLE**, the chirp went out but did not come back through the cable: check steps 1 and 2.
