@@ -771,7 +771,9 @@ juce::String AudioEngine::dropoutText() const
     const auto found = glitchStats();
     const auto clock = [] (double s) { const auto whole = (int) s; return juce::String (whole / 60) + ":" + juce::String (whole % 60).paddedLeft ('0', 2); };
 
-    if (found.state == GlitchStats::State::off)
+    const bool stopped = found.state == GlitchStats::State::off;
+
+    if (stopped && found.seconds <= 0.0)
     {
         add ("Glitch check: off.");
     }
@@ -785,7 +787,8 @@ juce::String AudioEngine::dropoutText() const
     }
     else
     {
-        add ("Glitch check, tone watched for " + clock (found.seconds) + ", heard on " + inputName (found.input, deviceIsCQ)
+        add (juce::String (stopped ? "Glitch check (stopped now; this is the last run), tone watched for "
+                                   : "Glitch check, tone watched for ") + clock (found.seconds) + ", heard on " + inputName (found.input, deviceIsCQ)
                + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB (background "
                + juce::String (found.backgroundPercent, 2) + "% of the tone):");
         add ("  Glitches heard: " + juce::String (found.glitches)

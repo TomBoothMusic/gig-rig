@@ -45,6 +45,10 @@ void GlitchWatch::setOn (bool shouldBeOn) noexcept
 
     if (shouldBeOn)
     {
+        // Nothing is listening while it is off, so the last run's result can be cleared from here.
+        glitchCount.store (0);
+        shownSeconds.store (0.0);
+        shownLostSeconds.store (0.0);
         restartRequested.store (true);
         countResetRequested.store (true);
         state.store ((int) GlitchStats::State::listening);
@@ -55,6 +59,19 @@ void GlitchWatch::setOn (bool shouldBeOn) noexcept
     }
 
     on.store (shouldBeOn);
+}
+
+void GlitchWatch::resetCount() noexcept
+{
+    if (on.load())
+    {
+        countResetRequested.store (true);
+        return;
+    }
+
+    glitchCount.store (0);      // stopped: clear what the last run found
+    shownSeconds.store (0.0);
+    shownLostSeconds.store (0.0);
 }
 
 void GlitchWatch::beginListening() noexcept

@@ -47,7 +47,7 @@ public:
 
     void setOn (bool shouldBeOn) noexcept;
     bool isOn() const noexcept                  { return on.load(); }
-    void resetCount() noexcept                  { countResetRequested.store (true); }
+    void resetCount() noexcept;
 
     /** Writes the tone to toneOut and listens on every input. */
     void process (const float* const* inputs, int numInputs, float* toneOut, int numSamples) noexcept;

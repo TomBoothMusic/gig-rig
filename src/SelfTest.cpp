@@ -417,6 +417,16 @@ juce::String runSelfTest (bool& passed)
         runBlocks (3000);
         check (engine.glitchStats().state == State::locked, "and it is found again when it comes back");
 
+        engine.resetDropoutStats();
+        runBlocks (1500, 1);
+        engine.setGlitchCheck (false);
+        check (engine.glitchStats().state == State::off && engine.glitchStats().glitches == 1
+                 && engine.reportText().contains ("this is the last run") && engine.reportText().contains ("Glitches heard: 1"),
+               "stopping the glitch check keeps its result in the report");
+
+        engine.setGlitchCheck (true);
+        check (engine.glitchStats().glitches == 0, "starting it again begins a fresh count");
+
         engine.measure ({});
         check (! engine.glitchCheckOn(), "starting a latency measurement stops the glitch check");
     }
