@@ -771,7 +771,9 @@ juce::String AudioEngine::dropoutText() const
     const auto found = glitchStats();
     const auto clock = [] (double s) { const auto whole = (int) s; return juce::String (whole / 60) + ":" + juce::String (whole % 60).paddedLeft ('0', 2); };
 
-    if (found.state == GlitchStats::State::off)
+    const bool stopped = found.state == GlitchStats::State::off;
+
+    if (stopped && found.seconds <= 0.0)
     {
         add ("Glitch check: off.");
     }
@@ -785,22 +787,27 @@ juce::String AudioEngine::dropoutText() const
     }
     else
     {
-        add ("Glitch check, tone watched for " + clock (found.seconds) + ", heard on " + inputName (found.input, deviceIsCQ)
+        add (juce::String (stopped ? "Glitch check (stopped now; this is the last run), tone watched for "
+                                   : "Glitch check, tone watched for ") + clock (found.seconds) + ", heard on " + inputName (found.input, deviceIsCQ)
                + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB (background "
                + juce::String (found.backgroundPercent, 2) + "% of the tone):");
         add ("  Glitches heard: " + juce::String (found.glitches)
+               + (found.breaks > found.glitches ? " (" + juce::String (found.breaks) + " separate breaks; breaks less than a second apart count as one glitch)" : juce::String())
                + (found.lostSeconds >= 0.05 ? "; tone missing altogether for " + juce::String (found.lostSeconds, 1) + " s" : juce::String()));
 
-        if (! found.times.empty())
+        for (size_t i = 0; i < found.times.size(); ++i)
         {
-            juce::StringArray when;
+            const auto breaks = found.breaksEach[i];
 
-            for (auto t : found.times)
-                when.add (clock (t));
-
-            add ("  At (min:sec into the check): " + when.joinIntoString (", ")
-                   + (found.glitches > (int) found.times.size() ? ", and more" : ""));
+            add ("    at " + clock (found.times[i]) + ": "
+                   + (breaks <= 1 ? juce::String ("a single break")
+                      : breaks < 5 ? juce::String (breaks) + " breaks close together"
+                                   : "a burst of " + juce::String (breaks) + " breaks (a long glitch, or another sound getting into "
+                                     "what the check hears, such as a lead being plugged or unplugged)"));
         }
+
+        if (found.glitches > (int) found.times.size())
+            add ("    and " + juce::String (found.glitches - (int) found.times.size()) + " more after that");
 
         if (! found.analogue && deviceIsCQ)
             add ("  NOTE: heard on the copy inside the mixer, not through a cable. That still covers the USB link both ways.");

@@ -403,7 +403,10 @@ void AudioPanel::updateGlitchLine()
     }
     else if (! on)
     {
-        text = "Off. Sends a steady tone round the mixer and counts every break in it. Play-through is silent while it runs.";
+        const auto seconds = (int) found.seconds;
+        text = seconds > 0 ? "Off. Last run: tone watched " + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
+                               + ", glitches: " + juce::String (found.glitches) + ". This stays in Copy report."
+                           : juce::String ("Off. Sends a steady tone round the mixer and counts every break in it. Play-through is silent while it runs.");
     }
     else if (found.state == State::notHeard)
     {
@@ -422,6 +425,7 @@ void AudioPanel::updateGlitchLine()
         colour = found.glitches == 0 ? style::textMain : style::amber;
         text = "Tone watched  " + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
                  + "     Glitches: " + juce::String (found.glitches)
+                 + (found.breaks > found.glitches ? " (" + juce::String (found.breaks) + " breaks)" : juce::String())
                  + "     Heard on " + inputName (found.input, engine.isCQ())
                  + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB";
     }

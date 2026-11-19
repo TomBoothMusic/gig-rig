@@ -12,7 +12,8 @@ namespace
     constexpr double quietestTone = 0.003;      // about -50 dBFS: any quieter and hiss would look like glitches
     constexpr double cleanEnough = 0.02;        // background must be under 2% of the tone to trust an input
     constexpr double spikeSize = 0.06;          // a break: what is left over jumps past 6% of the tone
-    constexpr double holdOffSeconds = 0.1;      // one glitch often has two edges: count it once
+    constexpr double holdOffSeconds = 0.1;      // one break often has two edges: count it once
+    constexpr double sameGlitchSeconds = 1.0;   // breaks closer together than this are one glitch
     constexpr double lostBelow = 0.25;          // tone under a quarter of its level counts as missing
     constexpr double relistenAfterSeconds = 2.0;
     constexpr double twoPi = juce::MathConstants<double>::twoPi;
@@ -31,7 +32,9 @@ void GlitchWatch::prepare (double sampleRate, int numInputs, int analogueInputs)
 
     phaseA = phaseB = fade = 0.0;
     glitchCount.store (0);
+    breakCount.store (0);
     watchedSamples = lostSamples = 0;
+    lastBreakAt = -1;
     shownSeconds.store (0.0);
     shownLostSeconds.store (0.0);
     beginListening();
@@ -45,6 +48,11 @@ void GlitchWatch::setOn (bool shouldBeOn) noexcept
 
     if (shouldBeOn)
     {
+        // Nothing is listening while it is off, so the last run's result can be cleared from here.
+        glitchCount.store (0);
+    breakCount.store (0);
+        shownSeconds.store (0.0);
+        shownLostSeconds.store (0.0);
         restartRequested.store (true);
         countResetRequested.store (true);
         state.store ((int) GlitchStats::State::listening);
@@ -55,6 +63,20 @@ void GlitchWatch::setOn (bool shouldBeOn) noexcept
     }
 
     on.store (shouldBeOn);
+}
+
+void GlitchWatch::resetCount() noexcept
+{
+    if (on.load())
+    {
+        countResetRequested.store (true);
+        return;
+    }
+
+    glitchCount.store (0);
+    breakCount.store (0);      // stopped: clear what the last run found
+    shownSeconds.store (0.0);
+    shownLostSeconds.store (0.0);
 }
 
 void GlitchWatch::beginListening() noexcept
@@ -123,7 +145,9 @@ void GlitchWatch::process (const float* const* in, int numInputs, float* toneOut
     if (countResetRequested.exchange (false))
     {
         glitchCount.store (0);
+        breakCount.store (0);
         watchedSamples = lostSamples = 0;
+        lastBreakAt = -1;
     }
 
     // ---- the tone ----
@@ -200,12 +224,26 @@ void GlitchWatch::process (const float* const* in, int numInputs, float* toneOut
         }
         else if (e > limit)
         {
-            const auto count = glitchCount.load (std::memory_order_relaxed);
+            const auto now = watchedSamples + i;
+            auto count = glitchCount.load (std::memory_order_relaxed);
 
-            if (count < maxTimes)
-                glitchTimes[(size_t) count].store ((float) ((double) (watchedSamples + i) / rate), std::memory_order_relaxed);
+            // A run of breaks close together is one glitch (or one burst of some other sound).
+            if (lastBreakAt < 0 || now - lastBreakAt > (juce::int64) (sameGlitchSeconds * rate))
+            {
+                if (count < maxTimes)
+                {
+                    glitchTimes[(size_t) count].store ((float) ((double) now / rate), std::memory_order_relaxed);
+                    glitchBreaks[(size_t) count].store (0, std::memory_order_relaxed);
+                }
 
-            glitchCount.store (count + 1, std::memory_order_relaxed);
+                glitchCount.store (++count, std::memory_order_relaxed);
+            }
+
+            if (count >= 1 && count <= maxTimes)
+                glitchBreaks[(size_t) (count - 1)].fetch_add (1, std::memory_order_relaxed);
+
+            breakCount.fetch_add (1, std::memory_order_relaxed);
+            lastBreakAt = now;
             holdOff = (int) (holdOffSeconds * rate);
         }
 
@@ -239,13 +277,17 @@ GlitchStats GlitchWatch::stats() const
     stats.input = shownInput.load();
     stats.analogue = stats.input >= 0 && stats.input < sockets;
     stats.glitches = glitchCount.load();
+    stats.breaks = breakCount.load();
     stats.seconds = shownSeconds.load();
     stats.lostSeconds = shownLostSeconds.load();
     stats.levelDb = shownLevelDb.load();
     stats.backgroundPercent = shownBackground.load();
 
     for (int i = 0; i < juce::jmin (stats.glitches, maxTimes); ++i)
+    {
         stats.times.push_back ((double) glitchTimes[(size_t) i].load());
+        stats.breaksEach.push_back (glitchBreaks[(size_t) i].load());
+    }
 
     return stats;
 }
