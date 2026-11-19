@@ -1,0 +1,128 @@
+name: Build
+
+# Builds the app for Windows and Linux on every change. A change that lands
+# on main is also published on the Releases page as a ready-to-run download.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            asset: GigRig-Windows.exe
+          - name: Linux
+            os: ubuntu-24.04
+            asset: GigRig-Linux.tar.gz
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build xvfb \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxext-dev libxrender-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxcomposite-dev libxi-dev
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -DGIGRIG_BUILD_LABEL="${{ github.run_number }}"
+
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGIGRIG_BUILD_LABEL="${{ github.run_number }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # No CQ or RC-600 on a build machine, so prove two things instead:
+      # the matching logic is right, and a real device scan runs without crashing.
+      - name: Self-test and device scan (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $exe = "build/GigRig_artefacts/Release/GigRig.exe"
+          foreach ($mode in "self-test", "report") {
+            $p = Start-Process -FilePath $exe -ArgumentList "--$mode", "$mode.txt" -Wait -PassThru
+            Write-Host "----- $mode (exit code $($p.ExitCode)) -----"
+            if (Test-Path "$mode.txt") { Get-Content "$mode.txt" }
+            if ($p.ExitCode -ne 0) { exit 1 }
+          }
+          Copy-Item $exe "${{ matrix.asset }}"
+
+      - name: Self-test and device scan (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: |
+          exe=build/GigRig_artefacts/Release/GigRig
+          for mode in self-test report; do
+            status=0
+            xvfb-run -a "$exe" "--$mode" "$mode.txt" || status=$?
+            echo "----- $mode (exit code $status) -----"
+            cat "$mode.txt" || true
+            [ "$status" -eq 0 ] || exit 1
+          done
+          tar -czf "${{ matrix.asset }}" -C build/GigRig_artefacts/Release GigRig
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish download
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: downloads
+          merge-multiple: true
+
+      - name: Publish to the Releases page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD: ${{ github.run_number }}
+        run: |
+          cat > notes.md <<'NOTES'
+          **Windows:** click `GigRig-Windows.exe` below to download it, then double-click the downloaded file.
+
+          Windows will warn about it the first time, because the app is home-made and not signed:
+          in the blue "Windows protected your PC" box, click **More info**, then **Run anyway**.
+
+          `GigRig-Linux.tar.gz` is the same app for Linux (for the final rig computer later).
+          NOTES
+          gh release create "build-$BUILD" downloads/* \
+            --target "$GITHUB_SHA" \
+            --title "Gig Rig build $BUILD" \
+            --notes-file notes.md \
+            --latest
