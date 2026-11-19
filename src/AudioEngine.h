@@ -32,7 +32,7 @@ enum class PlayThrough
 {
     off,        // inputs are only metered
     straight,   // input N goes back out on return N
-    mixToUsb    // inputs 1 to 8 are mixed to the CQ's USB stereo channel (returns 5 and 6)
+    mixToUsb    // inputs 1 to 10 (every input socket on the CQ12T) are mixed to the CQ's USB stereo channel (returns 5 and 6)
 };
 
 struct DeviceChoice

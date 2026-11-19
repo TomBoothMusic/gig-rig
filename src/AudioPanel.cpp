@@ -56,7 +56,7 @@ AudioPanel::AudioPanel (AudioEngine& e)
 
     playBox.addItem ("Off", 1);
     playBox.addItem ("Each input to its own return (input 1 to return 1, and so on)", 2);
-    playBox.addItem ("Inputs 1 to 8 mixed to the CQ's USB stereo channel", 3);
+    playBox.addItem ("Inputs 1 to 10 mixed to the CQ's USB stereo channel", 3);
     playBox.setSelectedId (1, juce::dontSendNotification);
 
     playBox.onChange = [this]

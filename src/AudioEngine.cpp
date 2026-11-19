@@ -580,7 +580,9 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
     {
         juce::FloatVectorOperations::clear (mix.data(), numSamples);
 
-        for (int ch = 0; ch < juce::jmin (numReturns, numIns); ++ch)
+        // Every input socket, but never the CQ's USB channels 11 to 16: those
+        // carry copies of the mixer's own outputs, and would loop straight round.
+        for (int ch = 0; ch < juce::jmin (cqAnalogueInputs, numIns); ++ch)
             if (inputs[ch] != nullptr)
                 juce::FloatVectorOperations::add (mix.data(), inputs[ch], numSamples);
 
@@ -732,7 +734,7 @@ juce::String AudioEngine::dropoutText() const
 
     add ("Play-through: " + juce::String (mode == PlayThrough::off ? "off"
                                            : mode == PlayThrough::straight ? "each input to its own return"
-                                                                           : "inputs 1 to 8 mixed to the USB stereo channel")
+                                                                           : "inputs 1 to 10 mixed to the USB stereo channel")
            + (guardTripped.load() ? "  (SWITCHED OFF BY THE FEEDBACK GUARD)" : ""));
     add ("Dropout watch, running for " + juce::String (seconds / 60) + " min " + juce::String (seconds % 60) + " s:");
     add ("  Dropouts counted by the driver: "
