@@ -7,6 +7,8 @@
 namespace gigrig
 {
 
+void runLooperSelfTest (const std::function<void (bool, const juce::String&)>& check);
+
 namespace
 {
     juce::StringArray channels (int count)
@@ -442,6 +444,59 @@ juce::String runSelfTest (bool& passed)
         engine.measure ({});
         check (! engine.glitchCheckOn(), "starting a latency measurement stops the glitch check");
     }
+
+    // ---- the looper inside the engine: pedal in, loop out on returns 5 and 6 ----
+    {
+        AudioEngine engine;
+        const int ins = 16, outs = 16, block = 64;
+        engine.openSimulated (48000.0, block, ins, outs);
+
+        std::vector<std::vector<float>> in ((size_t) ins, std::vector<float> ((size_t) block, 0.0f)), out ((size_t) outs, std::vector<float> ((size_t) block, 0.0f));
+        std::vector<const float*> inPointers;
+        std::vector<float*> outPointers;
+
+        for (auto& c : in)   inPointers.push_back (c.data());
+        for (auto& c : out)  outPointers.push_back (c.data());
+
+        std::fill (in[6].begin(), in[6].end(), 0.1f);       // a steady signal on socket 7, the acoustic
+
+        const auto runFor = [&] (double seconds)
+        {
+            for (int i = 0; i < (int) (seconds * 48000.0 / block); ++i)
+                engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, block);
+        };
+
+        const auto tap = [&] (int sw)
+        {
+            PedalEvent e;
+            e.sw = sw;
+            e.kind = PedalEvent::Kind::down;
+            engine.looper().pedal (e);
+            runFor (0.01);
+            e.kind = PedalEvent::Kind::up;
+            engine.looper().pedal (e);
+            runFor (0.01);
+        };
+
+        runFor (0.1);
+        check (std::abs (out[12][0]) < 1.0e-6f, "with no loop recorded the looper sends nothing");
+        tap (0);
+        check (engine.looper().snapshot().track[0].state == TrackState::recording, "in the engine, switch 1 starts track 1 recording");
+        runFor (2.0);
+        tap (0);
+        runFor (1.0);
+        check (engine.looper().snapshot().track[0].state == TrackState::playing, "and the second press plays it");
+        check (std::abs (out[12][0] - 0.1f) < 1.0e-4f && std::abs (out[13][0] - 0.1f) < 1.0e-4f, "the loop comes back on returns 5 and 6 (the CQ's USB stereo channel)");
+        check (std::abs (out[8][0]) < 1.0e-6f && std::abs (out[10][0]) < 1.0e-6f, "and on no other return");
+
+        engine.setGlitchCheck (true);
+        runFor (0.2);
+        engine.setGlitchCheck (false);
+        runFor (0.2);
+        check (engine.looper().snapshot().track[0].state == TrackState::playing, "a glitch check pauses the looper without losing the loop");
+    }
+
+    runLooperSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

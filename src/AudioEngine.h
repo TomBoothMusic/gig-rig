@@ -4,6 +4,7 @@
 
 #include "GlitchWatch.h"
 #include "LatencyProbe.h"
+#include "Looper.h"
 
 #include <array>
 #include <atomic>
@@ -142,6 +143,9 @@ public:
         break in it as it comes back. Play-through and the return tone are silent while it runs. */
     void setGlitchCheck (bool shouldBeOn) noexcept;
     bool glitchCheckOn() const noexcept             { return glitch.isOn(); }
+
+    /** Called (message thread) each time a glitch check starts. */
+    std::function<void()> onGlitchCheckStarted;
     GlitchStats glitchStats() const                 { return glitch.stats(); }
 
     DropoutStats dropoutStats() const;
@@ -155,7 +159,28 @@ public:
         latency table, then the play-through and dropout counts. */
     juce::String latencyText() const;
     juce::String dropoutText() const;
-    juce::String reportText() const                 { return latencyText() + "\n" + dropoutText(); }
+    juce::String reportText() const                 { return latencyText() + "\n" + dropoutText() + (extraReport != nullptr ? "\n" + extraReport() : juce::String()); }
+
+    /** Later stages (the pedal, the looper) add their own part to the report through this. */
+    std::function<juce::String()> extraReport;
+
+    //==============================================================================
+    /** The looper. It runs whenever a device is open, except during a latency
+        measurement or a glitch check. Its loops come back on the returns. */
+    Looper& looper() noexcept                       { return loopCore; }
+
+    /** Where the looper's timing correction comes from. */
+    struct LoopTiming
+    {
+        int samples = 0;            // what the looper is told
+        int baseSamples = 0;        // before the trim
+        juce::String source;        // "the latency test at this buffer size", "the driver's own figure"...
+    };
+
+    /** Works the correction out again and hands it to the looper. Message thread. */
+    LoopTiming updateLoopTiming();
+    void setLoopTrimMs (double ms)                  { loopTrimMs = ms; updateLoopTiming(); }
+    double getLoopTrimMs() const noexcept           { return loopTrimMs; }
 
     //==============================================================================
     /** The audio thread's work. Public so the self-test can drive it. */
@@ -223,6 +248,8 @@ private:
 
     Job job;
     std::vector<LatencyRow> rows;
+    Looper loopCore;
+    double loopTrimMs = 0.0;
     juce::Time statsSince;
     int driverDropoutsAtReset = 0;
 

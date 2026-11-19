@@ -10,7 +10,9 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | --- | --- | --- |
 | 0 | Device check: lists every audio and MIDI device, and says whether it can see the CQ mixer and the RC-600 | Built |
 | 1 | Audio through the CQ: a round-trip latency meter, buffer-size choice, play-through with a dropout watch, and a test tone for each return | Built |
-| 2 onward | RC-600 as the test pedal, looper, songs, effects, tablet app | Planned |
+| 2 | The RC-600 as the pedal: every switch by name, and press, 2-second hold and double-press told apart | Built |
+| 3 | The looper: six tracks that copy how the RC-600 loops, driven by the RC-600's switches, for a side-by-side test | Built, first version |
+| 4 onward | Songs from the RC-600 backup, effects, tablet app | Planned |
 
 ## Getting the app (no tools needed)
 
@@ -86,6 +88,70 @@ This part changes where some CQ channels take their sound from, so **save your s
 3. For each button, look at the CQ's meters and note which channel shows the tone. It should match the table above.
 4. Tell Claude which ones matched, then recall your saved scene.
 
+## Stage 2: the RC-600 as the pedal
+
+The **Pedal (RC-600)** tab shows the RC-600's nine switches, and CTL3 and CTL4, laid out as they are on the pedal.
+
+### Part A: every switch (about 10 minutes)
+
+1. Plug the RC-600 into the laptop by USB and switch it on. On the RC-600 choose memory **65** (MIDI CTRL).
+2. Open the app and click the **Pedal (RC-600)** tab. The box at the top should say **CONNECTED**. If it says **NO RC-600**, go to the **Device check** tab, click **Scan again**, and come back.
+3. For each switch in turn: press it once, press it twice quickly, then hold it down for 2 seconds. Under the switch's name the words **press**, **hold** and **double** fill in green as the app sees each one.
+4. If a double-press is missed, or two separate presses are taken as a double-press, change **Double-press: two presses within** and try again. Note which setting feels right.
+5. When all nine are filled in, click **Copy pedal results** and paste them to Claude. (CTL3 and CTL4 only fill in if footswitches are plugged into the RC-600's CTL 3/4 socket.)
+
+You can also click a switch on the screen with the mouse. That does the same as a foot on the real one.
+
+### Part B: glitch check with the RC-600 plugged in (30 minutes, no playing needed)
+
+This is the same glitch check as stage 1, run again now that the RC-600 shares the laptop's USB.
+
+1. Leave the RC-600 plugged in on memory 65. Set the CQ up as decided in stage 1: 96 kHz, buffer 64, safe mode on.
+2. On the **Latency and audio test** tab click **Glitch check** and leave it for 30 minutes. Press a few RC-600 switches now and then.
+3. Click **Copy report** (top right) and paste it to Claude. The report now also says how many switch messages the RC-600 sent while the check ran.
+4. Click **Stop glitch check**.
+
+## Stage 3: the looper
+
+The **Looper** tab is a six-track looper that copies how the RC-600 behaves, so the two can be compared. The RC-600's switches drive it.
+
+How it keeps time:
+
+- The first loop you record sets the length of a bar, and so the tempo.
+- Every later track is a whole number of bars. If you press mid-bar it waits for the next bar to start recording, and when you press to finish it ends on the nearest bar.
+- A track with a preset length (as in some of your RC-600 memories) finishes by itself.
+- Each recording is shifted by the round-trip delay measured in stage 1, so a loop plays back exactly where you played it.
+
+### Setting up (5 minutes)
+
+1. Plug in as you would for a gig, with the instruments going into the CQ. You hear yourself through the mixer as normal; the app only adds the loops.
+2. On the CQ, bring up the **USB** stereo channel to 0 dB. The loops come back on that channel.
+3. RC-600 on USB, memory **65**.
+4. In the app, on the **Latency and audio test** tab: set **Play-through** to off, make sure the glitch check is stopped, and click **Measure latency** once (no cable needed; you will hear a few chirps). This gives the looper its timing.
+5. Click the **Looper** tab. The line under the song box should name the CQ and say **Timing correction ... from the latency test**. If it shows an amber message instead, it says what to fix.
+6. Check the **socket** boxes on the right match where things are plugged in (vocal 6, acoustic and stomp 7, electric 8, bass 9).
+
+### Part A: the basics, with the song set to "Standard layout"
+
+Switches: 1 = track 1 record/play, 2 = track 1 stop, 3 and 4 = track 2, 5 and 6 = track 3, 7 = bank, 8 = undo/redo, 9 = all start/stop. Holding a record/play switch for 2 seconds undoes; holding a stop switch clears the track.
+
+1. Play a simple 2 or 4 bar guitar part. Press switch 1 on the first beat and again on the first beat as it comes round. Track 1 turns green and the loop plays. Listen to the join: is it clean, and is the loop in time with where you played it?
+2. Play along with the loop for a minute. Does it stay in time?
+3. Press switch 3 a little before a bar, play a bass line, and press switch 3 again near the end of a bar. Is track 2 in time with track 1?
+4. Press switch 1 again to overdub on track 1, play something, press again to finish. Hold switch 1 for 2 seconds to undo it, and hold again to bring it back.
+5. Press switch 9 to stop everything and again to start everything.
+6. Click **Copy looper results** and paste them to Claude, with a note on what you heard at each step.
+
+### Part B: side by side with the RC-600
+
+1. In the **Song** box choose one of your songs (they are read from your RC-600 backup): Dirty Slap, CCR Acoustic, Wicked Game, Dreams, Throw Arms, Boiz, Dancing Moon or Songbird. The switches, each track's inputs and any preset lengths are then the same as in that RC-600 memory. The panel at the bottom left lists them.
+2. Play the song's loops the way you do on the RC-600. Note anything that feels different: a switch that does the wrong thing, a loop that ends in the wrong place, timing that feels early or late.
+3. Click **Copy looper results** and paste them to Claude with your notes.
+
+If loops sound slightly early or late against your playing, move **Timing trim** a millisecond at a time and say which value sounded right.
+
+Not copied yet: the RC-600's effects, rhythm, memory up/down, and tap tempo. A switch set to one of those shows as "Effect (later)" or similar and does nothing.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.
@@ -126,6 +192,12 @@ GigRig --report report.txt      # write the device report, no window
 | `src/LatencyProbe.*` | Plays a chirp, records every input and finds how many samples later it came back |
 | `src/GlitchWatch.*` | Sends a steady two-note tone, cancels it from what comes back and counts every break |
 | `src/AudioPanel.*` | The stage 1 tab |
+| `src/Pedal.*` | The RC-600's switches: CC numbers to switch names, and press, hold and double-press |
+| `src/PedalPanel.*` | The stage 2 tab, and the on-screen switch used by both new tabs |
+| `src/Looper.*` | The looper core: tracks, bar timing, overdub, undo, and the RC-600's switch functions and linked actions |
+| `src/TestSongs.cpp` | Song set-ups for the side-by-side test, taken from the RC-600 backup |
+| `src/LooperPanel.*` | The stage 3 tab |
+| `src/LooperSelfTest.cpp` | Checks for the pedal and the looper, with loop timing checked to the sample |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |
 | `src/DeviceCheckPanel.*` | The stage 0 tab |

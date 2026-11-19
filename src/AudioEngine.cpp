@@ -14,6 +14,10 @@ namespace
     constexpr int cqAnalogueInputs = 10;   // CQ12T: USB channels 1 to 10 are the input sockets
     constexpr float toneLevel = 0.125f;    // -18 dBFS
     constexpr double toneHz = 440.0;
+    constexpr double loopSecondsReal = 120.0;       // the longest loop a track can hold on a real device
+    constexpr double loopSecondsSimulated = 20.0;
+    constexpr double cqThroughMs = 0.7;             // the CQ's own delay from an input socket to its outputs
+    constexpr double cqMixMs = 0.3;                 // the part of that which is its mixing, not its converters
 
     int usbPairFirstReturn (int numOutputs) noexcept    { return numOutputs >= 16 ? 4 : 0; }
 
@@ -251,6 +255,8 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     mix.assign ((size_t) scratchSize, 0.0f);
     probe.prepare (rate, ins);
     glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
+    loopCore.prepare (rate, simulated ? loopSecondsSimulated : loopSecondsReal);
+    updateLoopTiming();
     tonePhase = 0.0;
     hotSamples = 0;
     resetDropoutStats();
@@ -314,10 +320,15 @@ void AudioEngine::setPlayThrough (PlayThrough mode) noexcept
 
 void AudioEngine::setGlitchCheck (bool shouldBeOn) noexcept
 {
+    const bool starting = shouldBeOn && ! glitch.isOn();
+
     if (shouldBeOn)
         toneReturn.store (-1);
 
     glitch.setOn (shouldBeOn);
+
+    if (starting && onGlitchCheckStarted != nullptr)
+        onGlitchCheckStarted();
 }
 
 void AudioEngine::resetDropoutStats() noexcept
@@ -424,6 +435,7 @@ void AudioEngine::endJob()
 
     measuring.store (false);
     resetDropoutStats();
+    updateLoopTiming();
 }
 
 void AudioEngine::tick()
@@ -635,6 +647,24 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         }
     }
 
+    // ---- the looper: its loops come back on the returns ---------------------------
+    if (! pinging && ! checking && ! measuring.load())
+    {
+        float* loopOutputs[numLoopOutputs];
+
+        for (int r = 0; r < numLoopOutputs; ++r)
+            loopOutputs[r] = output (r);
+
+        // A device with no USB stereo channel (anything smaller than the CQ) plays the loops on its first pair.
+        if (numOuts < 16 && loopOutputs[4] == nullptr)
+        {
+            loopOutputs[4] = output (0);
+            loopOutputs[5] = output (1);
+        }
+
+        loopCore.process (inputs, numIns, loopOutputs, numSamples);
+    }
+
     // ---- meters, clipping and the feedback guard ----------------------------
     float loudest = 0.0f;
 
@@ -662,6 +692,47 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 }
 
 //==============================================================================
+AudioEngine::LoopTiming AudioEngine::updateLoopTiming()
+{
+    LoopTiming timing;
+
+    if (currentSampleRate <= 0.0)
+        return timing;
+
+    // A loop has to come back out exactly one loop after it was played. A sound takes the
+    // round trip to get into the computer and back out again, so each recording is shifted
+    // earlier by that much, less the short delay the live sound itself has through the mixer.
+    const LatencyRow* measured = nullptr;
+
+    for (const auto& row : rows)
+        if (row.best >= 0 && row.bufferSize == currentBufferSize && juce::approximatelyEqual (row.sampleRate, currentSampleRate))
+            measured = &row;
+
+    const auto msToSamples = [this] (double ms) { return juce::roundToInt (ms * currentSampleRate / 1000.0); };
+
+    if (measured != nullptr)
+    {
+        const auto roundTrip = measured->heard[(size_t) measured->best].medianSamples;
+        timing.baseSamples = roundTrip - (deviceIsCQ ? msToSamples (measured->bestIsAnalogue ? cqThroughMs : cqMixMs) : 0);
+        timing.source = measured->bestIsAnalogue ? "the latency test at this buffer size"
+                                                 : "the latency test at this buffer size (no cable, so the copy inside the mixer)";
+    }
+    else if (const auto driver = driverLatencySamples(); driver > 0)
+    {
+        timing.baseSamples = driver - (deviceIsCQ ? msToSamples (cqThroughMs) : 0);
+        timing.source = "the driver's own figure (press Measure latency on the first tab for a measured one)";
+    }
+    else
+    {
+        timing.source = "nothing: no figure from the driver and no latency test yet";
+    }
+
+    timing.baseSamples = juce::jmax (0, timing.baseSamples);
+    timing.samples = juce::jmax (0, timing.baseSamples + msToSamples (loopTrimMs));
+    loopCore.setCompensation (timing.samples);
+    return timing;
+}
+
 juce::String AudioEngine::latencyText() const
 {
     juce::StringArray lines;

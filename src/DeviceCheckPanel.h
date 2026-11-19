@@ -32,6 +32,12 @@ public:
     /** Called when a scan has finished. */
     std::function<void (const DeviceReport&)> onScanned;
 
+    /** Called after each scan with the names of the MIDI inputs now being listened to. */
+    std::function<void (const juce::StringArray&)> onMidiOpened;
+
+    /** The MIDI listener, so the pedal can be given what arrives. */
+    MidiMonitor& midi() noexcept        { return midiMonitor; }
+
 private:
     void timerCallback() override;
     void runScan();

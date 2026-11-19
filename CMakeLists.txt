@@ -44,9 +44,15 @@ target_sources(GigRig PRIVATE
     src/DeviceReport.cpp
     src/GlitchWatch.cpp
     src/LatencyProbe.cpp
+    src/Looper.cpp
+    src/LooperPanel.cpp
+    src/LooperSelfTest.cpp
     src/MidiMonitor.cpp
+    src/Pedal.cpp
+    src/PedalPanel.cpp
     src/SelfTest.cpp
-    src/Style.cpp)
+    src/Style.cpp
+    src/TestSongs.cpp)
 
 target_compile_definitions(GigRig PRIVATE
     JUCE_WEB_BROWSER=0

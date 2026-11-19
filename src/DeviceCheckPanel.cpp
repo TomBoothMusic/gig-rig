@@ -89,6 +89,9 @@ void DeviceCheckPanel::runScan()
     appendMidiLines ({ opened.isEmpty() ? juce::String ("No MIDI inputs to listen to.")
                                         : "Listening to: " + opened.joinIntoString (", ") });
 
+    if (onMidiOpened != nullptr)
+        onMidiOpened (opened);
+
     scanButton.setEnabled (true);
 
     if (onScanned != nullptr)

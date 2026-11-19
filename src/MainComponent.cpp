@@ -9,7 +9,7 @@ MainComponent::MainComponent()
     title.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
     title.setColour (juce::Label::textColourId, style::textMain);
 
-    subtitle.setText ("Stage 1: audio through the CQ and round-trip latency.   Build " + juce::String (GIGRIG_BUILD_LABEL),
+    subtitle.setText ("Stages 1 to 3: audio through the CQ, the RC-600 as the pedal, and the looper.   Build " + juce::String (GIGRIG_BUILD_LABEL),
                       juce::dontSendNotification);
     subtitle.setFont (juce::Font (juce::FontOptions (14.0f)));
     subtitle.setColour (juce::Label::textColourId, style::textDim);
@@ -26,7 +26,20 @@ MainComponent::MainComponent()
     tabs.setColour (juce::TabbedComponent::outlineColourId, juce::Colours::transparentBlack);
     tabs.setOutline (0);
     tabs.addTab ("Latency and audio test", style::background, &audioPanel, false);
+    tabs.addTab ("Pedal (RC-600)", style::background, &pedalPanel, false);
+    tabs.addTab ("Looper", style::background, &looperPanel, false);
     tabs.addTab ("Device check", style::background, &devicePanel, false);
+
+    // The pedal: MIDI from the RC-600 (and clicks on the on-screen switches) become
+    // presses, holds and double-presses, and those go straight to the looper.
+    pedal.onEvent = [this] (const PedalEvent& event) { engine.looper().pedal (event); };
+    devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message) { pedal.handleMidi (deviceName, message); };
+    devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
+
+    // The pedal and the looper add their parts to the report, and a glitch check
+    // starts a fresh count of what the RC-600 sent while it ran.
+    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText(); };
+    engine.onGlitchCheckStarted = [this] { pedal.resetCounts(); };
 
     // ASIO drivers allow one user at a time, so the engine lets go of its
     // device while the device check looks at every driver, then picks it up again.

@@ -20,6 +20,7 @@ namespace style
     void readOnlyEditor (juce::TextEditor&);
     void heading (juce::Label&, const juce::String& text);
     void body (juce::Label&, const juce::String& text);
+    void combo (juce::ComboBox&);
 }
 
 /** One line of an answer: a coloured tag with a word in it, a headline and a

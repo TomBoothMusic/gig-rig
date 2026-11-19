@@ -37,6 +37,13 @@ namespace style
         label.setColour (juce::Label::textColourId, textMain);
         label.setMinimumHorizontalScale (0.8f);
     }
+
+    void combo (juce::ComboBox& box)
+    {
+        box.setColour (juce::ComboBox::backgroundColourId, panel);
+        box.setColour (juce::ComboBox::textColourId, textMain);
+        box.setColour (juce::ComboBox::outlineColourId, textDim.withAlpha (0.4f));
+    }
 }
 
 //==============================================================================
