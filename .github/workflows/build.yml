@@ -37,9 +37,10 @@ jobs:
 
       - name: Install Linux build packages
         if: runner.os == 'Linux'
+        # Retries ride out the Ubuntu package servers' occasional 503 errors.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
             ninja-build xvfb \
             libasound2-dev libjack-jackd2-dev \
             libfreetype-dev libfontconfig1-dev \
