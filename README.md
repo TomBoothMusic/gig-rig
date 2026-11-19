@@ -72,7 +72,7 @@ Some glitches happen in the driver or the USB link, where the Dropout watch cann
 2. Turn your speakers down or off if you do not want to listen to the tone. The check works either way.
 3. In the app, click **Glitch check**. Within a couple of seconds the line beside it should read **Tone watched**, with a running time and **Glitches: 0**.
 4. Leave it for 30 minutes and use the laptop as you normally would at a gig.
-5. Click **Copy report** and paste it to Claude. The report lists how many glitches there were and when each one happened.
+5. Click **Copy test results** and paste it to Claude. It lists how many glitches there were and when each one happened. (**Copy report** is the long version with the full device list.)
 6. Click **Stop glitch check** when you are done. Play-through is silent while the check runs and comes back when you stop it.
 
 If the line says the tone is not coming back cleanly, check the USB stereo channel is not muted and its fader is up.

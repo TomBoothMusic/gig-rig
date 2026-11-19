@@ -14,7 +14,15 @@ MainComponent::MainComponent()
     subtitle.setFont (juce::Font (juce::FontOptions (14.0f)));
     subtitle.setColour (juce::Label::textColourId, style::textDim);
 
-    copyButton.setTooltip ("Copies the latency results and the device list, ready to paste to Claude");
+    resultsButton.setTooltip ("Copies only the short stage 1 results: latency, dropouts and the glitch check");
+    resultsButton.onClick = [this]
+    {
+        juce::SystemClipboard::copyTextToClipboard ("GigRig test results, build " + juce::String (GIGRIG_BUILD_LABEL) + "\n\n" + engine.reportText());
+        resultsButton.setButtonText ("Copied");
+        startTimer (2000);
+    };
+
+    copyButton.setTooltip ("Copies everything: the full device list as well as the test results");
     copyButton.onClick = [this]
     {
         juce::SystemClipboard::copyTextToClipboard (devicePanel.reportText() + "\n" + engine.reportText());
@@ -47,7 +55,7 @@ MainComponent::MainComponent()
         firstScan = false;
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
+    for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &resultsButton, &tabs })
         addAndMakeVisible (c);
 
     setSize (980, 740);
@@ -71,6 +79,8 @@ void MainComponent::resized()
 
     auto header = area.removeFromTop (52);
     copyButton.setBounds (header.removeFromRight (120).reduced (0, 9));
+    header.removeFromRight (8);
+    resultsButton.setBounds (header.removeFromRight (150).reduced (0, 9));
     title.setBounds (header.removeFromTop (30));
     subtitle.setBounds (header);
 
@@ -82,6 +92,7 @@ void MainComponent::timerCallback()
 {
     stopTimer();
     copyButton.setButtonText ("Copy report");
+    resultsButton.setButtonText ("Copy test results");
 }
 
 } // namespace gigrig

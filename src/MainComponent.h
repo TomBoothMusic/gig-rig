@@ -26,7 +26,7 @@ private:
     AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
 
     juce::Label title, subtitle;
-    juce::TextButton copyButton { "Copy report" };
+    juce::TextButton copyButton { "Copy report" }, resultsButton { "Copy test results" };
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     AudioPanel audioPanel { engine };
     DeviceCheckPanel devicePanel;
