@@ -234,8 +234,23 @@ DeviceReport scanDevices()
         if (! type->hasSeparateInputsAndOutputs())
         {
             // ASIO-style: one name is the whole device, both directions.
+            // Asking an ASIO driver about its channels means loading it, which
+            // wakes up the gear behind it. Only the CQ's driver is loaded, so a
+            // scan never disturbs other gear (the RC-600 froze once during testing).
             for (const auto& name : outputs)
-                report.audioDevices.add (describeDevice (*type, name, name));
+            {
+                if (looksLikeCQ (name))
+                {
+                    report.audioDevices.add (describeDevice (*type, name, name));
+                    continue;
+                }
+
+                AudioDeviceEntry entry;
+                entry.typeName = type->getTypeName();
+                entry.name = name;
+                entry.note = "Installed, but left alone: only the CQ's ASIO driver is opened.";
+                report.audioDevices.add (entry);
+            }
 
             continue;
         }
@@ -305,6 +320,9 @@ juce::String DeviceReport::toText() const
 
             if (device.problem.isNotEmpty())
                 add ("      Problem: " + device.problem);
+
+            if (device.note.isNotEmpty())
+                add ("      " + device.note);
 
             if (! device.inputChannels.isEmpty())
                 add ("      Inputs (" + juce::String (device.inputChannels.size()) + "):  "

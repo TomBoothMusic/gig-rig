@@ -278,7 +278,7 @@ juce::Array<int> AudioEngine::availableBufferSizes() const
     if (device != nullptr)
         return device->getAvailableBufferSizes();
 
-    return simulated ? juce::Array<int> { 32, 64, 128, 256 } : juce::Array<int>();
+    return simulated ? juce::Array<int> { 8, 16, 32, 64, 128, 256 } : juce::Array<int>();
 }
 
 bool AudioEngine::hasControlPanel() const
@@ -692,7 +692,7 @@ juce::String AudioEngine::latencyText() const
 
             add (head + "round trip " + ms (row.ms (best.medianSamples)) + " (" + juce::String (best.medianSamples)
                    + " samples), heard on " + inputName (best.input, deviceIsCQ)
-                   + " at " + juce::String (best.levelDb, 0) + " dB");
+                   + " at " + juce::String (juce::roundToInt (best.levelDb)) + " dB");
             add ("               " + juce::String (best.pingsHeard) + " of " + juce::String (row.pingsSent)
                    + " pings, fastest " + juce::String (best.minSamples) + " and slowest " + juce::String (best.maxSamples)
                    + " samples; driver's own figure " + ms (row.ms (row.driverSamples))
@@ -708,7 +708,7 @@ juce::String AudioEngine::latencyText() const
                 if (i != row.best)
                     others.add (inputName (row.heard[(size_t) i].input, deviceIsCQ) + " "
                                   + ms (row.ms (row.heard[(size_t) i].medianSamples)) + " at "
-                                  + juce::String (row.heard[(size_t) i].levelDb, 0) + " dB");
+                                  + juce::String (juce::roundToInt (row.heard[(size_t) i].levelDb)) + " dB");
 
             if (! others.isEmpty())
                 add ("               also heard on: " + others.joinIntoString ("; "));

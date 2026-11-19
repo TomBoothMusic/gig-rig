@@ -118,6 +118,13 @@ juce::String runSelfTest (bool& passed)
         check (text.contains ("[FOUND]"),            "report shows a FOUND tag");
         check (text.contains ("16: Ch 16"),          "report numbers every channel");
         check (text.contains ("[NOT FOUND] RC-600"), "report shows the RC-600 as not found");
+
+        AudioDeviceEntry leftAlone;
+        leftAlone.typeName = "ASIO";
+        leftAlone.name = "RC-600";
+        leftAlone.note = "Installed, but left alone: only the CQ's ASIO driver is opened.";
+        r.audioDevices.add (leftAlone);
+        check (r.toText().contains ("RC-600\n      Installed, but left alone"), "an ASIO driver that was not opened says so");
     }
 
     check (MidiMonitor::describe (juce::MidiMessage::controllerEvent (1, 80, 127)) == "CC 80 = 127 (channel 1)",
