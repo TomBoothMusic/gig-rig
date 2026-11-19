@@ -2,27 +2,14 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "DeviceReport.h"
-#include "MidiMonitor.h"
+#include "AudioEngine.h"
+#include "AudioPanel.h"
+#include "DeviceCheckPanel.h"
 
 namespace gigrig
 {
 
-/** One line of the answer at the top of the window: a coloured tag,
-    a headline and a sentence on what to do next. */
-class VerdictRow final : public juce::Component
-{
-public:
-    void setVerdict (const Verdict& newVerdict);
-    void setScanning (const juce::String& what);
-    void paint (juce::Graphics&) override;
-
-private:
-    Verdict verdict;
-    bool scanning = true;
-};
-
-/** The stage 0 screen: what was found, the full report, and live MIDI. */
+/** The window's contents: a title, the Copy report button and one tab per stage. */
 class MainComponent final : public juce::Component,
                             private juce::Timer
 {
@@ -35,20 +22,19 @@ public:
 
 private:
     void timerCallback() override;
-    void requestScan();
-    void runScan();
-    void appendMidiLines (const juce::StringArray& lines);
 
-    juce::Label title, subtitle, reportHeading, midiHeading;
-    VerdictRow mixerRow, looperRow;
-    juce::TextButton scanButton { "Scan again" }, copyButton { "Copy report" };
-    juce::TextEditor reportView, midiView;
+    AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
 
-    MidiMonitor midiMonitor;
-    juce::String reportText;
-    int scanCountdown = 0;      // timer ticks until a requested scan runs
-    int copiedCountdown = 0;    // timer ticks until the Copy button's label resets
-    int midiLineCount = 0;
+    juce::Label title, subtitle;
+    juce::TextButton copyButton { "Copy report" };
+    juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
+    AudioPanel audioPanel { engine };
+    DeviceCheckPanel devicePanel;
+    juce::TooltipWindow tooltips { this };
+
+    DeviceChoice reopenChoice;      // what was running before a rescan, to start it again after
+    int reopenBufferSize = 0;
+    bool firstScan = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

@@ -8,8 +8,9 @@ namespace
     // The CQ12T shows 16 channels each way over USB.
     constexpr int expectedCQChannels = 16;
 
-    /** True if `word` appears in `text` without a letter stuck on the front,
-        so "CQ12T" and "A&H CQ" match but a word merely containing "cq" doesn't. */
+    /** True if `word` appears in `text` with no letter or digit stuck on the front
+        and no letter straight after, so "CQ12T" and "A&H CQ" match, but a word
+        merely containing "cq" doesn't, and nor does the monitor "MP341CQ". */
     bool containsWordStart (const juce::String& text, const juce::String& word)
     {
         const auto lower = text.toLowerCase();
@@ -22,7 +23,7 @@ namespace
             if (at < 0)
                 return false;
 
-            if (at == 0 || ! juce::CharacterFunctions::isLetter (lower[at - 1]))
+            if (at == 0 || ! juce::CharacterFunctions::isLetterOrDigit (lower[at - 1]))
             {
                 const auto after = lower[at + needle.length()];
 
@@ -195,8 +196,8 @@ void judge (DeviceReport& report)
     {
         report.looper = { Verdict::State::found,
                           "RC-600: found as a MIDI device (\"" + inName + "\")",
-                          "Press a switch on the RC-600 and watch the live MIDI monitor. Nothing may show yet: "
-                          "the switches only send MIDI once the stage 2 test memory is loaded." };
+                          "Select the MIDI CTRL memory (slot 65) on the RC-600, then press a switch: "
+                          "each press shows in the live MIDI monitor as CC 20 to 30." };
     }
     else if (outName.isNotEmpty())
     {
@@ -261,7 +262,7 @@ juce::String DeviceReport::toText() const
     juce::StringArray lines;
     const auto add = [&lines] (const juce::String& line = {}) { lines.add (line); };
 
-    add ("GigRig device check");
+    add ("GigRig report");
     add ("Build:    " + juce::String (GIGRIG_BUILD_LABEL) + " (version " + JUCE_APPLICATION_VERSION_STRING + ")");
     add ("System:   " + juce::SystemStats::getOperatingSystemName()
             + (juce::SystemStats::isOperatingSystem64Bit() ? ", 64-bit" : ", 32-bit"));
