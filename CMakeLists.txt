@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(GigRig VERSION 0.0.1 LANGUAGES C CXX)
+project(GigRig VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,8 +27,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 # ---------------------------------------------------------------------------
-# The app. Stage 0: a device check that lists audio and MIDI devices.
-# Later stages grow this same app into the rig engine.
+# The app. Stage 0 was a device check; stage 1 adds the audio engine with
+# play-through and a round-trip latency meter. Later stages keep growing it.
 # ---------------------------------------------------------------------------
 juce_add_gui_app(GigRig
     PRODUCT_NAME "GigRig"
@@ -38,9 +38,14 @@ juce_add_gui_app(GigRig
 target_sources(GigRig PRIVATE
     src/Main.cpp
     src/MainComponent.cpp
+    src/AudioEngine.cpp
+    src/AudioPanel.cpp
+    src/DeviceCheckPanel.cpp
     src/DeviceReport.cpp
+    src/LatencyProbe.cpp
     src/MidiMonitor.cpp
-    src/SelfTest.cpp)
+    src/SelfTest.cpp
+    src/Style.cpp)
 
 target_compile_definitions(GigRig PRIVATE
     JUCE_WEB_BROWSER=0

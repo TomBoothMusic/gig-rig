@@ -1,0 +1,747 @@
+#include "AudioEngine.h"
+#include "DeviceReport.h"
+
+namespace gigrig
+{
+
+namespace
+{
+    constexpr int pingsPerRow = 6;
+    constexpr int settleTicks = 10;        // half a second for a freshly opened device to steady
+    constexpr int gapTicks = 2;
+    constexpr int giveUpTicks = 40;
+    constexpr int scratchSize = 16384;
+    constexpr int cqAnalogueInputs = 10;   // CQ12T: USB channels 1 to 10 are the input sockets
+    constexpr float toneLevel = 0.125f;    // -18 dBFS
+    constexpr double toneHz = 440.0;
+
+    int usbPairFirstReturn (int numOutputs) noexcept    { return numOutputs >= 16 ? 4 : 0; }
+
+    void raisePeak (std::atomic<float>& slot, float peak) noexcept
+    {
+        if (peak > slot.load (std::memory_order_relaxed))
+            slot.store (peak, std::memory_order_relaxed);
+    }
+
+    float peakOf (const float* data, int numSamples) noexcept
+    {
+        const auto range = juce::FloatVectorOperations::findMinAndMax (data, numSamples);
+        return juce::jmax (std::abs (range.getStart()), std::abs (range.getEnd()));
+    }
+
+    juce::String ms (double value)      { return juce::String (value, 2) + " ms"; }
+}
+
+int returnToOutput (int returnIndex, int numOutputs) noexcept
+{
+    if (returnIndex < 0 || returnIndex >= numReturns)
+        return -1;
+
+    if (numOutputs >= 16)
+        return 8 + returnIndex;
+
+    return returnIndex < numOutputs ? returnIndex : -1;
+}
+
+juce::String returnName (int returnIndex)
+{
+    static const char* const lands[numReturns] = { "CQ channel 9", "CQ channel 10", "ST1 left", "ST1 right",
+                                                   "USB left", "USB right", "Bluetooth left", "Bluetooth right" };
+
+    if (returnIndex < 0 || returnIndex >= numReturns)
+        return {};
+
+    return "Return " + juce::String (returnIndex + 1) + " (" + lands[returnIndex] + ")";
+}
+
+juce::String inputName (int inputIndex, bool isCQ)
+{
+    if (! isCQ)
+        return "input " + juce::String (inputIndex + 1);
+
+    return inputIndex < cqAnalogueInputs ? "input socket " + juce::String (inputIndex + 1)
+                                         : "inside the mixer (USB channel " + juce::String (inputIndex + 1) + ")";
+}
+
+LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int numInputs, bool isCQ)
+{
+    LatencyRow row;
+    row.pingsSent = (int) pings.size();
+
+    for (int input = 0; input < numInputs; ++input)
+    {
+        std::vector<int> delays;
+        float level = -100.0f;
+
+        for (const auto& ping : pings)
+            for (const auto& hit : ping)
+                if (hit.input == input)
+                {
+                    delays.push_back (hit.delaySamples);
+                    level = juce::jmax (level, hit.levelDb);
+                }
+
+        // Heard on most of the pings, so one stray noise doesn't count.
+        if (delays.empty() || (int) delays.size() * 2 < row.pingsSent)
+            continue;
+
+        std::sort (delays.begin(), delays.end());
+
+        InputTiming timing;
+        timing.input = input;
+        timing.pingsHeard = (int) delays.size();
+        timing.medianSamples = delays[delays.size() / 2];
+        timing.minSamples = delays.front();
+        timing.maxSamples = delays.back();
+        timing.levelDb = level;
+        row.heard.push_back (timing);
+    }
+
+    // The answer is the loudest input socket: that is the loopback cable.
+    // (A microphone picking the ping up from a speaker is later and quieter.)
+    // If no socket heard it, fall back to the copy that came back inside the mixer.
+    const auto loudest = [&row] (bool wantAnalogue, bool cq)
+    {
+        int found = -1;
+
+        for (int i = 0; i < (int) row.heard.size(); ++i)
+        {
+            const bool analogue = ! cq || row.heard[(size_t) i].input < cqAnalogueInputs;
+
+            if (analogue == wantAnalogue && (found < 0 || row.heard[(size_t) i].levelDb > row.heard[(size_t) found].levelDb))
+                found = i;
+        }
+
+        return found;
+    };
+
+    row.best = loudest (true, isCQ);
+    row.bestIsAnalogue = row.best >= 0;
+
+    if (row.best < 0)
+        row.best = loudest (false, isCQ);
+
+    return row;
+}
+
+//==============================================================================
+AudioEngine::AudioEngine()
+{
+    juce::AudioDeviceManager manager;
+    manager.createAudioDeviceTypes (types);
+}
+
+AudioEngine::~AudioEngine()
+{
+    close();
+}
+
+juce::Array<DeviceChoice> AudioEngine::listDevices()
+{
+    juce::Array<DeviceChoice> choices;
+
+    for (auto* type : types)
+    {
+        type->scanForDevices();
+
+        const auto inputs  = type->getDeviceNames (true);
+        const auto outputs = type->getDeviceNames (false);
+
+        for (const auto& name : outputs)
+            if (! type->hasSeparateInputsAndOutputs() || inputs.contains (name))
+                choices.add ({ type->getTypeName(), name });
+    }
+
+    return choices;
+}
+
+juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize)
+{
+    if (device != nullptr)
+    {
+        device->stop();
+        device->close();
+        device.reset();
+    }
+
+    simulated = false;
+    choice = newChoice;
+    errorText = {};
+    currentSampleRate = 0.0;
+    currentBufferSize = currentInputs = currentOutputs = 0;
+
+    juce::AudioIODeviceType* type = nullptr;
+
+    for (auto* t : types)
+        if (t->getTypeName() == choice.typeName)
+            type = t;
+
+    if (type == nullptr)
+        return errorText = "This computer has no \"" + choice.typeName + "\" audio driver type.";
+
+    std::unique_ptr<juce::AudioIODevice> opened (type->createDevice (choice.deviceName, choice.deviceName));
+
+    if (opened == nullptr)
+        return errorText = "\"" + choice.deviceName + "\" would not open. It may be unplugged, switched off "
+                           "or in use by another program (close Reaper or any other audio program first).";
+
+    const auto inputNames  = opened->getInputChannelNames();
+    const auto outputNames = opened->getOutputChannelNames();
+
+    if (inputNames.isEmpty() || outputNames.isEmpty())
+        return errorText = "\"" + choice.deviceName + "\" reported no channels. It may be unplugged or switched off.";
+
+    juce::BigInteger inputs, outputs;
+    inputs.setRange (0, juce::jmin (32, inputNames.size()), true);
+    outputs.setRange (0, juce::jmin (32, outputNames.size()), true);
+
+    const auto rates = opened->getAvailableSampleRates();
+    const auto rate = rates.contains (48000.0) || rates.isEmpty() ? 48000.0 : rates[0];
+    const auto size = bufferSize > 0 ? bufferSize : opened->getDefaultBufferSize();
+
+    const auto error = opened->open (inputs, outputs, rate, size);
+
+    if (error.isNotEmpty())
+        return errorText = "\"" + choice.deviceName + "\" would not start: " + error;
+
+    device = std::move (opened);
+    deviceIsCQ = looksLikeCQ (choice.deviceName) && inputNames.size() >= 16 && outputNames.size() >= 16;
+    device->start (this);   // calls audioDeviceAboutToStart, then audio begins
+    return {};
+}
+
+void AudioEngine::close()
+{
+    if (job.active)
+    {
+        probe.cancel();
+        job.active = false;
+        measuring.store (false);
+    }
+
+    if (device != nullptr)
+    {
+        device->stop();
+        device->close();
+        device.reset();
+    }
+
+    simulated = false;
+    currentSampleRate = 0.0;
+    currentBufferSize = currentInputs = currentOutputs = 0;
+}
+
+void AudioEngine::openSimulated (double rate, int block, int ins, int outs)
+{
+    close();
+    simulated = true;
+    deviceIsCQ = ins >= 16 && outs >= 16;
+    choice = { "Simulated", "Simulated device" };
+    prepare (rate, block, ins, outs);
+}
+
+void AudioEngine::prepare (double rate, int block, int ins, int outs)
+{
+    currentSampleRate = rate;
+    currentBufferSize = block;
+    currentInputs = ins;
+    currentOutputs = outs;
+
+    scratch.assign ((size_t) scratchSize, 0.0f);
+    mix.assign ((size_t) scratchSize, 0.0f);
+    probe.prepare (rate, ins);
+    tonePhase = 0.0;
+    hotSamples = 0;
+    resetDropoutStats();
+}
+
+void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* d)
+{
+    prepare (d->getCurrentSampleRate(),
+             d->getCurrentBufferSizeSamples(),
+             d->getActiveInputChannels().countNumberOfSetBits(),
+             d->getActiveOutputChannels().countNumberOfSetBits());
+}
+
+void AudioEngine::audioDeviceError (const juce::String& message)
+{
+    errorText = message;
+}
+
+int AudioEngine::driverLatencySamples() const
+{
+    return device != nullptr ? device->getInputLatencyInSamples() + device->getOutputLatencyInSamples() : 0;
+}
+
+juce::Array<int> AudioEngine::availableBufferSizes() const
+{
+    if (device != nullptr)
+        return device->getAvailableBufferSizes();
+
+    return simulated ? juce::Array<int> { 32, 64, 128, 256 } : juce::Array<int>();
+}
+
+bool AudioEngine::hasControlPanel() const
+{
+    return device != nullptr && device->hasControlPanel();
+}
+
+void AudioEngine::showControlPanel()
+{
+    if (hasControlPanel())
+        device->showControlPanel();
+}
+
+juce::String AudioEngine::reopen (int newBufferSize)
+{
+    if (simulated)
+    {
+        prepare (currentSampleRate, newBufferSize, currentInputs, currentOutputs);
+        return {};
+    }
+
+    const auto sameDevice = choice;
+    return open (sameDevice, newBufferSize);
+}
+
+//==============================================================================
+void AudioEngine::setPlayThrough (PlayThrough mode) noexcept
+{
+    guardTripped.store (false);
+    playMode.store ((int) mode);
+}
+
+void AudioEngine::resetDropoutStats() noexcept
+{
+    statsSince = juce::Time::getCurrentTime();
+    driverDropoutsAtReset = device != nullptr ? juce::jmax (0, device->getXRunCount()) : 0;
+    statsResetRequested.store (true);
+}
+
+DropoutStats AudioEngine::dropoutStats() const
+{
+    DropoutStats stats;
+    stats.seconds = (juce::Time::getCurrentTime() - statsSince).inSeconds();
+    stats.driverDropouts = device == nullptr || device->getXRunCount() < 0
+                             ? -1
+                             : juce::jmax (0, device->getXRunCount() - driverDropoutsAtReset);
+
+    if (! statsResetRequested.load())
+    {
+        stats.lateCallbacks = lateCallbacks.load();
+        stats.worstGapMs = worstGapSeconds.load() * 1000.0;
+        stats.peakLoad = peakLoad.load();
+    }
+
+    stats.expectedGapMs = currentSampleRate > 0.0 ? currentBufferSize * 1000.0 / currentSampleRate : 0.0;
+    return stats;
+}
+
+int AudioEngine::dropoutTotal() const
+{
+    const auto stats = dropoutStats();
+    return juce::jmax (0, stats.driverDropouts) + stats.lateCallbacks;
+}
+
+//==============================================================================
+void AudioEngine::measure (std::vector<int> bufferSizes)
+{
+    if (! isOpen() || job.active)
+        return;
+
+    const auto available = availableBufferSizes();
+    std::vector<int> sizes;
+
+    for (auto size : bufferSizes)
+        if (available.contains (size))
+            sizes.push_back (size);
+
+    if (sizes.empty())
+        sizes.push_back (currentBufferSize);
+
+    rows.clear();
+    job = {};
+    job.active = true;
+    job.sizes = std::move (sizes);
+    job.originalSize = currentBufferSize;
+
+    toneReturn.store (-1);
+    measuring.store (true);
+    startRow();
+}
+
+void AudioEngine::startRow()
+{
+    const auto size = job.sizes[job.index];
+    job.rowProblem = {};
+    job.pings.clear();
+    job.phase = Job::Phase::settle;
+    job.ticks = 0;
+
+    if (size != currentBufferSize)
+    {
+        job.rowProblem = reopen (size);
+
+        if (job.rowProblem.isEmpty() && currentBufferSize != size)
+            job.rowProblem = "Asked the driver for " + juce::String (size) + " samples but it chose "
+                               + juce::String (currentBufferSize) + ".";
+    }
+}
+
+void AudioEngine::finishRow()
+{
+    auto row = summarisePings (job.pings, currentInputs, deviceIsCQ);
+    row.bufferSize = isOpen() ? currentBufferSize : job.sizes[job.index];
+    row.sampleRate = currentSampleRate;
+    row.driverSamples = driverLatencySamples();
+    row.dropouts = dropoutTotal();
+    row.problem = job.rowProblem;
+    rows.push_back (std::move (row));
+
+    if (++job.index < job.sizes.size())
+        startRow();
+    else
+        endJob();
+}
+
+void AudioEngine::endJob()
+{
+    job.active = false;
+
+    if (job.originalSize > 0 && currentBufferSize != job.originalSize)
+        reopen (job.originalSize);
+
+    measuring.store (false);
+    resetDropoutStats();
+}
+
+void AudioEngine::tick()
+{
+    if (! job.active)
+        return;
+
+    ++job.ticks;
+
+    if (! isOpen())
+    {
+        finishRow();   // the device would not reopen at this size; the row carries the reason
+        return;
+    }
+
+    switch (job.phase)
+    {
+        case Job::Phase::settle:
+            if (job.ticks >= settleTicks)
+            {
+                resetDropoutStats();
+                probe.fire();
+                job.phase = Job::Phase::listening;
+                job.ticks = 0;
+            }
+            break;
+
+        case Job::Phase::gap:
+            if (job.ticks >= gapTicks)
+            {
+                probe.fire();
+                job.phase = Job::Phase::listening;
+                job.ticks = 0;
+            }
+            break;
+
+        case Job::Phase::listening:
+            if (probe.captureReady())
+            {
+                job.pings.push_back (probe.analyse());
+
+                if ((int) job.pings.size() >= pingsPerRow)
+                {
+                    finishRow();
+                }
+                else
+                {
+                    job.phase = Job::Phase::gap;
+                    job.ticks = 0;
+                }
+            }
+            else if (job.ticks > giveUpTicks)
+            {
+                probe.cancel();
+                job.rowProblem = "No audio arrived from the device.";
+                finishRow();
+            }
+            break;
+    }
+}
+
+juce::String AudioEngine::measuringStatus() const
+{
+    if (! job.active)
+        return {};
+
+    return "Measuring at " + juce::String (job.sizes[job.index]) + " samples ("
+             + juce::String (job.index + 1) + " of " + juce::String (job.sizes.size()) + "): ping "
+             + juce::String (juce::jmin (pingsPerRow, (int) job.pings.size() + 1)) + " of " + juce::String (pingsPerRow);
+}
+
+//==============================================================================
+void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numIns,
+                                                    float* const* outputs, int numOuts, int numSamples,
+                                                    const juce::AudioIODeviceCallbackContext&)
+{
+    const auto startTicks = juce::Time::getHighResolutionTicks();
+    const auto period = currentSampleRate > 0.0 ? numSamples / currentSampleRate : 0.0;
+
+    if (statsResetRequested.exchange (false))
+    {
+        samplesSinceReset = 0;
+        lateCallbacks.store (0);
+        worstGapSeconds.store (0.0);
+        peakLoad.store (0.0);
+    }
+
+    // The first half second after a start or a reset is left out: a device
+    // that has only just opened takes a moment to find its rhythm.
+    samplesSinceReset = juce::jmin (samplesSinceReset + numSamples, 1 << 30);
+    const bool counting = samplesSinceReset > currentSampleRate * 0.5;
+
+    if (counting && lastCallbackTicks != 0 && period > 0.0)
+    {
+        const auto gap = juce::Time::highResolutionTicksToSeconds (startTicks - lastCallbackTicks);
+
+        if (gap > worstGapSeconds.load (std::memory_order_relaxed))
+            worstGapSeconds.store (gap, std::memory_order_relaxed);
+
+        // A whole extra block late (or 2 ms, for very small blocks that
+        // normally arrive in bunches): the sound very likely clicked.
+        if (gap > period + juce::jmax (period, 0.002))
+            lateCallbacks.fetch_add (1, std::memory_order_relaxed);
+    }
+
+    lastCallbackTicks = startTicks;
+
+    processBlock (inputs, numIns, outputs, numOuts, numSamples);
+
+    if (counting && period > 0.0)
+    {
+        const auto load = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - startTicks) / period;
+
+        if (load > peakLoad.load (std::memory_order_relaxed))
+            peakLoad.store (load, std::memory_order_relaxed);
+    }
+}
+
+void AudioEngine::processBlock (const float* const* inputs, int numIns,
+                                float* const* outputs, int numOuts, int numSamples) noexcept
+{
+    for (int ch = 0; ch < numOuts; ++ch)
+        if (outputs[ch] != nullptr)
+            juce::FloatVectorOperations::clear (outputs[ch], numSamples);
+
+    if (numSamples <= 0 || numSamples > scratchSize || (int) scratch.size() < scratchSize)
+        return;
+
+    for (int ch = 0; ch < juce::jmin (numIns, numMeteredInputs); ++ch)
+        if (inputs[ch] != nullptr)
+            raisePeak (inputPeaks[(size_t) ch], peakOf (inputs[ch], numSamples));
+
+    const auto output = [&] (int returnIndex) -> float*
+    {
+        const auto index = returnToOutput (returnIndex, numOuts);
+        return index >= 0 ? outputs[index] : nullptr;
+    };
+
+    // ---- the latency ping -------------------------------------------------
+    const bool pinging = probe.isSounding();
+    probe.process (inputs, numIns, scratch.data(), numSamples);
+
+    if (pinging)
+    {
+        // A device smaller than the CQ has no USB stereo channel: use every output it has.
+        const auto mask = numOuts >= 16 ? pingMask.load() : 0xff;
+
+        for (int r = 0; r < numReturns; ++r)
+            if ((mask & (1 << r)) != 0)
+                if (auto* out = output (r))
+                    juce::FloatVectorOperations::copy (out, scratch.data(), numSamples);
+    }
+
+    // ---- play-through (silent while measuring, so nothing can loop round) ----
+    const auto mode = (PlayThrough) playMode.load();
+    const bool playing = mode != PlayThrough::off && ! pinging && ! measuring.load();
+
+    if (playing && mode == PlayThrough::straight)
+    {
+        for (int r = 0; r < juce::jmin (numReturns, numIns); ++r)
+            if (auto* out = output (r); out != nullptr && inputs[r] != nullptr)
+                juce::FloatVectorOperations::copy (out, inputs[r], numSamples);
+    }
+    else if (playing && mode == PlayThrough::mixToUsb)
+    {
+        juce::FloatVectorOperations::clear (mix.data(), numSamples);
+
+        for (int ch = 0; ch < juce::jmin (numReturns, numIns); ++ch)
+            if (inputs[ch] != nullptr)
+                juce::FloatVectorOperations::add (mix.data(), inputs[ch], numSamples);
+
+        const auto first = usbPairFirstReturn (numOuts);
+
+        for (int r = first; r < first + 2; ++r)
+            if (auto* out = output (r))
+                juce::FloatVectorOperations::copy (out, mix.data(), numSamples);
+    }
+
+    // ---- the return check tone ----------------------------------------------
+    if (const auto r = toneReturn.load(); r >= 0 && ! pinging && ! measuring.load())
+    {
+        if (auto* out = output (r))
+        {
+            const auto step = juce::MathConstants<double>::twoPi * toneHz / juce::jmax (1.0, currentSampleRate);
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                out[i] += toneLevel * (float) std::sin (tonePhase);
+                tonePhase += step;
+            }
+
+            tonePhase = std::fmod (tonePhase, juce::MathConstants<double>::twoPi);
+        }
+    }
+
+    // ---- meters, clipping and the feedback guard ----------------------------
+    float loudest = 0.0f;
+
+    for (int r = 0; r < numReturns; ++r)
+    {
+        if (auto* out = output (r))
+        {
+            const auto peak = peakOf (out, numSamples);
+            juce::FloatVectorOperations::clip (out, out, -1.0f, 1.0f, numSamples);
+            raisePeak (returnPeaks[(size_t) r], juce::jmin (1.0f, peak));
+            loudest = juce::jmax (loudest, peak);
+        }
+    }
+
+    // Play-through stuck at full level for a quarter of a second is a feedback
+    // howl, not music: switch it off before it gets any louder.
+    hotSamples = playing && loudest >= 0.99f ? hotSamples + numSamples : 0;
+
+    if (hotSamples > currentSampleRate * 0.25)
+    {
+        playMode.store ((int) PlayThrough::off);
+        guardTripped.store (true);
+        hotSamples = 0;
+    }
+}
+
+//==============================================================================
+juce::String AudioEngine::latencyText() const
+{
+    juce::StringArray lines;
+    const auto add = [&lines] (const juce::String& line = {}) { lines.add (line); };
+
+    add ("STAGE 1: AUDIO AND LATENCY");
+    add ("--------------------------");
+
+    if (! isOpen())
+    {
+        add ("Audio device: none running."
+               + (errorText.isNotEmpty() ? " Last problem: " + errorText : juce::String()));
+    }
+    else
+    {
+        add ("Audio device: " + choice.label() + ", " + juce::String (currentSampleRate, 0) + " Hz, "
+               + juce::String (currentBufferSize) + "-sample buffer, "
+               + juce::String (currentInputs) + " in / " + juce::String (currentOutputs) + " out");
+
+        if (device != nullptr)
+            add ("Driver's own latency figure: in " + ms (device->getInputLatencyInSamples() * 1000.0 / currentSampleRate)
+                   + " + out " + ms (device->getOutputLatencyInSamples() * 1000.0 / currentSampleRate)
+                   + " = " + ms (driverLatencySamples() * 1000.0 / currentSampleRate));
+    }
+
+    add();
+
+    if (rows.empty())
+    {
+        add ("Latency test: not run yet.");
+    }
+    else
+    {
+        juce::StringArray pingOn;
+
+        for (int r = 0; r < numReturns; ++r)
+            if ((pingMask.load() & (1 << r)) != 0)
+                pingOn.add (juce::String (r + 1));
+
+        add ("Latency test (ping sent on return " + pingOn.joinIntoString ("+") + ", "
+               + juce::String (pingsPerRow) + " pings per buffer size):");
+
+        for (const auto& row : rows)
+        {
+            const auto head = "  Buffer " + juce::String (row.bufferSize).paddedRight (' ', 5);
+
+            if (row.best < 0)
+            {
+                add (head + "ping not heard on any input."
+                       + (row.problem.isNotEmpty() ? " " + row.problem : juce::String()));
+                continue;
+            }
+
+            const auto& best = row.heard[(size_t) row.best];
+
+            add (head + "round trip " + ms (row.ms (best.medianSamples)) + " (" + juce::String (best.medianSamples)
+                   + " samples), heard on " + inputName (best.input, deviceIsCQ)
+                   + " at " + juce::String (best.levelDb, 0) + " dB");
+            add ("               " + juce::String (best.pingsHeard) + " of " + juce::String (row.pingsSent)
+                   + " pings, fastest " + juce::String (best.minSamples) + " and slowest " + juce::String (best.maxSamples)
+                   + " samples; driver's own figure " + ms (row.ms (row.driverSamples))
+                   + "; dropouts during the test: " + juce::String (row.dropouts));
+
+            if (! row.bestIsAnalogue)
+                add ("               NOTE: no input socket heard the ping, so this is the copy that came back inside "
+                     "the mixer. It leaves out the mixer's converters. Check the loopback cable.");
+
+            juce::StringArray others;
+
+            for (int i = 0; i < (int) row.heard.size(); ++i)
+                if (i != row.best)
+                    others.add (inputName (row.heard[(size_t) i].input, deviceIsCQ) + " "
+                                  + ms (row.ms (row.heard[(size_t) i].medianSamples)) + " at "
+                                  + juce::String (row.heard[(size_t) i].levelDb, 0) + " dB");
+
+            if (! others.isEmpty())
+                add ("               also heard on: " + others.joinIntoString ("; "));
+
+            if (row.problem.isNotEmpty())
+                add ("               " + row.problem);
+        }
+    }
+
+    return lines.joinIntoString ("\n") + "\n";
+}
+
+juce::String AudioEngine::dropoutText() const
+{
+    juce::StringArray lines;
+    const auto add = [&lines] (const juce::String& line = {}) { lines.add (line); };
+
+    const auto mode = playThrough();
+    const auto stats = dropoutStats();
+    const auto seconds = (int) stats.seconds;
+
+    add ("Play-through: " + juce::String (mode == PlayThrough::off ? "off"
+                                           : mode == PlayThrough::straight ? "each input to its own return"
+                                                                           : "inputs 1 to 8 mixed to the USB stereo channel")
+           + (guardTripped.load() ? "  (SWITCHED OFF BY THE FEEDBACK GUARD)" : ""));
+    add ("Dropout watch, running for " + juce::String (seconds / 60) + " min " + juce::String (seconds % 60) + " s:");
+    add ("  Dropouts counted by the driver: "
+           + (stats.driverDropouts < 0 ? juce::String ("not reported") : juce::String (stats.driverDropouts)));
+    add ("  Late blocks of audio: " + juce::String (stats.lateCallbacks)
+           + " (longest wait " + ms (stats.worstGapMs) + ", normal is " + ms (stats.expectedGapMs) + ")");
+    add ("  Busiest moment: " + juce::String (stats.peakLoad * 100.0, 1) + "% of the time available");
+
+    return lines.joinIntoString ("\n") + "\n";
+}
+
+} // namespace gigrig

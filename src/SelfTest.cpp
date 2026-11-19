@@ -1,5 +1,7 @@
 #include "SelfTest.h"
+#include "AudioEngine.h"
 #include "DeviceReport.h"
+#include "LatencyProbe.h"
 #include "MidiMonitor.h"
 
 namespace gigrig
@@ -56,6 +58,8 @@ juce::String runSelfTest (bool& passed)
     check (! looksLikeCQ ("Realtek High Definition Audio"), "Realtek is not a CQ");
     check (! looksLikeCQ ("WING"),                         "Wing is not a CQ");
     check (! looksLikeCQ ("Acquire Capture"),              "a word containing 'cq' is not a CQ");
+    check (! looksLikeCQ ("MSI MP341CQ"),                  "the monitor 'MSI MP341CQ' is not a CQ");
+    check (looksLikeCQ ("CQ ASIO Driver"),                 "'CQ ASIO Driver' is a CQ");
     check (looksLikeRC600 ("RC-600"),                      "RC-600 is an RC-600");
     check (looksLikeRC600 ("MIDIIN2 (RC-600)"),            "second RC-600 port is an RC-600");
     check (! looksLikeRC600 ("RC-505mkII"),                "RC-505 is not an RC-600");
@@ -82,6 +86,7 @@ juce::String runSelfTest (bool& passed)
         check (r.mixer.headline.contains ("ASIO"),      "ASIO preferred when channel counts tie");
         check (r.mixer.headline.contains ("16 inputs"), "headline gives the input count");
         check (r.looper.state == State::found,          "RC-600 input -> looper found");
+        check (r.looper.detail.contains ("slot 65"),    "RC-600 advice points at the MIDI CTRL memory");
     }
 
     // --- No driver: Windows only shows a stereo pair --------------------------
@@ -119,6 +124,196 @@ juce::String runSelfTest (bool& passed)
            "CC message reads plainly");
     check (MidiMonitor::describe (juce::MidiMessage::programChange (1, 10)) == "Program change 11 (channel 1)",
            "program change is shown counting from 1");
+
+    // --- Latency probe: find a ping in a recording ----------------------------
+    {
+        const double rate = 48000.0;
+        const auto ping = LatencyProbe::makePing (rate);
+        juce::Random random (1234);
+
+        const auto recordingWith = [&] (int delay, float gain, float noise)
+        {
+            std::vector<float> recorded ((size_t) (rate * 0.35), 0.0f);
+
+            for (auto& sample : recorded)
+                sample = noise * (random.nextFloat() * 2.0f - 1.0f);
+
+            if (delay >= 0)
+                for (size_t i = 0; i < ping.size(); ++i)
+                    recorded[(size_t) delay + i] += gain * ping[i];
+
+            return recorded;
+        };
+
+        PingHit hit;
+        auto recorded = recordingWith (257, 1.0f, 0.0f);
+        check (LatencyProbe::findPing (recorded.data(), (int) recorded.size(), ping, hit) && hit.delaySamples == 257,
+               "ping found at exactly 257 samples");
+
+        recorded = recordingWith (1931, -0.05f, 0.002f);
+        check (LatencyProbe::findPing (recorded.data(), (int) recorded.size(), ping, hit) && hit.delaySamples == 1931,
+               "quiet, upside-down ping in hiss still found to the sample");
+
+        recorded = recordingWith (0, 0.5f, 0.0f);
+        check (LatencyProbe::findPing (recorded.data(), (int) recorded.size(), ping, hit) && hit.delaySamples == 0,
+               "ping with no delay at all is found at zero");
+
+        recorded = recordingWith (-1, 0.0f, 0.0f);
+        check (! LatencyProbe::findPing (recorded.data(), (int) recorded.size(), ping, hit), "silence is not a ping");
+
+        recorded = recordingWith (-1, 0.0f, 0.1f);
+        check (! LatencyProbe::findPing (recorded.data(), (int) recorded.size(), ping, hit), "noise alone is not a ping");
+
+        const auto ping96 = LatencyProbe::makePing (96000.0);
+        check (ping96.size() == ping.size() * 2, "the ping lasts the same time at 96 kHz");
+    }
+
+    // --- Return routing ------------------------------------------------------
+    check (returnToOutput (0, 16) == 8 && returnToOutput (7, 16) == 15, "CQ: returns 1 to 8 leave on USB channels 9 to 16");
+    check (returnToOutput (1, 2) == 1 && returnToOutput (2, 2) == -1,    "a stereo device only has returns 1 and 2");
+    check (returnName (4) == "Return 5 (USB left)",                      "return 5 is the CQ's USB stereo channel, left");
+    check (inputName (9, true) == "input socket 10",                     "CQ USB channel 10 is input socket 10");
+    check (inputName (14, true).contains ("inside the mixer"),           "CQ USB channel 15 is a copy from inside the mixer");
+
+    // --- Boiling a run of pings down to one answer -----------------------------
+    {
+        const auto hit = [] (int input, int delay, float level) { PingHit h; h.input = input; h.delaySamples = delay; h.match = 0.9f; h.levelDb = level; return h; };
+
+        // Cable on input 10, the mixer's own copy on 15 and 16, a microphone hearing a speaker on input 1.
+        std::vector<std::vector<PingHit>> pings;
+
+        for (int i = 0; i < 6; ++i)
+            pings.push_back ({ hit (0, 900 + i, -40.0f), hit (9, 260 + (i == 2 ? 1 : 0), -14.0f), hit (14, 210, -12.0f), hit (15, 210, -12.0f) });
+
+        pings[3].push_back (hit (5, 5000, -60.0f));   // one stray noise on input 6
+
+        auto row = summarisePings (pings, 16, true);
+        check (row.heard.size() == 4,                                         "a one-off noise on another input is ignored");
+        check (row.best >= 0 && row.heard[(size_t) row.best].input == 9,      "the loudest input socket is the answer");
+        check (row.best >= 0 && row.heard[(size_t) row.best].medianSamples == 260, "the answer is the middle value of the pings");
+        check (row.bestIsAnalogue,                                            "and it counts as heard through a socket");
+
+        for (auto& ping : pings)
+            ping.erase (ping.begin(), ping.begin() + 2);   // no cable, no microphone
+
+        row = summarisePings (pings, 16, true);
+        check (row.best >= 0 && ! row.bestIsAnalogue, "with no cable, the mixer's own copy is used and flagged");
+
+        row = summarisePings ({ {}, {}, {} }, 16, true);
+        check (row.best < 0 && row.pingsSent == 3, "nothing heard gives no answer");
+    }
+
+    // --- The whole engine against a pretend loopback cable ---------------------
+    {
+        constexpr int ins = 16, outs = 16, maxBlock = 256, cableDelay = 311;
+        constexpr int cableFrom = 12;   // return 5: USB channel 13, the CQ's USB stereo channel, left
+        constexpr int cableTo = 9;      // input socket 10
+
+        AudioEngine engine;
+        engine.openSimulated (48000.0, 64, ins, outs);
+
+        std::vector<std::vector<float>> inData (ins, std::vector<float> (maxBlock, 0.0f)),
+                                        outData (outs, std::vector<float> (maxBlock, 0.0f));
+        std::vector<const float*> inPointers;
+        std::vector<float*> outPointers;
+
+        for (auto& channel : inData)   inPointers.push_back (channel.data());
+        for (auto& channel : outData)  outPointers.push_back (channel.data());
+
+        std::vector<float> cable (cableDelay, 0.0f);
+        size_t cablePosition = 0;
+
+        const auto runAudio = [&] (int samples)
+        {
+            for (int done = 0; done < samples;)
+            {
+                const auto block = engine.bufferSize();
+
+                for (int i = 0; i < block; ++i)
+                    inData[cableTo][(size_t) i] = cable[(cablePosition + (size_t) i) % cable.size()];
+
+                engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, block);
+
+                for (int i = 0; i < block; ++i)
+                    cable[(cablePosition + (size_t) i) % cable.size()] = 0.5f * outData[cableFrom][(size_t) i];
+
+                cablePosition = (cablePosition + (size_t) block) % cable.size();
+                done += block;
+            }
+        };
+
+        engine.measure ({ 64, 256, 999 });
+
+        for (int tick = 0; tick < 2000 && engine.isMeasuring(); ++tick)
+        {
+            runAudio (2400);    // a twentieth of a second, like the screen's timer
+            engine.tick();
+        }
+
+        const auto& rows = engine.latencyRows();
+        check (! engine.isMeasuring(),                      "a measurement run finishes");
+        check (rows.size() == 2,                            "one row per buffer size the device offers");
+        check (engine.bufferSize() == 64,                   "the buffer size goes back to where it started");
+
+        for (const auto& row : rows)
+        {
+            const bool right = row.best >= 0 && row.bestIsAnalogue
+                                 && row.heard[(size_t) row.best].input == cableTo
+                                 && row.heard[(size_t) row.best].medianSamples == cableDelay
+                                 && row.heard[(size_t) row.best].minSamples == row.heard[(size_t) row.best].maxSamples;
+            check (right, "pretend cable of " + juce::String (cableDelay) + " samples measured exactly at a buffer of "
+                            + juce::String (row.bufferSize));
+        }
+
+        check (rows.size() == 2 && rows[1].bufferSize == 256, "the second row was measured at 256");
+        check (engine.reportText().contains ("round trip 6.48 ms (311 samples), heard on input socket 10"),
+               "the report gives the round trip in plain words");
+
+        // Play-through: straight, then mixed, then the feedback guard.
+        std::fill (cable.begin(), cable.end(), 0.0f);
+        for (auto& channel : inData)
+            std::fill (channel.begin(), channel.end(), 0.0f);
+
+        std::fill (inData[2].begin(), inData[2].end(), 0.25f);
+        engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+        check (juce::approximatelyEqual (outData[10][0], 0.0f), "play-through is off to begin with");
+
+        engine.setPlayThrough (PlayThrough::straight);
+        engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+        check (juce::approximatelyEqual (outData[10][5], 0.25f) && juce::approximatelyEqual (outData[11][5], 0.0f),
+               "straight play-through sends input 3 to return 3 only");
+
+        engine.setPlayThrough (PlayThrough::mixToUsb);
+        engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+        check (juce::approximatelyEqual (outData[12][5], 0.25f) && juce::approximatelyEqual (outData[13][5], 0.25f)
+                 && juce::approximatelyEqual (outData[10][5], 0.0f),
+               "mixed play-through sends the inputs to the USB stereo channel");
+
+        engine.setPlayThrough (PlayThrough::off);
+        engine.setToneReturn (0);
+        engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+        float tonePeak = 0.0f, elsewhere = 0.0f;
+
+        for (int i = 0; i < 64; ++i)
+        {
+            tonePeak = juce::jmax (tonePeak, std::abs (outData[8][(size_t) i]));
+            elsewhere = juce::jmax (elsewhere, std::abs (outData[9][(size_t) i]));
+        }
+
+        check (tonePeak > 0.01f && tonePeak <= 0.126f && juce::approximatelyEqual (elsewhere, 0.0f),
+               "the test tone sounds on the chosen return only");
+        engine.setToneReturn (-1);
+
+        engine.setPlayThrough (PlayThrough::straight);
+        std::fill (inData[2].begin(), inData[2].end(), 1.5f);   // a howl: stuck past full level
+
+        for (int block = 0; block < 400; ++block)
+            engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+
+        check (engine.feedbackGuardTripped() && engine.playThrough() == PlayThrough::off,
+               "the feedback guard switches play-through off");
+        check (outData[10][5] <= 1.0f && juce::approximatelyEqual (outData[10][5], 0.0f), "and the output is silent afterwards");
+    }
 
     passed = failures == 0;
     log.add ({});
