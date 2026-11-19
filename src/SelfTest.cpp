@@ -296,6 +296,14 @@ juce::String runSelfTest (bool& passed)
                  && juce::approximatelyEqual (outData[10][5], 0.0f),
                "mixed play-through sends the inputs to the USB stereo channel");
 
+        std::fill (inData[8].begin(), inData[8].end(), 0.125f);    // bass on input socket 9
+        std::fill (inData[14].begin(), inData[14].end(), 0.5f);    // the mixer's own output coming back on USB 15
+        engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);
+        check (juce::approximatelyEqual (outData[12][5], 0.375f),
+               "mixed play-through includes input 9 and leaves out the mixer's own copies");
+        std::fill (inData[8].begin(), inData[8].end(), 0.0f);
+        std::fill (inData[14].begin(), inData[14].end(), 0.0f);
+
         engine.setPlayThrough (PlayThrough::off);
         engine.setToneReturn (0);
         engine.processBlock (inPointers.data(), ins, outPointers.data(), outs, 64);

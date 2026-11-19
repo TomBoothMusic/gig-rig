@@ -56,9 +56,9 @@ If the box says **NOT HEARD**, the chirp is not reaching the main output: check 
 ### Part B: play through it for 30 minutes
 
 1. **Unplug the loopback cable first.** Leaving it in while play-through is on can howl.
-2. Plug your guitar into its usual input (it must be one of inputs 1 to 8). On the CQ, pull the faders for channels 1 to 8 right down, so the only sound you hear is the copy that has been through the computer. Use the faders, not mute.
+2. Plug everything into its usual inputs (any of inputs 1 to 10). On the CQ, pull the faders for channels 1 to 10 right down, so the only sound you hear is the copy that has been through the computer. Use the faders, not mute.
 3. In the app, choose the **Buffer** size to test (start with the smallest one that showed no dropouts in part A).
-4. Set **Play-through** to **Inputs 1 to 8 mixed to the CQ's USB stereo channel**.
+4. Set **Play-through** to **Inputs 1 to 10 mixed to the CQ's USB stereo channel**.
 5. Switch the speakers back on, at a low level to begin with, and play for 30 minutes. Listen for clicks or gaps, and glance at the **Dropout watch** line now and then.
 6. Click **Copy report** and paste it to Claude, with a note on anything you heard.
 
