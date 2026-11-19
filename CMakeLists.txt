@@ -42,6 +42,7 @@ target_sources(GigRig PRIVATE
     src/AudioPanel.cpp
     src/DeviceCheckPanel.cpp
     src/DeviceReport.cpp
+    src/GlitchWatch.cpp
     src/LatencyProbe.cpp
     src/MidiMonitor.cpp
     src/SelfTest.cpp
