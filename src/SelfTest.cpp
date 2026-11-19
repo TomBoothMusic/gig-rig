@@ -399,11 +399,23 @@ juce::String runSelfTest (bool& passed)
         runBlocks (1500, 1);
         check (engine.glitchStats().glitches == 1, "one block of silence counts as one glitch");
 
+        runBlocks (3000);
         runBlocks (1500, 2);
+        runBlocks (3000);
         found = engine.glitchStats();
         check (found.glitches == 2, "96 samples going missing counts as one more");
         check (found.times.size() == 2 && found.times[0] > 31.0 && found.times[0] < 33.0, "each glitch is timed");
-        check (engine.reportText().contains ("Glitches heard: 2"), "the report gives the glitch count");
+        check (engine.reportText().contains ("Glitches heard: 2") && engine.reportText().contains ("a single break"),
+               "the report gives the glitch count");
+
+        // A lead being unplugged: crackle for two seconds on the input the check is listening to.
+        for (int burst = 0; burst < 20; ++burst)
+            runBlocks (150, 1);
+
+        found = engine.glitchStats();
+        check (found.glitches == 3 && found.breaks >= 12 && found.breaksEach.size() == 3 && found.breaksEach[2] >= 10,
+               "a run of breaks close together counts as one glitch, with its breaks noted");
+        check (engine.reportText().contains ("a burst of"), "and the report calls it a burst");
 
         engine.resetDropoutStats();
         runBlocks (1500);

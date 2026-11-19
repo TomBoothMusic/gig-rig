@@ -17,12 +17,14 @@ struct GlitchStats
     State state = State::off;
     int input = -1;                 // the input the tone is being heard on
     bool analogue = false;          // through a socket (a cable), not the copy inside the mixer
-    int glitches = 0;               // breaks in the tone since the count was last reset
+    int glitches = 0;               // glitches since the count was last reset: breaks less than a second apart count as one
+    int breaks = 0;                 // every separate break, however close together
     double seconds = 0.0;           // how long the tone has been watched
     double lostSeconds = 0.0;       // how long the tone was missing altogether
     float levelDb = -100.0f;        // how loud the tone came back
     float backgroundPercent = 0.0f; // everything that is not the tone, as a share of it
-    std::vector<double> times;      // when the first few glitches happened, in seconds
+    std::vector<double> times;      // when the first few glitches started, in seconds
+    std::vector<int> breaksEach;    // and how many breaks each was made of
 };
 
 /** Sends a steady two-note tone and listens for it coming back.
@@ -87,15 +89,16 @@ private:
     int chosen = -1;
     double reference = 0.0, envelope = 0.0;
     int holdOff = 0, lostRun = 0;
-    juce::int64 watchedSamples = 0, lostSamples = 0;
+    juce::int64 watchedSamples = 0, lostSamples = 0, lastBreakAt = -1;
 
     // ---- written by the audio thread, read by the screen ----
     std::atomic<int> state { (int) GlitchStats::State::off };
     std::atomic<int> shownInput { -1 };
-    std::atomic<int> glitchCount { 0 };
+    std::atomic<int> glitchCount { 0 }, breakCount { 0 };
     std::atomic<double> shownSeconds { 0.0 }, shownLostSeconds { 0.0 };
     std::atomic<float> shownLevelDb { -100.0f }, shownBackground { 0.0f };
     std::array<std::atomic<float>, maxTimes> glitchTimes {};
+    std::array<std::atomic<int>, maxTimes> glitchBreaks {};
 };
 
 } // namespace gigrig

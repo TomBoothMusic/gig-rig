@@ -425,6 +425,7 @@ void AudioPanel::updateGlitchLine()
         colour = found.glitches == 0 ? style::textMain : style::amber;
         text = "Tone watched  " + juce::String (seconds / 60) + ":" + juce::String (seconds % 60).paddedLeft ('0', 2)
                  + "     Glitches: " + juce::String (found.glitches)
+                 + (found.breaks > found.glitches ? " (" + juce::String (found.breaks) + " breaks)" : juce::String())
                  + "     Heard on " + inputName (found.input, engine.isCQ())
                  + " at " + juce::String (juce::roundToInt (found.levelDb)) + " dB";
     }
