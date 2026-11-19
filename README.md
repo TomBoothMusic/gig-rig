@@ -124,6 +124,7 @@ GigRig --report report.txt      # write the device report, no window
 | --- | --- |
 | `src/AudioEngine.*` | Opens the audio device, passes audio through, runs latency measurements and counts dropouts |
 | `src/LatencyProbe.*` | Plays a chirp, records every input and finds how many samples later it came back |
+| `src/GlitchWatch.*` | Sends a steady two-note tone, cancels it from what comes back and counts every break |
 | `src/AudioPanel.*` | The stage 1 tab |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |
