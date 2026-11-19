@@ -1,0 +1,83 @@
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include "DeviceReport.h"
+#include "MainComponent.h"
+#include "SelfTest.h"
+
+namespace gigrig
+{
+
+class GigRigApplication final : public juce::JUCEApplication
+{
+public:
+    const juce::String getApplicationName() override    { return JUCE_APPLICATION_NAME_STRING; }
+    const juce::String getApplicationVersion() override { return JUCE_APPLICATION_VERSION_STRING; }
+    bool moreThanOneInstanceAllowed() override          { return true; }
+
+    void initialise (const juce::String& commandLine) override
+    {
+        // Two windowless modes for the automatic builds:
+        //   GigRig --report <file>      write the device report and exit
+        //   GigRig --self-test <file>   check the matching logic and exit (non-zero on failure)
+        const auto args = juce::StringArray::fromTokens (commandLine, true);
+        const auto fileAfter = [&args] (const juce::String& flag) -> juce::File
+        {
+            const auto index = args.indexOf (flag);
+            const auto path = index >= 0 ? args[index + 1].unquoted() : juce::String();
+            return path.isNotEmpty() ? juce::File::getCurrentWorkingDirectory().getChildFile (path) : juce::File();
+        };
+
+        if (args.contains ("--self-test"))
+        {
+            bool passed = false;
+            const auto log = runSelfTest (passed);
+            const auto wrote = fileAfter ("--self-test").replaceWithText (log);
+            setApplicationReturnValue (passed && wrote ? 0 : 1);
+            quit();
+            return;
+        }
+
+        if (args.contains ("--report"))
+        {
+            const auto wrote = fileAfter ("--report").replaceWithText (scanDevices().toText());
+            setApplicationReturnValue (wrote ? 0 : 1);
+            quit();
+            return;
+        }
+
+        mainWindow = std::make_unique<MainWindow> (getApplicationName());
+    }
+
+    void shutdown() override                { mainWindow.reset(); }
+    void systemRequestedQuit() override     { quit(); }
+
+private:
+    class MainWindow final : public juce::DocumentWindow
+    {
+    public:
+        explicit MainWindow (const juce::String& name)
+            : DocumentWindow (name, juce::Colour (0xff15181c), DocumentWindow::allButtons)
+        {
+            setUsingNativeTitleBar (true);
+            setContentOwned (new MainComponent(), true);
+            setResizable (true, false);
+            setResizeLimits (720, 560, 4000, 3000);
+            centreWithSize (getWidth(), getHeight());
+            setVisible (true);
+        }
+
+        void closeButtonPressed() override
+        {
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        }
+
+    private:
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
+    };
+
+    std::unique_ptr<MainWindow> mainWindow;
+};
+
+} // namespace gigrig
+
+START_JUCE_APPLICATION (gigrig::GigRigApplication)
