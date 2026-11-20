@@ -654,10 +654,18 @@ void runLooperSelfTest (const Check& check)
         const auto length = rig.length (0);
         rig.runSeconds (3.0);
 
-        rig.tap (1);                                    // switch 2: track 1 stop
+        rig.run (length / 3 + 4321);                    // somewhere in the middle of a bar
+        const auto trackStop = rig.tap (1);             // switch 2: track 1 stop
         check (rig.track (0).state == TrackState::stopped && ! rig.looper.snapshot().running && rig.looper.snapshot().tempoKnown,
                "stop stops the track; the tempo is kept");
         rig.runSeconds (1.0);
+        check (rig.worst (trackStop + 250 + 600, rig.time, [] (juce::int64) { return 0.0f; }) < exact,
+               "a track's stop switch is immediate by default: silent within a few milliseconds, not at the end of the loop");
+
+        for (int i = 0; i < numBuiltInSongs(); ++i)
+            if (builtInSong (i).rcMemory == 0)
+                for (const auto& tr : builtInSong (i).track)
+                    check (tr.stopMode == StopMode::immediate, "every layout that is not copied from an RC-600 memory stops its tracks immediately");
         const auto again = rig.tap (0);
         check (rig.track (0).state == TrackState::playing, "rec/play on a stopped track plays it");
         rig.runSeconds (5.0);
