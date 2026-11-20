@@ -36,11 +36,12 @@ namespace
         int block;
         int delayIn, delayOut;
         juce::int64 time = 0;                 // engine time, which is also real time here
-        std::vector<float> heard;             // the loop playback as heard, by real time
+        std::vector<float> heard;             // the loop playback as heard on return 5, by real time
+        std::vector<float> heardOn3;          // and on return 3
         std::function<float (juce::int64, int)> instrument;   // (real time, input socket) -> sample
         std::vector<LoopLogEntry> log;
 
-        Rig (double sampleRate, int blockSize, int in, int out, const char* song, bool fixedTempo = false)
+        Rig (double sampleRate, int blockSize, int in, int out, const char* song, bool fixedTempo = false, int outputMode = 0)
             : rate (sampleRate), block (blockSize), delayIn (in), delayOut (out)
         {
             looper.prepare (rate, 30.0);
@@ -48,6 +49,7 @@ namespace
 
             LooperOptions options;
             options.fixedTempo = fixedTempo;
+            options.outputMode = outputMode;
             looper.setOptions (options);
             looper.setSong (builtInSong (songIndex (song)));
 
@@ -85,11 +87,17 @@ namespace
                 const auto needed = (size_t) (time + block + delayOut);
 
                 if (heard.size() < needed)
+                {
                     heard.resize (needed, 0.0f);
+                    heardOn3.resize (needed, 0.0f);
+                }
 
                 // Returns 5 and 6 carry the same thing in the default routing; listen to 5.
                 for (int i = 0; i < block; ++i)
+                {
                     heard[(size_t) (time + i + delayOut)] = out[4][(size_t) i];
+                    heardOn3[(size_t) (time + i + delayOut)] = out[2][(size_t) i];
+                }
 
                 LoopLogEntry entries[64];
                 const auto count = looper.takeLog (entries, 64);
@@ -172,14 +180,20 @@ namespace
         float worst (juce::int64 from, juce::int64 to, const std::function<float (juce::int64)>& expected,
                      const std::function<bool (juce::int64)>& skip = nullptr) const
         {
-            if (from < 0 || to > (juce::int64) heard.size() || to <= from)
+            return worstOn (heard, from, to, expected, skip);
+        }
+
+        float worstOn (const std::vector<float>& listened, juce::int64 from, juce::int64 to, const std::function<float (juce::int64)>& expected,
+                       const std::function<bool (juce::int64)>& skip = nullptr) const
+        {
+            if (from < 0 || to > (juce::int64) listened.size() || to <= from)
                 return 1000.0f;
 
             float worstSoFar = 0.0f;
 
             for (auto t = from; t < to; ++t)
                 if (skip == nullptr || ! skip (t))
-                    worstSoFar = juce::jmax (worstSoFar, std::abs (heard[(size_t) t] - expected (t)));
+                    worstSoFar = juce::jmax (worstSoFar, std::abs (listened[(size_t) t] - expected (t)));
 
             return worstSoFar;
         }
@@ -431,6 +445,77 @@ void runLooperSelfTest (const Check& check)
         const auto start = rig.tap (0);
         rig.run ((start + 4 * 76190 + 64) - rig.time);
         check (rig.track (0).state == TrackState::playing && rig.length (0) == 4 * 76190, "and the first track closes itself after its 4 preset bars");
+    }
+
+    // =========================================================================
+    // One track, two sources: recorded with one press, kept apart, played back on separate returns
+    // =========================================================================
+    {
+        // Track 1 of this layout hears the vocal (socket 6) and the acoustic (socket 7).
+        Rig rig (48000.0, 64, 150, 250, "Two sources per track", false, 3);
+        const auto start = rig.tap (0);
+        rig.run (96000 - (rig.time - start));
+        rig.tap (0);
+        const auto length = rig.length (0);
+        check (length == 96000 && rig.track (0).lanes == 2, "a track that hears two sockets keeps two lanes, and one press records both");
+
+        rig.runSeconds (7.0);
+        const auto from = rig.time - 3 * length, to = rig.time;
+        const auto skip = [&] (juce::int64 t) { return rig.nearJoin (start, length, t); };
+        check (rig.worstOn (rig.heardOn3, from, to, [&] (juce::int64 t) { return rig.loop (5, start, length, t); }, skip) < exact,
+               "the vocal comes back on returns 3+4 alone, exactly in time");
+        check (rig.worst (from, to, [&] (juce::int64 t) { return rig.loop (6, start, length, t); }, skip) < exact,
+               "the acoustic comes back on returns 5+6 alone, exactly in time, so the two cannot drift apart");
+
+        // An overdub goes onto both lanes, and one undo takes it off both.
+        const auto dubOn = rig.tap (0);
+        rig.run (length / 2);
+        rig.tap (0);
+        rig.runSeconds (4.5);
+        const float quiet = 1.0e-4f;
+        const auto differs = [&] (const std::vector<float>& listened, int socket)
+        {
+            return rig.worstOn (listened, rig.time - length, rig.time, [&] (juce::int64 t) { return rig.loop (socket, start, length, t); }, skip) > quiet;
+        };
+        check (differs (rig.heardOn3, 5) && differs (rig.heard, 6), "an overdub is added to both lanes");
+        juce::ignoreUnused (dubOn);
+
+        rig.hold (0);
+        rig.runSeconds (4.5);
+        check (! differs (rig.heardOn3, 5) && ! differs (rig.heard, 6), "one undo takes the overdub off both lanes together");
+
+        // Stopping: both lanes fall silent at the same moment.
+        rig.tap (1);
+        rig.runSeconds (1.0);
+        const auto silent = [&] (const std::vector<float>& listened)
+        {
+            return rig.worstOn (listened, rig.time - 20000, rig.time, [] (juce::int64) { return 0.0f; }) < exact;
+        };
+        check (rig.track (0).state == TrackState::stopped && silent (rig.heardOn3) && silent (rig.heard), "the stop switch stops both lanes");
+
+        // A track with one source is not split: track 5 here hears only the vocal.
+        rig.tap (7 - 1);                                // bank 2
+        const auto solo = rig.tap (2);                  // track 5 rec/play
+        rig.run (rig.bar() * 2);
+        rig.tap (2);
+        rig.runSeconds (6.0);
+        const auto soloStart = rig.bar() > 0 ? solo + rig.mod (start - solo, rig.bar()) : solo;
+        juce::ignoreUnused (soloStart);
+        check (rig.track (4).lanes == 1 && silent (rig.heardOn3), "a track with one source has one lane and plays on 5+6 only");
+        check (rig.worst (rig.time - 20000, rig.time, [] (juce::int64) { return 0.0f; }) > 0.01f, "and it is heard there");
+    }
+
+    // The default routing mixes the lanes back together, so nothing changes for a song that does not split.
+    {
+        Rig rig (48000.0, 64, 150, 250, "Two sources per track");
+        const auto start = rig.tap (0);
+        rig.run (96000 - (rig.time - start));
+        rig.tap (0);
+        const auto length = rig.length (0);
+        rig.runSeconds (7.0);
+        check (rig.worst (rig.time - 3 * length, rig.time, [&] (juce::int64 t) { return rig.loop (5, start, length, t) + rig.loop (6, start, length, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, length, t); }) < exact,
+               "with everything on returns 5+6 the two lanes add up to exactly what one mixed track gave");
     }
 
     // =========================================================================
