@@ -336,6 +336,14 @@ void AudioPanel::updateVerdict()
     const auto time = judged->ms (best.medianSamples);
     const auto headline = "Round trip in ms    " + parts.joinIntoString (",   ");
 
+    if (judged->acousticInput >= 0)
+    {
+        verdict.set (Tone::good, "MEASURED", headline,
+                     "Measured on the copy inside the mixer. " + inputName (judged->acousticInput, engine.isCQ())
+                     + " also heard the chirp, but through the air from a speaker, so it was set aside. This is the right figure for the looper.");
+        return;
+    }
+
     if (! judged->bestIsAnalogue)
     {
         verdict.set (Tone::caution, "NO CABLE", headline,

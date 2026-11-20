@@ -127,13 +127,15 @@ How it keeps time:
 1. Plug in as you would for a gig, with the instruments going into the CQ. You hear yourself through the mixer as normal; the app only adds the loops.
 2. On the CQ, bring up the **USB** stereo channel to 0 dB. The loops come back on that channel.
 3. RC-600 on USB, memory **65**.
-4. In the app, on the **Latency and audio test** tab: set **Play-through** to off, make sure the glitch check is stopped, and click **Measure latency** once (no cable needed; you will hear a few chirps). This gives the looper its timing. The app remembers the result for this buffer size and safe mode setting, so it only needs doing again if you change one of those. If it has not been done, the Looper tab says **TIMING NOT MEASURED** in amber.
+4. In the app, on the **Latency and audio test** tab: set **Play-through** to off, make sure the glitch check is stopped, and click **Measure latency** once (no cable needed; you will hear a few chirps). This gives the looper its timing. The app remembers the result for this buffer size and safe mode setting, so it only needs doing again if you change one of those. If it has not been done, the Looper tab says **TIMING NOT MEASURED** in amber. It does not matter if a microphone or guitar hears the chirps from a speaker: the app spots that (it arrives too late to be a cable) and uses the copy inside the mixer instead.
+
+   The app also keeps a note of every delay figure the CQ's driver has given. If the driver's delay is well above what it was before at the same setting, the Looper tab says **DELAY HIGHER THAN BEFORE** in amber, and the report lists the figures with the date each was first seen. Loops still line up when that happens; restarting the computer is the first thing to try.
 5. Click the **Looper** tab. The line under the song box should name the CQ and say **Timing correction ... from the latency test**. If it shows an amber message instead, it says what to fix.
 6. Check the **socket** boxes on the right match where things are plugged in (vocal 6, acoustic and stomp 7, electric 8, bass 9).
 
 ### Part A: the basics, with the song set to "Standard layout"
 
-Switches: 1 = track 1 record/play, 2 = track 1 stop, 3 and 4 = track 2, 5 and 6 = track 3, 7 = bank, 8 = undo/redo, 9 = all start/stop. Holding a record/play switch for 2 seconds undoes; holding a stop switch clears the track.
+Switches: 1 = track 1 record/play, 2 = track 1 stop, 3 and 4 = track 2, 5 and 6 = track 3, 7 = bank, 8 = undo/redo, 9 = all start/stop. Holding a record/play switch for 2 seconds undoes; holding a stop switch clears the track. Holding the record/play switch from the very press that started a new recording throws that take away.
 
 1. Play a simple 2 or 4 bar guitar part. Press switch 1 on the first beat and again on the first beat as it comes round. Track 1 turns green and the loop plays. Listen to the join: is it clean, and is the loop in time with where you played it?
 2. Play along with the loop for a minute. Does it stay in time?
