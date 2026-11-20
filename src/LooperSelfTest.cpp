@@ -604,6 +604,25 @@ void runLooperSelfTest (const Check& check)
         check (rig.track (2).state == TrackState::armed || rig.track (2).state == TrackState::recording || rig.track (2).state == TrackState::closing, "Dreams: and its own track 3 goes into record");
     }
 
+    // ---- the saved tempo as a guide: it says how many bars the first loop was ----
+    {
+        Rig rig (48000.0, 64, 150, 250, "Dreams");      // saved at 120.6 BPM, track 1 has no preset length
+        const auto start = rig.tap (0);
+        rig.run (64 * 4600 - (rig.time - start));       // 6.13 s: three bars played a touch fast, at 117.4 BPM
+        rig.tap (0);
+        check (std::abs (rig.track (0).bars - 3.0) < 1.0e-9 && std::abs (rig.looper.snapshot().bpm - 117.4) < 0.1,
+               "with a saved tempo of 120.6, a 6.13 s first loop is 3 bars at 117.4 BPM, not 2 bars at half speed or 4");
+    }
+
+    {
+        Rig rig (48000.0, 64, 150, 250, "CCR Acoustic");    // saved at 88.2 BPM
+        const auto start = rig.tap (0);
+        rig.run (64 * 4000 - (rig.time - start));           // 5.33 s: two bars at 90 BPM
+        rig.tap (0);
+        check (std::abs (rig.track (0).bars - 2.0) < 1.0e-9 && std::abs (rig.looper.snapshot().bpm - 90.0) < 0.1,
+               "a 2-bar first loop comes out at the song's real tempo (90 BPM), not half of it");
+    }
+
     {
         Rig rig (48000.0, 64, 150, 250, "Songbird");
         const juce::int64 bar = 48000;

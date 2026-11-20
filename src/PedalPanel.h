@@ -50,7 +50,7 @@ private:
     PedalInput& pedal;
 
     StatusRow status;
-    juce::Label help, windowLabel, logHeading;
+    juce::Label help, windowLabel, windowNow, logHeading;
     juce::OwnedArray<SwitchTile> tiles;
     juce::ComboBox windowBox;
     juce::TextButton resetButton { "Start again" }, copyButton { "Copy pedal results" };

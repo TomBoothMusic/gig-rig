@@ -5,7 +5,8 @@ namespace gigrig
 
 namespace
 {
-    const int windowChoices[] = { 250, 300, 350, 400, 450, 500, 600 };
+    const int windowChoices[] = { 250, 300, 350, 400, 450, 500, 600, 700, 800 };
+    constexpr int followBeatId = 5000;
     constexpr int maxLogLines = 400;
 }
 
@@ -141,14 +142,27 @@ PedalPanel::PedalPanel (PedalInput& pedalToUse)
     }
 
     style::body (windowLabel, "Double-press: two presses within");
+    style::body (windowNow, {});
+    windowNow.setColour (juce::Label::textColourId, style::textDim);
+    addAndMakeVisible (windowNow);
     style::combo (windowBox);
+
+    windowBox.addItem ("one beat of the song", followBeatId);
 
     for (auto ms : windowChoices)
         windowBox.addItem (juce::String (ms) + " ms", ms);
 
-    windowBox.setSelectedId (pedal.doubleWindowMs(), juce::dontSendNotification);
-    windowBox.setTooltip ("If double-presses are being missed, make this longer. If two separate presses are being taken as a double-press, make it shorter.");
-    windowBox.onChange = [this] { pedal.setDoubleWindowMs (windowBox.getSelectedId()); };
+    windowBox.setSelectedId (pedal.followsBeat() ? followBeatId : pedal.doubleWindowMs(), juce::dontSendNotification);
+    windowBox.setTooltip ("One beat of the song: two presses a beat apart (say on beats 3 and 4) count as a double-press, whatever the tempo. "
+                          "Or choose a fixed time. If double-presses are missed, go longer; if two separate presses are taken as one double-press, go shorter.");
+    windowBox.onChange = [this]
+    {
+        const auto id = windowBox.getSelectedId();
+        pedal.setFollowBeat (id == followBeatId);
+
+        if (id != followBeatId && id > 0)
+            pedal.setDoubleWindowMs (id);
+    };
 
     resetButton.setTooltip ("Clears the ticks and the counts so the test can be done again");
     resetButton.onClick = [this]
@@ -195,7 +209,9 @@ void PedalPanel::resized()
 
     auto row = area.removeFromTop (28);
     windowLabel.setBounds (row.removeFromLeft (230));
-    windowBox.setBounds (row.removeFromLeft (100));
+    windowBox.setBounds (row.removeFromLeft (190));
+    row.removeFromLeft (8);
+    windowNow.setBounds (row.removeFromLeft (150));
     copyButton.setBounds (row.removeFromRight (160));
     row.removeFromRight (8);
     resetButton.setBounds (row.removeFromRight (110));
@@ -253,6 +269,11 @@ void PedalPanel::timerCallback()
         logView.moveCaretToEnd();
         logView.insertTextAtCaret (lines.joinIntoString ("\n") + "\n");
     }
+
+    const auto nowText = pedal.followsBeat() ? "now " + juce::String (pedal.doubleWindowMs()) + " ms" : juce::String();
+
+    if (windowNow.getText() != nowText)
+        windowNow.setText (nowText, juce::dontSendNotification);
 
     if (copiedTicks > 0 && --copiedTicks == 0)
         copyButton.setButtonText ("Copy pedal results");

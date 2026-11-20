@@ -97,7 +97,7 @@ The **Pedal (RC-600)** tab shows the RC-600's nine switches, and CTL3 and CTL4, 
 1. Plug the RC-600 into the laptop by USB and switch it on. On the RC-600 choose memory **65** (MIDI CTRL).
 2. Open the app and click the **Pedal (RC-600)** tab. The box at the top should say **CONNECTED**. If it says **NO RC-600**, go to the **Device check** tab, click **Scan again**, and come back.
 3. For each switch in turn: press it once, press it twice quickly, then hold it down for 2 seconds. Under the switch's name the words **press**, **hold** and **double** fill in green as the app sees each one.
-4. If a double-press is missed, or two separate presses are taken as a double-press, change **Double-press: two presses within** and try again. Note which setting feels right.
+4. **Double-press: two presses within** starts on **one beat of the song**, so two presses a beat apart (say on beats 3 and 4) count as a double-press at any tempo. With no loop running it uses the chosen song's saved tempo. You can pick a fixed time instead. Note which setting feels right.
 5. When all nine are filled in, click **Copy pedal results** and paste them to Claude. (CTL3 and CTL4 only fill in if footswitches are plugged into the RC-600's CTL 3/4 socket.)
 
 You can also click a switch on the screen with the mouse. That does the same as a foot on the real one.
@@ -117,7 +117,7 @@ The **Looper** tab is a six-track looper that copies how the RC-600 behaves, so 
 
 How it keeps time:
 
-- The first loop you record sets the length of a bar, and so the tempo.
+- The first loop you record sets the length of a bar, and so the tempo. For one of your own songs the saved tempo is the guide to how many bars that loop was: a 2-bar loop played near the saved tempo is counted as 2 bars at that tempo, not 1 bar at half of it. You never have to match the saved tempo exactly.
 - Every later track is a whole number of bars. If you press mid-bar it waits for the next bar to start recording, and when you press to finish it ends on the nearest bar.
 - A track with a preset length (as in some of your RC-600 memories) finishes by itself.
 - Each recording is shifted by the round-trip delay measured in stage 1, so a loop plays back exactly where you played it.
