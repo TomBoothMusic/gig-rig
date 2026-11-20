@@ -664,10 +664,19 @@ void runLooperSelfTest (const Check& check)
         check (rig.worst (again + 250 + 200, again + length - 500, [&] (juce::int64 t) { return f (start + (t - again)); }) < exact,
                "started with everything stopped, the loop plays from its beginning");
 
-        rig.tap (8);                                    // switch 9: all stop
-        check (rig.track (0).state == TrackState::stopped, "all start/stop stops everything");
-        rig.tap (8);
+        // All start/stop, the way Tom uses it: everything stops the moment it is pressed, wherever
+        // in the bar that is, and the next press starts every track from beat 1 straight away.
+        rig.run (length / 3 + 12345);                   // somewhere in the middle of a bar
+        const auto allStop = rig.tap (8);               // switch 9: all stop
+        check (rig.track (0).state == TrackState::stopped && ! rig.looper.snapshot().running, "all start/stop stops everything");
+        rig.runSeconds (0.7);
+        check (rig.worst (allStop + 250 + 600, rig.time, [] (juce::int64) { return 0.0f; }) < exact,
+               "all stop is immediate: silent within a few milliseconds, not at the end of the bar");
+        const auto allStart = rig.tap (8);
         check (rig.track (0).state == TrackState::playing, "and starts everything again");
+        rig.runSeconds (5.0);
+        check (rig.worst (allStart + 250 + 200, allStart + length - 500, [&] (juce::int64 t) { return f (start + (t - allStart)); }) < exact,
+               "all start does not wait for a bar line: every loop plays from beat 1 from the press");
 
         rig.tap (7);                                    // switch 8: undo/redo on the current track
         check (rig.track (0).undone, "undo with no overdub hides the whole recording");

@@ -141,7 +141,7 @@ Switches: 1 = track 1 record/play, 2 = track 1 stop, 3 and 4 = track 2, 5 and 6 
 2. Play along with the loop for a minute. Does it stay in time?
 3. Press switch 3 a little before a bar, play a bass line, and press switch 3 again near the end of a bar. Is track 2 in time with track 1?
 4. Press switch 1 again to overdub on track 1, play something, press again to finish. Hold switch 1 for 2 seconds to undo it, and hold again to bring it back.
-5. Press switch 9 to stop everything and again to start everything.
+5. Press switch 9 to stop everything and again to start everything. Everything stops the moment you press, wherever in the bar that is, and the second press starts every loop from beat 1 straight away without waiting for a bar line.
 6. Click **Copy looper results** and paste them to Claude, with a note on what you heard at each step.
 
 ### Part A2: one track, two sources kept apart
