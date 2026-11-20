@@ -275,6 +275,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     probe.prepare (rate, ins);
     glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
     loopCore.prepare (rate, simulated ? loopSecondsSimulated : loopSecondsReal);
+    bassRig.prepare (rate, scratchSize);
     updateLoopTiming();
     tonePhase = 0.0;
     hotSamples = 0;
@@ -682,6 +683,19 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         }
 
         loopCore.process (inputs, numIns, loopOutputs, numSamples);
+
+        // ---- the bass: the app's or the real Bass9's, on its own pair of returns ----
+        const auto pair = bassRig.outputPair();
+        auto* bassA = output (pair);
+        auto* bassB = output (pair + 1);
+
+        if (bassA == nullptr && bassB == nullptr)    // a small device: its first pair
+        {
+            bassA = output (0);
+            bassB = output (1);
+        }
+
+        bassRig.process (inputs, numIns, bassA, bassB, numSamples);
     }
 
     // ---- meters, clipping and the feedback guard ----------------------------

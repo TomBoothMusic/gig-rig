@@ -9,7 +9,7 @@ MainComponent::MainComponent()
     title.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
     title.setColour (juce::Label::textColourId, style::textMain);
 
-    subtitle.setText ("Stages 1 to 3: audio through the CQ, the RC-600 as the pedal, and the looper.   Build " + juce::String (GIGRIG_BUILD_LABEL),
+    subtitle.setText ("Stages 1 to 3 and the Bass9 test: audio through the CQ, the RC-600 as the pedal, the looper and the bass.   Build " + juce::String (GIGRIG_BUILD_LABEL),
                       juce::dontSendNotification);
     subtitle.setFont (juce::Font (juce::FontOptions (14.0f)));
     subtitle.setColour (juce::Label::textColourId, style::textDim);
@@ -28,17 +28,22 @@ MainComponent::MainComponent()
     tabs.addTab ("Latency and audio test", style::background, &audioPanel, false);
     tabs.addTab ("Pedal (RC-600)", style::background, &pedalPanel, false);
     tabs.addTab ("Looper", style::background, &looperPanel, false);
+    tabs.addTab ("Bass (Bass9 A/B)", style::background, &bassPanel, false);
     tabs.addTab ("Device check", style::background, &devicePanel, false);
 
     // The pedal: MIDI from the RC-600 (and clicks on the on-screen switches) become
     // presses, holds and double-presses, and those go straight to the looper.
-    pedal.onEvent = [this] (const PedalEvent& event) { engine.looper().pedal (event); };
+    pedal.onEvent = [this] (const PedalEvent& event)
+    {
+        if (! bassPanel.handlePedal (event))     // the bass A/B switch, if one is chosen, is not the looper's
+            engine.looper().pedal (event);
+    };
     devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message) { pedal.handleMidi (deviceName, message); };
     devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
 
-    // The pedal and the looper add their parts to the report, and a glitch check
+    // The pedal, the looper and the bass add their parts to the report, and a glitch check
     // starts a fresh count of what the RC-600 sent while it ran.
-    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText(); };
+    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText() + "\n" + bassPanel.reportText(); };
     engine.onGlitchCheckStarted = [this] { pedal.resetCounts(); };
 
     // ASIO drivers allow one user at a time, so the engine lets go of its

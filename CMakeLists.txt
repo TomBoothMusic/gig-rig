@@ -40,6 +40,10 @@ target_sources(GigRig PRIVATE
     src/MainComponent.cpp
     src/AudioEngine.cpp
     src/AudioPanel.cpp
+    src/BassMachine.cpp
+    src/BassPanel.cpp
+    src/BassRig.cpp
+    src/BassSelfTest.cpp
     src/DeviceCheckPanel.cpp
     src/DeviceReport.cpp
     src/GlitchWatch.cpp
@@ -77,6 +81,7 @@ endif()
 target_link_libraries(GigRig
     PRIVATE
         juce::juce_audio_devices
+        juce::juce_audio_formats
         juce::juce_gui_basics
     PUBLIC
         juce::juce_recommended_config_flags

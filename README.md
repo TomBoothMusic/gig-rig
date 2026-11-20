@@ -12,7 +12,8 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 1 | Audio through the CQ: a round-trip latency meter, buffer-size choice, play-through with a dropout watch, and a test tone for each return | Built |
 | 2 | The RC-600 as the pedal: every switch by name, and press, 2-second hold and double-press told apart | Built |
 | 3 | The looper: six tracks that copy how the RC-600 loops, driven by the RC-600's switches, for a side-by-side test | Built, first version |
-| 4 onward | Songs from the RC-600 backup, effects, tablet app | Planned |
+| Bass | The Bass9 test: the app's copy of the Bass9's PRECISION patch beside the real Bass9, with an A/B switch, live sliders, presets, a blind test and a capture recorder | Built, first version |
+| 4 onward | Songs from the RC-600 backup, more effects, tablet app | Planned |
 
 ## Getting the app (no tools needed)
 
@@ -165,6 +166,42 @@ If loops sound slightly early or late against your playing, move **Timing trim**
 
 Not copied yet: the RC-600's effects, rhythm, memory up/down, and tap tempo. A switch set to one of those shows as "Effect (later)" or similar and does nothing.
 
+## The Bass9 test
+
+The **Bass (Bass9 A/B)** tab makes a bass from your guitar the way the Bass9's PRECISION patch does, and puts the real Bass9 beside it so you can flip between the two.
+
+How the app's bass works, briefly: the guitar is split into 33 narrow strands (six to an octave), each strand is turned at half speed, which drops it exactly one octave while keeping its attack and how it dies away, and neighbouring strands are kept lined up so a note always comes out at full strength. Then it goes through a model of a P-bass pickup and tone knob, an EQ, a compressor and a touch of drive. Nothing looks ahead. Low notes take a little longer to speak than high ones (the **Tracking speed** slider trades that against how cleanly chords come out).
+
+Every slider changes the sound at once, so tuning needs no new build. A sound you like can be saved as a preset (a small text file in `Documents\GigRig\Bass presets`), and a preset Claude sends you can be loaded with **Load file...**.
+
+### Setting up (5 minutes)
+
+1. Guitar into the Bass9 as usual. Bass9 **EFFECT OUTPUT** into CQ socket 9 (as now). Bass9 **DRY OUTPUT** into a spare jack socket: socket 10 (unplug the latency cable) or socket 8 if the electric is not in use.
+2. On the CQ: set the **ST1** channel's Input Source to USB and bring its fader up. **Mute channel 9** (the Bass9's own channel) and keep the dry guitar channel muted too, so all you hear is what the app sends back on ST1.
+3. In the app, start the CQ on the first tab as usual, then open the **Bass (Bass9 A/B)** tab. Check the three boxes under **Plugging in** match your sockets.
+4. RC-600 on USB, memory 65. **CTL4** flips between A and B (change it under **A/B from the pedal** if CTL4 is not plugged in; any switch chosen there stops working for the looper while it is chosen).
+
+### Part A: first listen (10 minutes)
+
+1. Press **A: real Bass9** and play. You are hearing your Bass9 through the app, so it has the same small delay the app's bass will have.
+2. Press **Match app level to the Bass9** and play normally for about 8 seconds. The app sets its Level so the two are equally loud.
+3. Flip between A and B with CTL4 while you play. Try single notes low and high, a bass line, and the chords you would really play.
+4. Move the sliders on B to get closer. **Tone** and **Sub mix** are the Bass9's own CTRL 2 and CTRL 1; set them where your Bass9's knobs are first. Hover over any slider for what it does; double-click puts it back.
+5. When it is close, **Save as...** and name it.
+
+### Part B: blind test
+
+1. Press **Blind test**. A and B become 1 and 2 in a random order.
+2. Flip between 1 and 2, then press **1 is the real Bass9** or **2 is the real Bass9**. The app tells you if you were right and shuffles again.
+3. Do 10 rounds. Guessing scores about 5 of 10; a score near that means you cannot tell them apart.
+
+### Part C: capture for Claude (5 minutes)
+
+1. Press **Capture**, play 20 to 30 seconds of the kind of thing you play (a bass line, some low single notes, some chords), press **Stop capture**.
+2. **Open captures folder**. Each capture is a .wav (dry guitar, real Bass9 and the app's bass, lined up) and a .txt with the slider settings. Upload both here; Claude matches the app to the Bass9 from them and sends a preset back.
+
+Click **Copy report** at the top and paste it with your notes: it includes the bass settings, blind test score, level match and captures.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.
@@ -211,6 +248,10 @@ GigRig --report report.txt      # write the device report, no window
 | `src/TestSongs.cpp` | Song set-ups for the side-by-side test, taken from the RC-600 backup |
 | `src/LooperPanel.*` | The stage 3 tab |
 | `src/LooperSelfTest.cpp` | Checks for the pedal and the looper, with loop timing checked to the sample |
+| `src/BassMachine.*` | The bass sound itself (plain C++, no JUCE): the octave-down filter bank, P-bass pickup and tone model, EQ, compressor, drive and gate, and preset text |
+| `src/BassRig.*` | The Bass9 test inside the engine: A/B routing, level figures and the capture recorder |
+| `src/BassPanel.*` | The Bass (Bass9 A/B) tab: sliders, presets, A/B switch, blind test, level match, capture |
+| `src/BassSelfTest.cpp` | Checks for the bass: octave and two octaves down, steady level, tone knob, gate, A/B routing, speed |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |
 | `src/DeviceCheckPanel.*` | The stage 0 tab |

@@ -2,6 +2,7 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include "BassRig.h"
 #include "GlitchWatch.h"
 #include "LatencyProbe.h"
 #include "Looper.h"
@@ -203,6 +204,9 @@ public:
     void setLoopTrimMs (double ms)                  { loopTrimMs = ms; updateLoopTiming(); }
     double getLoopTrimMs() const noexcept           { return loopTrimMs; }
 
+    /** The Bass9 test bench: the app's bass beside the real Bass9 on one pair of returns. */
+    BassRig& bass() noexcept                        { return bassRig; }
+
     //==============================================================================
     /** The audio thread's work. Public so the self-test can drive it. */
     void processBlock (const float* const* inputs, int numIns, float* const* outputs, int numOuts, int numSamples) noexcept;
@@ -270,6 +274,7 @@ private:
     Job job;
     std::vector<LatencyRow> rows;
     Looper loopCore;
+    BassRig bassRig;
     double loopTrimMs = 0.0;
 
     // Measured corrections from this and earlier runs, kept in a small file so the latency
