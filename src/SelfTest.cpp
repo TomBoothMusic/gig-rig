@@ -208,6 +208,28 @@ juce::String runSelfTest (bool& passed)
         row = summarisePings (pings, 16, true);
         check (row.best >= 0 && ! row.bestIsAnalogue, "with no cable, the mixer's own copy is used and flagged");
 
+        // No cable, but a microphone hears the chirp from a speaker a few metres away, louder than the mixer's own copy.
+        for (auto& ping : pings)
+            ping.push_back (hit (5, 210 + 450, -6.0f));
+
+        row = summarisePings (pings, 16, true, 48000.0);
+        check (row.best >= 0 && ! row.bestIsAnalogue && row.heard[(size_t) row.best].medianSamples == 210,
+               "a microphone hearing a speaker is not taken for the cable: the mixer's own copy is the answer");
+        check (row.acousticInput == 5 && row.acousticSamples == 660, "and the report can say which socket heard it through the air");
+
+        for (auto& ping : pings)
+            ping.back() = hit (9, 210 + 17, -14.0f);    // a real cable: a third of a millisecond after the mixer's copy
+
+        row = summarisePings (pings, 16, true, 48000.0);
+        check (row.bestIsAnalogue && row.heard[(size_t) row.best].input == 9 && row.acousticInput < 0, "a real cable is still the answer");
+
+        // The driver's delay creeping up at the same setting.
+        std::vector<DriverDelayNote> history { { 96000, 64, 384, 512, 1000 }, { 96000, 64, 384, 224, 2000 }, { 96000, 128, 448, 320, 3000 } };
+        check (driverDelayGrown (history, 96000, 64, 384 + 1856) != nullptr
+                 && driverDelayGrown (history, 96000, 64, 384 + 1856)->total() == 608, "23 ms where the driver once said 6 ms is flagged, against the lowest seen");
+        check (driverDelayGrown (history, 96000, 64, 896) == nullptr, "the 3 ms that safe mode adds is not flagged");
+        check (driverDelayGrown (history, 96000, 256, 4000) == nullptr, "a setting never seen before is not flagged");
+
         row = summarisePings ({ {}, {}, {} }, 16, true);
         check (row.best < 0 && row.pingsSent == 3, "nothing heard gives no answer");
     }

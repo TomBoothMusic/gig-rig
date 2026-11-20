@@ -434,6 +434,26 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // A hold on the very press that started a recording throws the take away
+    // =========================================================================
+    {
+        Rig rig (48000.0, 64, 150, 250, "One press per track");
+        rig.hold (0);
+        check (rig.track (0).state == TrackState::empty && ! rig.track (0).hasAudio && rig.count (LoopLogEntry::Kind::recordingCancelled, 0) == 1,
+               "holding the switch that just started a first recording cancels it and leaves the track empty");
+
+        const auto start = rig.tap (0);
+        rig.run (96000 - (rig.time - start));
+        rig.tap (0);
+        check (rig.track (0).state == TrackState::playing && rig.length (0) == 96000, "and the track records normally straight afterwards");
+
+        rig.runSeconds (0.5);
+        rig.hold (1);                                   // track 2 was only waiting for the bar line
+        check (rig.track (1).state == TrackState::empty && rig.track (0).state == TrackState::playing,
+               "holding a switch whose track was waiting for the bar cancels that too, and leaves the others playing");
+    }
+
+    // =========================================================================
     // Overdub, undo and redo, and a press that turns into a hold or a double-press
     // =========================================================================
     {

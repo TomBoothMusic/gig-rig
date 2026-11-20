@@ -64,6 +64,8 @@ struct LatencyRow
     std::vector<InputTiming> heard;     // every input the ping came back on
     int best = -1;                      // index into heard: the answer, or -1 if not heard
     bool bestIsAnalogue = false;        // came back through a socket, not inside the mixer
+    int acousticInput = -1;             // a socket that heard the ping through the air (a microphone near a speaker), set aside
+    int acousticSamples = 0;            // and how long that took
     int dropouts = 0;                   // driver-reported dropouts plus late callbacks during the run
     juce::String problem;
 
@@ -71,7 +73,21 @@ struct LatencyRow
 };
 
 /** Boils a run of pings down to one row. Split out so it can be checked without hardware. */
-LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int numInputs, bool isCQ);
+LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int numInputs, bool isCQ, double sampleRate = 48000.0);
+
+/** One line of the driver's delay history: what the driver said its delay was, and when that was first seen. */
+struct DriverDelayNote
+{
+    int rate = 0, buffer = 0, inSamples = 0, outSamples = 0;
+    juce::int64 firstSeenMs = 0;
+
+    int total() const noexcept          { return inSamples + outSamples; }
+    double ms() const noexcept          { return rate > 0 ? total() * 1000.0 / rate : 0.0; }
+};
+
+/** The lowest delay the driver has reported before at this sample rate and buffer size, when the
+    figure now is well above it (more than safe mode alone adds). Null when there is nothing to warn about. */
+const DriverDelayNote* driverDelayGrown (const std::vector<DriverDelayNote>& history, int rate, int buffer, int totalNow);
 
 struct DropoutStats
 {
@@ -175,11 +191,15 @@ public:
         int samples = 0;            // what the looper is told
         int baseSamples = 0;        // before the trim
         juce::String source;        // "the latency test at this buffer size", "the driver's own figure"...
-        bool measured = false;      // false: only the driver's own figure, which can be far out (14 ms on the CQ)
+        bool measured = false;      // false: only the driver's own figure, not checked by a latency test
     };
 
     /** Works the correction out again and hands it to the looper. Message thread. */
     LoopTiming updateLoopTiming();
+
+    /** Empty, or a sentence saying the driver's delay is well above what it was before at this
+        same setting. Message thread. */
+    juce::String driverDelayWarning();
     void setLoopTrimMs (double ms)                  { loopTrimMs = ms; updateLoopTiming(); }
     double getLoopTrimMs() const noexcept           { return loopTrimMs; }
 
@@ -260,6 +280,12 @@ private:
     bool rememberedLoaded = false;
     void loadRemembered();
     void remember (int samples);
+
+    // Every different delay figure the driver has given, with the date it was first seen,
+    // so a delay that has crept up since an earlier day shows up without anyone reading numbers out.
+    std::vector<DriverDelayNote> driverHistory;
+    bool driverHistoryLoaded = false;
+    void noteDriverDelay();
     juce::Time statsSince;
     int driverDropoutsAtReset = 0;
 

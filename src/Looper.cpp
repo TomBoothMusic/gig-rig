@@ -644,6 +644,20 @@ void Looper::handleHold (int sw) noexcept
     if (track >= 0 && tracks[(size_t) track].tentative && tracks[(size_t) track].tentativeSwitch == sw)
         cancelTentative (track, false);
 
+    // Held on the very press that started a first recording (or set one waiting for the bar):
+    // on the RC-600 a hold undoes the last recording, so the take is thrown away.
+    if (track >= 0 && (p.fn.hold == LoopAction::undoRedo || p.fn.hold == LoopAction::undoOrClear))
+    {
+        auto& tr = tracks[(size_t) track];
+
+        if (p.stateBefore == TrackState::empty && tr.recStartedBySwitch == sw
+              && (tr.state == TrackState::armed || tr.state == TrackState::recording))
+        {
+            cancelRecording (track, true);
+            return;
+        }
+    }
+
     const auto before = p.stateBefore;
     const bool wasRunning = before == TrackState::playing || before == TrackState::overdubbing || before == TrackState::recording
                               || before == TrackState::closing || before == TrackState::stopping;

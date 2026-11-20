@@ -18,6 +18,7 @@ namespace
     constexpr double loopSecondsSimulated = 20.0;
     constexpr double cqThroughMs = 0.7;             // the CQ's own delay from an input socket to its outputs
     constexpr double cqMixMs = 0.3;                 // the part of that which is its mixing, not its converters
+    constexpr double cableSlackMs = 1.5;            // a cable is at most this much later than the copy inside the mixer (measured: 0.35 ms)
 
     int usbPairFirstReturn (int numOutputs) noexcept    { return numOutputs >= 16 ? 4 : 0; }
 
@@ -67,7 +68,7 @@ juce::String inputName (int inputIndex, bool isCQ)
                                          : "inside the mixer (USB channel " + juce::String (inputIndex + 1) + ")";
 }
 
-LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int numInputs, bool isCQ)
+LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int numInputs, bool isCQ, double sampleRate)
 {
     LatencyRow row;
     row.pingsSent = (int) pings.size();
@@ -122,8 +123,26 @@ LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int n
     row.best = loudest (true, isCQ);
     row.bestIsAnalogue = row.best >= 0;
 
+    const auto insideMixer = isCQ ? loudest (false, true) : -1;
+
+    if (row.best >= 0 && insideMixer >= 0)
+    {
+        // A real cable comes back well under a millisecond after the copy inside the mixer.
+        // Anything much later went through the air: a microphone or pickup hearing a speaker.
+        // That is not the round trip, so it is set aside and the mixer's own copy is used.
+        const auto later = row.heard[(size_t) row.best].medianSamples - row.heard[(size_t) insideMixer].medianSamples;
+
+        if (later > juce::roundToInt (cableSlackMs * sampleRate / 1000.0))
+        {
+            row.acousticInput = row.heard[(size_t) row.best].input;
+            row.acousticSamples = row.heard[(size_t) row.best].medianSamples;
+            row.best = -1;
+            row.bestIsAnalogue = false;
+        }
+    }
+
     if (row.best < 0)
-        row.best = loudest (false, isCQ);
+        row.best = insideMixer >= 0 ? insideMixer : loudest (false, isCQ);
 
     return row;
 }
@@ -412,7 +431,7 @@ void AudioEngine::startRow()
 
 void AudioEngine::finishRow()
 {
-    auto row = summarisePings (job.pings, currentInputs, deviceIsCQ);
+    auto row = summarisePings (job.pings, currentInputs, deviceIsCQ, currentSampleRate);
     row.bufferSize = isOpen() ? currentBufferSize : job.sizes[job.index];
     row.sampleRate = currentSampleRate;
     row.driverSamples = driverLatencySamples();
@@ -696,8 +715,16 @@ namespace
 {
     juce::File rememberedTimingFile()
     {
-        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("GigRig").getChildFile ("loop-timing.txt");
+        // "-2": figures saved by earlier builds could include a microphone hearing a speaker, so they are left behind.
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("GigRig").getChildFile ("loop-timing-2.txt");
     }
+
+    juce::File driverDelayFile()
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("GigRig").getChildFile ("driver-delay.txt");
+    }
+
+    constexpr double driverDelaySlackMs = 6.0;
 }
 
 void AudioEngine::loadRemembered()
@@ -751,12 +778,93 @@ void AudioEngine::remember (int samples)
     file.replaceWithText (lines.joinIntoString ("\n") + "\n");
 }
 
+const DriverDelayNote* driverDelayGrown (const std::vector<DriverDelayNote>& history, int rate, int buffer, int totalNow)
+{
+    const DriverDelayNote* lowest = nullptr;
+
+    for (const auto& n : history)
+        if (n.rate == rate && n.buffer == buffer && n.total() > 0 && (lowest == nullptr || n.total() < lowest->total()))
+            lowest = &n;
+
+    // Safe mode adds about 3 ms on the CQ, which is expected. Twice that is not.
+    if (lowest == nullptr || rate <= 0 || (totalNow - lowest->total()) * 1000.0 / rate <= driverDelaySlackMs)
+        return nullptr;
+
+    return lowest;
+}
+
+void AudioEngine::noteDriverDelay()
+{
+    if (simulated || device == nullptr || currentSampleRate <= 0.0)
+        return;
+
+    const auto file = driverDelayFile();
+
+    if (! driverHistoryLoaded)
+    {
+        driverHistoryLoaded = true;
+
+        for (const auto& line : juce::StringArray::fromLines (file.loadFileAsString()))
+        {
+            const auto parts = juce::StringArray::fromTokens (line, " ", {});
+
+            if (parts.size() == 5 && parts[0].getIntValue() > 0 && parts[1].getIntValue() > 0)
+                driverHistory.push_back ({ parts[0].getIntValue(), parts[1].getIntValue(), parts[2].getIntValue(),
+                                           parts[3].getIntValue(), parts[4].getLargeIntValue() });
+        }
+    }
+
+    DriverDelayNote now { juce::roundToInt (currentSampleRate), currentBufferSize, device->getInputLatencyInSamples(),
+                          device->getOutputLatencyInSamples(), juce::Time::currentTimeMillis() };
+
+    if (now.total() <= 0)
+        return;
+
+    for (const auto& n : driverHistory)
+        if (n.rate == now.rate && n.buffer == now.buffer && n.inSamples == now.inSamples && n.outSamples == now.outSamples)
+            return;
+
+    driverHistory.push_back (now);
+
+    while (driverHistory.size() > 60)
+        driverHistory.erase (driverHistory.begin());
+
+    juce::StringArray lines;
+
+    for (const auto& n : driverHistory)
+        lines.add (juce::String (n.rate) + " " + juce::String (n.buffer) + " " + juce::String (n.inSamples) + " "
+                     + juce::String (n.outSamples) + " " + juce::String (n.firstSeenMs));
+
+    file.getParentDirectory().createDirectory();
+    file.replaceWithText (lines.joinIntoString ("\n") + "\n");
+}
+
+juce::String AudioEngine::driverDelayWarning()
+{
+    if (simulated || device == nullptr || currentSampleRate <= 0.0)
+        return {};
+
+    noteDriverDelay();
+    const auto* before = driverDelayGrown (driverHistory, juce::roundToInt (currentSampleRate), currentBufferSize, driverLatencySamples());
+
+    if (before == nullptr)
+        return {};
+
+    const auto oneDp = [] (double v) { return juce::String (v, 1); };
+    return "DELAY HIGHER THAN BEFORE: the CQ's driver says " + oneDp (driverLatencySamples() * 1000.0 / currentSampleRate)
+             + " ms now. At this same setting it said " + oneDp (before->ms()) + " ms on "
+             + juce::Time (before->firstSeenMs).toString (true, false) + ". Loops still line up, but play-through will feel late. "
+               "Restarting the computer is the first thing to try.";
+}
+
 AudioEngine::LoopTiming AudioEngine::updateLoopTiming()
 {
     LoopTiming timing;
 
     if (currentSampleRate <= 0.0)
         return timing;
+
+    noteDriverDelay();
 
     // A loop has to come back out exactly one loop after it was played. A sound takes the
     // round trip to get into the computer and back out again, so each recording is shifted
@@ -832,6 +940,23 @@ juce::String AudioEngine::latencyText() const
             add ("Driver's own latency figure: in " + ms (device->getInputLatencyInSamples() * 1000.0 / currentSampleRate)
                    + " + out " + ms (device->getOutputLatencyInSamples() * 1000.0 / currentSampleRate)
                    + " = " + ms (driverLatencySamples() * 1000.0 / currentSampleRate));
+
+        if (! simulated)
+        {
+            if (const auto* before = driverDelayGrown (driverHistory, juce::roundToInt (currentSampleRate), currentBufferSize, driverLatencySamples()))
+                add ("  DELAY HIGHER THAN BEFORE: at this same sample rate and buffer the driver said "
+                       + ms (before->ms()) + " on " + juce::Time (before->firstSeenMs).toString (true, true, false, true) + ".");
+
+            if (! driverHistory.empty())
+            {
+                add ("Driver's delay figures seen so far (each with when it was first seen):");
+
+                for (const auto& n : driverHistory)
+                    add ("  " + juce::Time (n.firstSeenMs).toString (true, true, false, true) + ": " + juce::String (n.rate) + " Hz, buffer "
+                           + juce::String (n.buffer) + ": in " + ms (n.inSamples * 1000.0 / n.rate) + " + out " + ms (n.outSamples * 1000.0 / n.rate)
+                           + " = " + ms (n.ms()));
+            }
+        }
     }
 
     add();
@@ -872,7 +997,11 @@ juce::String AudioEngine::latencyText() const
                    + " samples; driver's own figure " + ms (row.ms (row.driverSamples))
                    + "; dropouts during the test: " + juce::String (row.dropouts));
 
-            if (! row.bestIsAnalogue)
+            if (row.acousticInput >= 0)
+                add ("               NOTE: " + inputName (row.acousticInput, deviceIsCQ) + " heard the ping " + ms (row.ms (row.acousticSamples))
+                     + " after it was sent, too late to be a cable: a microphone or pickup hearing a speaker. "
+                     "It was set aside and the copy inside the mixer used instead.");
+            else if (! row.bestIsAnalogue)
                 add ("               NOTE: no input socket heard the ping, so this is the copy that came back inside "
                      "the mixer. It leaves out the mixer's converters. Check the loopback cable.");
 

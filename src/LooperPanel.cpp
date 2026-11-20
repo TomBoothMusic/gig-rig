@@ -305,6 +305,8 @@ void LooperPanel::slowUpdate()
     else if (! timing.measured)
         stripNote = "TIMING NOT MEASURED: click Measure latency on the Latency and audio test tab before recording (no cable needed). "
                     "Until then loops will play back out of time.";
+    else if (const auto grown = engine.driverDelayWarning(); grown.isNotEmpty())
+        stripNote = grown;
     else
     {
         stripWarning = false;
