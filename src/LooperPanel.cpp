@@ -302,6 +302,9 @@ void LooperPanel::slowUpdate()
         stripNote = "PAUSED while the latency test runs.";
     else if (engine.glitchCheckOn())
         stripNote = "PAUSED while the glitch check runs. Switch the glitch check off to use the looper.";
+    else if (! timing.measured)
+        stripNote = "TIMING NOT MEASURED: click Measure latency on the Latency and audio test tab before recording (no cable needed). "
+                    "Until then loops will play back out of time.";
     else
     {
         stripWarning = false;

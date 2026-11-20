@@ -175,6 +175,7 @@ public:
         int samples = 0;            // what the looper is told
         int baseSamples = 0;        // before the trim
         juce::String source;        // "the latency test at this buffer size", "the driver's own figure"...
+        bool measured = false;      // false: only the driver's own figure, which can be far out (14 ms on the CQ)
     };
 
     /** Works the correction out again and hands it to the looper. Message thread. */
@@ -250,6 +251,15 @@ private:
     std::vector<LatencyRow> rows;
     Looper loopCore;
     double loopTrimMs = 0.0;
+
+    // Measured corrections from this and earlier runs, kept in a small file so the latency
+    // test need not be repeated every time the app is opened. One line per setting:
+    // sample rate, buffer size, the driver's own latency figure (it changes with safe mode), samples.
+    struct RememberedTiming { int rate, buffer, driver, samples; };
+    std::vector<RememberedTiming> remembered;
+    bool rememberedLoaded = false;
+    void loadRemembered();
+    void remember (int samples);
     juce::Time statsSince;
     int driverDropoutsAtReset = 0;
 
