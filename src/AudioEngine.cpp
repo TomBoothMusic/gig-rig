@@ -692,6 +692,65 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 }
 
 //==============================================================================
+namespace
+{
+    juce::File rememberedTimingFile()
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("GigRig").getChildFile ("loop-timing.txt");
+    }
+}
+
+void AudioEngine::loadRemembered()
+{
+    if (rememberedLoaded || simulated)
+        return;
+
+    rememberedLoaded = true;
+
+    for (const auto& line : juce::StringArray::fromLines (rememberedTimingFile().loadFileAsString()))
+    {
+        const auto parts = juce::StringArray::fromTokens (line, " ", {});
+
+        if (parts.size() == 4 && parts[0].getIntValue() > 0 && parts[1].getIntValue() > 0 && parts[3].getIntValue() > 0)
+            remembered.push_back ({ parts[0].getIntValue(), parts[1].getIntValue(), parts[2].getIntValue(), parts[3].getIntValue() });
+    }
+}
+
+void AudioEngine::remember (int samples)
+{
+    if (simulated || device == nullptr || samples <= 0)
+        return;
+
+    loadRemembered();
+    const RememberedTiming entry { juce::roundToInt (currentSampleRate), currentBufferSize, driverLatencySamples(), samples };
+
+    bool found = false;
+
+    for (auto& r : remembered)
+    {
+        if (r.rate == entry.rate && r.buffer == entry.buffer && r.driver == entry.driver)
+        {
+            if (r.samples == entry.samples)
+                return;     // nothing new: this is called twice a second
+
+            r.samples = entry.samples;
+            found = true;
+        }
+    }
+
+    if (! found)
+        remembered.push_back (entry);
+
+    juce::StringArray lines;
+
+    for (const auto& r : remembered)
+        lines.add (juce::String (r.rate) + " " + juce::String (r.buffer) + " " + juce::String (r.driver) + " " + juce::String (r.samples));
+
+    const auto file = rememberedTimingFile();
+    file.getParentDirectory().createDirectory();
+    file.replaceWithText (lines.joinIntoString ("\n") + "\n");
+}
+
 AudioEngine::LoopTiming AudioEngine::updateLoopTiming()
 {
     LoopTiming timing;
@@ -716,6 +775,23 @@ AudioEngine::LoopTiming AudioEngine::updateLoopTiming()
         timing.baseSamples = roundTrip - (deviceIsCQ ? msToSamples (measured->bestIsAnalogue ? cqThroughMs : cqMixMs) : 0);
         timing.source = measured->bestIsAnalogue ? "the latency test at this buffer size"
                                                  : "the latency test at this buffer size (no cable, so the copy inside the mixer)";
+        timing.measured = true;
+        remember (timing.baseSamples);
+    }
+    else if (const auto* kept = [this]() -> const RememberedTiming*
+             {
+                 loadRemembered();
+
+                 for (const auto& r : remembered)
+                     if (r.rate == juce::roundToInt (currentSampleRate) && r.buffer == currentBufferSize && r.driver == driverLatencySamples())
+                         return &r;
+
+                 return nullptr;
+             }())
+    {
+        timing.baseSamples = kept->samples;
+        timing.source = "the latency test at this setting, remembered from before";
+        timing.measured = true;
     }
     else if (const auto driver = driverLatencySamples(); driver > 0)
     {
