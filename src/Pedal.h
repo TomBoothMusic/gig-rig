@@ -3,6 +3,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 
 #include <array>
+#include <atomic>
 #include <functional>
 
 namespace gigrig
@@ -96,6 +97,11 @@ public:
     void setDoubleWindowMs (int ms);
     int doubleWindowMs() const;
 
+    /** True when the double-press window should track one beat of the song (the looper screen
+        keeps it up to date), false when it stays at the figure chosen. */
+    void setFollowBeat (bool shouldFollow) noexcept     { followBeat.store (shouldFollow); }
+    bool followsBeat() const noexcept                   { return followBeat.load(); }
+
     /** Tell it which MIDI inputs are open, so it can say whether the RC-600 is connected. */
     void setOpenDevices (const juce::StringArray& names);
     bool rc600Connected() const;
@@ -126,6 +132,7 @@ private:
     std::array<double, numPedalSwitches> downAt {};
     juce::StringArray pending;
     bool connected = false;
+    std::atomic<bool> followBeat { true };
     int switchMessages = 0, otherChannelMessages = 0;
     juce::int64 clockTicks = 0;
     double lastClockAt = -1.0e9;

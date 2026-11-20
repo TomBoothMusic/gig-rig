@@ -300,7 +300,7 @@ juce::String PedalInput::reportText() const
                    "and were ignored. The MIDI CTRL memory sends on channel 1.");
 
     lines.add ("Double-press window: " + juce::String (juce::roundToInt (decoder.getDoubleWindow() * 1000.0))
-                 + " ms. Hold: 2 seconds.");
+                 + " ms" + (followBeat.load() ? " (following the beat: one beat of the song plus a fifth)" : "") + ". Hold: 2 seconds.");
     lines.add ("Seen from each switch (presses / releases / holds / double-presses):");
 
     int complete = 0;

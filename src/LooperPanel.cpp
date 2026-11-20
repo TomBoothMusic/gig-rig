@@ -282,6 +282,14 @@ void LooperPanel::slowUpdate()
 {
     timing = engine.updateLoopTiming();
 
+    if (pedal.followsBeat())
+    {
+        // Tom double-presses in time with the music (say beats 3 and 4), so the window is one beat and a bit.
+        const auto bpm = snapshot.tempoKnown && snapshot.bpm > 0.0 ? snapshot.bpm : song.savedBpm;
+        const auto beatMs = bpm > 0.0 ? 60000.0 / bpm : 500.0;
+        pedal.setDoubleWindowMs (juce::jlimit (300, 1000, juce::roundToInt (beatMs * 1.2 / 10.0) * 10));
+    }
+
     if (engine.looper().options().doubleWindowMs != pedal.doubleWindowMs())
         pushOptions();
 

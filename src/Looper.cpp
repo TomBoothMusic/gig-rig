@@ -940,7 +940,13 @@ void Looper::pressToClose (int track, TrackState next) noexcept
             return;
         }
 
-        if (bars <= 0)
+        if (bars <= 0 && activeSong.rcMemory > 0 && activeSong.savedBpm > 0.0)
+        {
+            // The song's saved tempo is the guide: the loop is however many bars bring it closest.
+            const auto barsAtSaved = (double) elapsed * activeSong.savedBpm / (activeSong.beatsPerBar * 60.0 * rate);
+            bars = juce::jlimit<juce::int64> (1, 64, (juce::int64) std::llround (barsAtSaved));
+        }
+        else if (bars <= 0)
         {
             bars = 1;
             const auto tempoFor = [&] (juce::int64 n) { return (double) n * activeSong.beatsPerBar * 60.0 * rate / (double) elapsed; };
