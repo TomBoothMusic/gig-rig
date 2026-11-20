@@ -144,6 +144,17 @@ Switches: 1 = track 1 record/play, 2 = track 1 stop, 3 and 4 = track 2, 5 and 6 
 5. Press switch 9 to stop everything and again to start everything.
 6. Click **Copy looper results** and paste them to Claude, with a note on what you heard at each step.
 
+### Part A2: one track, two sources kept apart
+
+A track that listens to two input sockets records each into its own lane. The lanes share one length and the same switch presses, so they cannot drift apart, but each can come back on its own mixer channel.
+
+1. On the CQ, set the ST1 channel's Input Source to USB and bring its fader up, as well as the USB stereo channel.
+2. In the **Song** box choose **Two sources per track**. In **Loops play on** choose **two-source tracks split: first on 3+4, second on 5+6**. Track 1 now hears vocal and acoustic, track 2 acoustic and bass. Its tile says "(kept apart)".
+3. Sing and play a verse together. Press switch 1 at the start and again at the end.
+4. On the CQ, pull the ST1 fader down: the looped vocal goes and the looped guitar stays. Bring it back and pull the USB stereo channel down instead: the guitar goes and the vocal stays. Are the two in time with each other, exactly as you played them?
+5. Overdub on track 1 (switch 1 again), then hold switch 1 to undo: the overdub should come off both.
+6. Click **Copy looper results** and paste them to Claude with what you heard.
+
 ### Part B: side by side with the RC-600
 
 1. In the **Song** box choose one of your songs (they are read from your RC-600 backup): Dirty Slap, CCR Acoustic, Wicked Game, Dreams, Throw Arms, Boiz, Dancing Moon or Songbird. The switches, each track's inputs and any preset lengths are then the same as in that RC-600 memory. The panel at the bottom left lists them.

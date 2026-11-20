@@ -328,14 +328,17 @@ void Looper::prepare (double sampleRate, double maxLoopSeconds)
 
     for (auto& tr : tracks)
     {
-        if ((juce::int64) tr.base.size() != capacity)
+        for (auto& lane : tr.lanes)
         {
-            tr.base.assign ((size_t) capacity, 0.0f);
-            tr.dub.assign ((size_t) capacity, 0.0f);
-        }
+            if ((juce::int64) lane.base.size() != capacity)
+            {
+                lane.base.assign ((size_t) capacity, 0.0f);
+                lane.dub.assign ((size_t) capacity, 0.0f);
+            }
 
-        tr.ring.assign ((size_t) ringSize, 0.0f);
-        tr.pre.assign ((size_t) crossfade, 0.0f);
+            lane.ring.assign ((size_t) ringSize, 0.0f);
+            lane.pre.assign ((size_t) crossfade, 0.0f);
+        }
     }
 
     now = 0;
@@ -435,17 +438,50 @@ void Looper::rebuildRouting() noexcept
         auto& tr = tracks[(size_t) t];
         const auto& setup = activeSong.track[(size_t) t];
 
-        tr.inputMask = 0;
+        // One lane for each input socket the track listens to, in the order vocal, acoustic,
+        // stomp, bass, electric. Sources on the same socket (acoustic and stomp on the CQ) share
+        // a lane, and anything past the last lane joins it.
+        juce::uint32 laneInputs[maxLoopLanes] = {};
+        bool laneIsVocal[maxLoopLanes] = {};
+        int lanes = 0;
 
         for (int s = 0; s < numLoopSources; ++s)
-            if ((setup.rcInputs & sourceBits[s]) != 0 && activeOptions.inputFor[(size_t) s] >= 0 && activeOptions.inputFor[(size_t) s] < 32)
-                tr.inputMask |= 1u << activeOptions.inputFor[(size_t) s];
+        {
+            const auto input = activeOptions.inputFor[(size_t) s];
 
-        const bool vocal = (setup.rcInputs & (rcMic1 | rcMic2)) != 0;
+            if ((setup.rcInputs & sourceBits[s]) == 0 || input < 0 || input >= 32)
+                continue;
 
-        tr.outputMask = activeOptions.outputMode == 2 ? 1u << t
-                      : activeOptions.outputMode == 1 && vocal ? 0b00001100u
-                                                               : 0b00110000u;
+            const auto bit = 1u << input;
+            int lane = -1;
+
+            for (int l = 0; l < lanes; ++l)
+                if ((laneInputs[l] & bit) != 0)
+                    lane = l;
+
+            if (lane < 0)
+                lane = lanes < maxLoopLanes ? lanes++ : maxLoopLanes - 1;
+
+            laneInputs[lane] |= bit;
+            laneIsVocal[lane] = laneIsVocal[lane] || s == (int) LoopSource::vocal;
+        }
+
+        tr.numLanes = juce::jmax (1, lanes);
+
+        for (int l = 0; l < maxLoopLanes; ++l)
+        {
+            auto& lane = tr.lanes[(size_t) l];
+            lane.inputMask = l < tr.numLanes ? laneInputs[l] : 0u;
+
+            switch (activeOptions.outputMode)
+            {
+                case 1:  lane.outputMask = laneIsVocal[l] ? 0b00001100u : 0b00110000u; break;
+                case 2:  lane.outputMask = 1u << t; break;
+                case 3:  lane.outputMask = tr.numLanes > 1 && l == 0 ? 0b00001100u : 0b00110000u; break;
+                default: lane.outputMask = 0b00110000u; break;
+            }
+        }
+
         tr.level = (float) juce::jlimit (0, 200, setup.level) * 0.01f;
     }
 
@@ -1391,36 +1427,47 @@ void Looper::render (juce::int64 from, juce::int64 to, float* const* outputs, in
             continue;
 
         const bool withDub = tr.hasDub && ! tr.dubUndone;
-        const auto* base = tr.base.data();
-        const auto* dub = tr.dub.data();
-        auto index = positionOf (tr, from);
-        auto gain = tr.gain;
+        const auto startIndex = positionOf (tr, from);
+        const auto startGain = tr.gain;
+        auto endGain = startGain;
         auto peak = tr.peak;
 
-        float* outs[numLoopOutputs];
-        int numOuts = 0;
-
-        for (int r = 0; r < numLoopOutputs; ++r)
-            if ((tr.outputMask & (1u << r)) != 0 && outputs[r] != nullptr)
-                outs[numOuts++] = outputs[r] + offset;
-
-        for (int i = 0; i < count; ++i)
+        // Every lane is read from the same place with the same fade, so the lanes of a track stay locked together.
+        for (int l = 0; l < tr.numLanes; ++l)
         {
-            if (gain < tr.gainTarget)       gain = juce::jmin (tr.gainTarget, gain + tr.gainUp);
-            else if (gain > tr.gainTarget)  gain = juce::jmax (tr.gainTarget, gain - tr.gainDown);
+            const auto& lane = tr.lanes[(size_t) l];
+            const auto* base = lane.base.data();
+            const auto* dub = lane.dub.data();
+            auto index = startIndex;
+            auto gain = startGain;
 
-            const auto sample = (withDub ? base[index] + dub[index] : base[index]) * gain * tr.level;
+            float* outs[numLoopOutputs];
+            int numOuts = 0;
 
-            for (int o = 0; o < numOuts; ++o)
-                outs[o][i] += sample;
+            for (int r = 0; r < numLoopOutputs; ++r)
+                if ((lane.outputMask & (1u << r)) != 0 && outputs[r] != nullptr)
+                    outs[numOuts++] = outputs[r] + offset;
 
-            peak = juce::jmax (peak, std::abs (sample));
+            for (int i = 0; i < count; ++i)
+            {
+                if (gain < tr.gainTarget)       gain = juce::jmin (tr.gainTarget, gain + tr.gainUp);
+                else if (gain > tr.gainTarget)  gain = juce::jmax (tr.gainTarget, gain - tr.gainDown);
 
-            if (++index >= tr.length)
-                index = 0;
+                const auto sample = (withDub ? base[index] + dub[index] : base[index]) * gain * tr.level;
+
+                for (int o = 0; o < numOuts; ++o)
+                    outs[o][i] += sample;
+
+                peak = juce::jmax (peak, std::abs (sample));
+
+                if (++index >= tr.length)
+                    index = 0;
+            }
+
+            endGain = gain;
         }
 
-        tr.gain = gain;
+        tr.gain = endGain;
         tr.peak = peak;
     }
 }
@@ -1442,12 +1489,16 @@ void Looper::fold (Track& tr, juce::int64 count) noexcept
             tr.foldNext = 0;
 
         const auto chunk = (int) juce::jmin (count, tr.length - tr.foldNext);
-        auto* dub = tr.dub.data() + tr.foldNext;
 
-        if (! tr.foldDiscard)
-            juce::FloatVectorOperations::add (tr.base.data() + tr.foldNext, dub, chunk);
+        for (auto& lane : tr.lanes)
+        {
+            auto* dub = lane.dub.data() + tr.foldNext;
 
-        juce::FloatVectorOperations::clear (dub, chunk);
+            if (! tr.foldDiscard)
+                juce::FloatVectorOperations::add (lane.base.data() + tr.foldNext, dub, chunk);
+
+            juce::FloatVectorOperations::clear (dub, chunk);
+        }
 
         tr.foldNext += chunk;
         count -= chunk;
@@ -1467,8 +1518,6 @@ void Looper::runWriters (juce::int64 blockEnd) noexcept
 {
     for (auto& tr : tracks)
     {
-        const auto* ring = tr.ring.data();
-
         // ---- a recording: linear, shifted earlier by the round trip ----
         if (tr.recActive)
         {
@@ -1477,8 +1526,9 @@ void Looper::runWriters (juce::int64 blockEnd) noexcept
             if (! tr.preCaptured && blockEnd >= zero)
             {
                 // The moment just before the loop starts, kept for the crossfade at the loop point.
-                for (int i = 0; i < crossfade; ++i)
-                    tr.pre[(size_t) i] = ring[(zero - crossfade + i) & ringMask];
+                for (auto& lane : tr.lanes)
+                    for (int i = 0; i < crossfade; ++i)
+                        lane.pre[(size_t) i] = lane.ring[(size_t) ((zero - crossfade + i) & ringMask)];
 
                 tr.preCaptured = true;
             }
@@ -1486,10 +1536,15 @@ void Looper::runWriters (juce::int64 blockEnd) noexcept
             const auto limit = tr.recLength > 0 ? tr.recLength : capacity;
             const auto from = juce::jmax (tr.recWrittenTo, zero);
             const auto to = juce::jmin (blockEnd, zero + limit);
-            auto* base = tr.base.data();
 
-            for (auto time = from; time < to; ++time)
-                base[time - zero] = ring[time & ringMask];
+            for (auto& lane : tr.lanes)
+            {
+                auto* base = lane.base.data();
+                const auto* ring = lane.ring.data();
+
+                for (auto time = from; time < to; ++time)
+                    base[time - zero] = ring[time & ringMask];
+            }
 
             tr.recWrittenTo = juce::jmax (tr.recWrittenTo, to);
 
@@ -1499,11 +1554,14 @@ void Looper::runWriters (juce::int64 blockEnd) noexcept
                 // before it began, so the jump back to the start is seamless.
                 if (tr.preCaptured && tr.recLength > crossfade * 4)
                 {
-                    for (int i = 0; i < crossfade; ++i)
+                    for (auto& lane : tr.lanes)
                     {
-                        const auto a = ((float) i + 0.5f) / (float) crossfade;
-                        auto& sample = base[tr.recLength - crossfade + i];
-                        sample = sample * (1.0f - a) + tr.pre[(size_t) i] * a;
+                        for (int i = 0; i < crossfade; ++i)
+                        {
+                            const auto a = ((float) i + 0.5f) / (float) crossfade;
+                            auto& sample = lane.base[(size_t) (tr.recLength - crossfade + i)];
+                            sample = sample * (1.0f - a) + lane.pre[(size_t) i] * a;
+                        }
                     }
                 }
 
@@ -1516,21 +1574,27 @@ void Looper::runWriters (juce::int64 blockEnd) noexcept
         {
             const auto closed = tr.gateOff >= never ? never : tr.gateOff + fadeSamples;
             const auto to = juce::jmin (blockEnd, closed);
-            auto* dub = tr.dub.data();
-            auto index = wrap (tr.dubWrittenTo - tr.dubComp - origin - tr.phase, tr.length);
+            const auto startIndex = wrap (tr.dubWrittenTo - tr.dubComp - origin - tr.phase, tr.length);
             const auto fadeStep = 1.0f / (float) fadeSamples;
 
-            for (auto time = tr.dubWrittenTo; time < to; ++time)
+            for (auto& lane : tr.lanes)
             {
-                auto gate = juce::jmin (1.0f, (float) (time - tr.gateOn) * fadeStep);
+                auto* dub = lane.dub.data();
+                const auto* ring = lane.ring.data();
+                auto index = startIndex;
 
-                if (time >= tr.gateOff)
-                    gate *= juce::jmax (0.0f, 1.0f - (float) (time - tr.gateOff) * fadeStep);
+                for (auto time = tr.dubWrittenTo; time < to; ++time)
+                {
+                    auto gate = juce::jmin (1.0f, (float) (time - tr.gateOn) * fadeStep);
 
-                dub[index] += ring[time & ringMask] * gate;
+                    if (time >= tr.gateOff)
+                        gate *= juce::jmax (0.0f, 1.0f - (float) (time - tr.gateOff) * fadeStep);
 
-                if (++index >= tr.length)
-                    index = 0;
+                    dub[index] += ring[time & ringMask] * gate;
+
+                    if (++index >= tr.length)
+                        index = 0;
+                }
             }
 
             tr.dubWrittenTo = juce::jmax (tr.dubWrittenTo, to);
@@ -1589,6 +1653,7 @@ void Looper::publish() noexcept
         v.undone = tr.baseUndone;
         v.overdubUndone = tr.hasDub && tr.dubUndone;
         v.tentative = tr.tentative;
+        v.lanes = tr.numLanes;
         v.peak = juce::jmax (tr.peak, v.peak * 0.85f);
         tr.peak = 0.0f;
 
@@ -1620,26 +1685,29 @@ void Looper::process (const float* const* inputs, int numInputs, float* const* o
     // are copied out of this, which is what lets them reach back in time.
     for (auto& tr : tracks)
     {
-        auto* ring = tr.ring.data();
-        auto position = now & ringMask;
-
-        for (int i = 0; i < numSamples; ++i)
+        for (auto& lane : tr.lanes)
         {
-            ring[position] = 0.0f;
-            position = (position + 1) & ringMask;
-        }
-
-        for (int ch = 0; ch < juce::jmin (numInputs, 32); ++ch)
-        {
-            if ((tr.inputMask & (1u << ch)) == 0 || inputs[ch] == nullptr)
-                continue;
-
-            position = now & ringMask;
+            auto* ring = lane.ring.data();
+            auto position = now & ringMask;
 
             for (int i = 0; i < numSamples; ++i)
             {
-                ring[position] += inputs[ch][i];
+                ring[position] = 0.0f;
                 position = (position + 1) & ringMask;
+            }
+
+            for (int ch = 0; ch < juce::jmin (numInputs, 32); ++ch)
+            {
+                if ((lane.inputMask & (1u << ch)) == 0 || inputs[ch] == nullptr)
+                    continue;
+
+                position = now & ringMask;
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    ring[position] += inputs[ch][i];
+                    position = (position + 1) & ringMask;
+                }
             }
         }
     }

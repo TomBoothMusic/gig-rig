@@ -109,7 +109,7 @@ void TrackTile::paint (juce::Graphics& g)
     g.drawFittedText (length, area.removeFromBottom (16.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
 
     g.setColour (style::textDim);
-    g.drawFittedText ("hears: " + describeRcInputs (setup.rcInputs), area.toNearestInt(), juce::Justification::centredLeft, 2, 0.75f);
+    g.drawFittedText ("hears: " + describeRcInputs (setup.rcInputs) + (view.lanes > 1 ? " (kept apart)" : ""), area.toNearestInt(), juce::Justification::centredLeft, 2, 0.75f);
 }
 
 //==============================================================================
@@ -183,6 +183,7 @@ LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse)
     style::body (outLabel, "Loops play on");
     outBox.addItem ("returns 5+6 (the CQ's USB channel)", 1);
     outBox.addItem ("vocal loops on 3+4 (ST1), the rest on 5+6", 2);
+    outBox.addItem ("two-source tracks split: first on 3+4, second on 5+6", 3);
     outBox.setSelectedId (1, juce::dontSendNotification);
     outBox.onChange = [this] { pushOptions(); };
 
@@ -239,7 +240,7 @@ void LooperPanel::pushOptions()
     auto options = engine.looper().options();
 
     options.fixedTempo = firstLoopBox.getSelectedId() == 2;
-    options.outputMode = outBox.getSelectedId() == 2 ? 1 : 0;
+    options.outputMode = outBox.getSelectedId() == 2 ? 1 : outBox.getSelectedId() == 3 ? 3 : 0;
     options.doubleWindowMs = pedal.doubleWindowMs();
 
     for (int s = 0; s < numLoopSources; ++s)
@@ -505,7 +506,9 @@ juce::String LooperPanel::reportText()
     lines.add ("Timing correction: " + juce::String (timing.samples) + " samples ("
                  + juce::String (rate > 0.0 ? timing.samples * 1000.0 / rate : 0.0, 2) + " ms), from " + timing.source
                  + ". Trim " + juce::String (engine.getLoopTrimMs(), 1) + " ms.");
-    lines.add (juce::String ("Loops play on: ") + (options.outputMode == 1 ? "vocal loops on returns 3+4, the rest on 5+6" : "returns 5+6"));
+    lines.add (juce::String ("Loops play on: ") + (options.outputMode == 1 ? "vocal loops on returns 3+4, the rest on 5+6"
+                                                                  : options.outputMode == 3 ? "two-source tracks split, first source on returns 3+4 and second on 5+6; other tracks on 5+6"
+                                                                                            : "returns 5+6"));
 
     juce::StringArray sockets;
 

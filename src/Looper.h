@@ -14,6 +14,7 @@ namespace gigrig
 constexpr int numLoopTracks = 6;
 constexpr int numLoopOutputs = 8;       // the rig's returns
 constexpr int numLoopSources = 5;
+constexpr int maxLoopLanes = 2;         // separate recordings inside one track, one per input socket it listens to
 constexpr int maxLoopAssigns = 16;
 constexpr int numLoopBanks = 2;
 
@@ -128,7 +129,8 @@ struct LooperOptions
 
     /** 0: every track to returns 5+6 (the CQ's USB stereo channel).
         1: tracks that hold the vocal to returns 3+4 (ST1), the rest to 5+6.
-        2: track N to return N. */
+        2: track N to return N.
+        3: a track that listens to two sockets plays its first lane on 3+4 and its second on 5+6; other tracks on 5+6. */
     int outputMode = 0;
 
     int doubleWindowMs = 400;
@@ -143,6 +145,7 @@ struct TrackView
 {
     TrackState state = TrackState::empty;
     bool hasAudio = false, hasOverdub = false, undone = false, overdubUndone = false, tentative = false;
+    int lanes = 1;              // 2 when the track keeps its two sources apart
     double seconds = 0.0;       // loop length
     double bars = 0.0;
     float position = 0.0f;      // 0..1 through the loop (or through the recording so far, in seconds)
@@ -197,7 +200,7 @@ class Looper
 public:
     Looper();
 
-    /** Call with audio stopped. Allocates the loop memory (two buffers a track). */
+    /** Call with audio stopped. Allocates the loop memory (two buffers for each lane of each track). */
     void prepare (double sampleRate, double maxLoopSeconds);
 
     /** Any thread but the audio thread. A new song clears every loop. */
@@ -227,9 +230,19 @@ public:
     double maxLoopSeconds() const noexcept          { return rate > 0.0 ? (double) capacity / rate : 0.0; }
 
 private:
-    struct Track
+    /** One source's recording inside a track. A track that listens to two input sockets keeps
+        a lane for each, so each can come back out on its own return and be mixed on its own.
+        The lanes share everything else (length, state, switch presses), so they cannot drift apart. */
+    struct Lane
     {
         std::vector<float> base, dub, ring, pre;
+        juce::uint32 inputMask = 0, outputMask = 0;
+    };
+
+    struct Track
+    {
+        std::array<Lane, maxLoopLanes> lanes;
+        int numLanes = 1;
 
         TrackState state = TrackState::empty;
         juce::int64 length = 0, phase = 0;
@@ -262,8 +275,6 @@ private:
         juce::int64 stopAt = -1;
         bool fadingOut = false;
 
-        juce::uint32 inputMask = 0;
-        juce::uint32 outputMask = 0;
         float level = 1.0f;
     };
 
