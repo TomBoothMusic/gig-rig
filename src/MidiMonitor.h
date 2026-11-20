@@ -24,6 +24,9 @@ public:
     /** A readable description of one message, e.g. "CC 80 = 127 (channel 1)". */
     static juce::String describe (const juce::MidiMessage& message);
 
+    /** Every message as it arrives, on the MIDI driver's thread. Set once, before opening. */
+    std::function<void (const juce::String& deviceName, const juce::MidiMessage&)> onMessage;
+
 private:
     void handleIncomingMidiMessage (juce::MidiInput* source, const juce::MidiMessage& message) override;
 

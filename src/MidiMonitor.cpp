@@ -1,4 +1,6 @@
 #include "MidiMonitor.h"
+#include "DeviceReport.h"
+#include "Pedal.h"
 
 namespace gigrig
 {
@@ -90,6 +92,9 @@ void MidiMonitor::handleIncomingMidiMessage (juce::MidiInput* source, const juce
     const auto name = source != nullptr ? source->getName() : juce::String ("unknown");
     juce::String text;
 
+    if (onMessage != nullptr)
+        onMessage (name, message);
+
     {
         const juce::ScopedLock sl (lock);
 
@@ -104,6 +109,11 @@ void MidiMonitor::handleIncomingMidiMessage (juce::MidiInput* source, const juce
         else
         {
             text = describe (message);
+
+            // The RC-600's MIDI CTRL memory: say which switch it was.
+            if (message.isController() && looksLikeRC600 (name))
+                if (const auto sw = pedalSwitchForCC (message.getChannel(), message.getControllerNumber()); sw >= 0)
+                    text << "   = " << pedalSwitchName (sw) << (message.getControllerValue() >= 64 ? " pressed" : " released");
         }
 
         if (pending.size() >= maxPendingLines)
