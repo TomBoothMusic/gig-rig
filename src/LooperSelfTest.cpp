@@ -531,6 +531,52 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // Tom's Dreams session of 23 Nov 2026, replayed press for press
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams", false, 0, 0);
+        rig.runSeconds (1.0);
+        const auto zero = rig.time;
+        const auto at = [&] (double seconds) { const auto t = zero + (juce::int64) (seconds * 96000.0 / 64) * 64; if (t > rig.time) rig.run (t - rig.time); };
+        const auto down = [&] (int sw, bool dbl = false) { rig.send (PedalEvent::Kind::down, sw, dbl); rig.run (64 * 8); rig.send (PedalEvent::Kind::up, sw); rig.run (64); };
+        const auto held = [&] (int sw, bool dbl = false) { rig.send (PedalEvent::Kind::down, sw, dbl); rig.runSeconds (2.0); rig.send (PedalEvent::Kind::hold, sw); rig.runSeconds (0.2); rig.send (PedalEvent::Kind::up, sw); };
+
+        at (0.000);   down (0);             // 17:19.046 T1 recording
+        at (2.120);   down (0);             // 17:21.166 closed, 1 bar
+        at (4.204);   down (0);             // 17:23.250 overdubbing
+        at (9.908);   down (7);             // 17:28.954 switch 8: undo
+        at (20.644);  down (0);             // 17:39.690 overdubbing
+        at (21.026);  held (0, true);       // 17:40.072 double: stopped; held: redo
+        at (29.002);  down (1);             // 17:48.048 T2 recording
+        at (40.959);  down (0);             // 18:00.005 T1 playing
+        at (44.067);  down (0);             // 18:03.113 T1 overdubbing
+        at (44.491);  held (0, true);       // 18:03.537 stopped; hold: undo
+        at (48.482);  down (0);             // 18:07.528 playing
+        at (48.701);  held (0, true);       // 18:07.747 stopped; hold: redo
+        at (52.089);  down (0);             // 18:11.135 playing
+        at (52.458);  down (0, true);       // 18:11.504 stopped
+        at (53.587);  down (0);             // 18:12.633 playing
+        at (54.008);  down (0, true);       // 18:13.054 stopped
+        at (57.885);  down (1);             // 18:16.931 T2 will finish
+        at (58.300);  down (1, true);       // T2 stopped when it closes
+        at (61.434);  held (1);             // 18:20.480 T2 playing; hold: cleared
+        at (65.685);  held (0);             // 18:24.731 T1 playing; hold: cleared
+        check (rig.track (0).state == TrackState::empty && rig.track (1).state == TrackState::empty, "Dreams replay: both tracks end up cleared, as in Tom's log");
+
+        at (72.469);
+        const auto start = rig.tap (0);     // 18:31.515 T1 recording
+        rig.run (203072 - (rig.time - start));
+        rig.tap (0);                        // 18:33.630 closed: 1 bar of 2.115 s
+        const auto length = rig.length (0);
+        rig.runSeconds (7.0);
+        check (length == 203072, "Dreams replay: the second attempt is one bar of 203,072 samples");
+        const auto from = start + 2 * length;
+        check (rig.worst (from, from + 2 * length, [&] (juce::int64 t) { return 1.02f * rig.loop (6, start, length, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, length, t); }) < exact,
+               "Dreams replay: after the earlier takes were cleared, the new one-bar loop plays back alone, with nothing left over from them");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {
