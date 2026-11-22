@@ -135,10 +135,11 @@ struct LooperOptions
 
     int doubleWindowMs = 400;
 
-    /** A press for a new track that lands up to this long after a bar line counts as being on
-        that bar line. The looper is always listening, so what was played since the bar line is
-        in the loop too. Never more than a quarter of a bar. 0 = off. */
-    int lateStartMs = 150;
+    /** A press for a new track that lands up to this many beats after a bar line counts as being
+        on that bar line. The looper is always listening, so what was played since the bar line is
+        in the loop too. Half a beat: nobody arms the next bar that early, so a press there can only
+        have been meant for the bar just begun. 0 = off. */
+    double lateStartBeats = 0.5;
 
     /** The first loop (and any recording started with everything stopped) begins this long before
         the press, out of the same always-listening memory, so a note or stomp struck together with

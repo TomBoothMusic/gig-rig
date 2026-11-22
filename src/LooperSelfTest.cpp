@@ -442,9 +442,17 @@ void runLooperSelfTest (const Check& check)
                           [&] (juce::int64 t) { return rig.nearJoin (start, 2 * bar, t) || rig.nearJoin (t2Start, 2 * bar, t); }) < exact,
                "the loop holds what was played from the bar line on, including the 100 ms before the press, in time to the sample");
 
-        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: too late to be a slip
+        // The allowance is half a beat: 250 ms here (a 2 s bar of 4 beats).
+        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: still inside half a beat
         rig.tap (4);
-        check (rig.track (2).state == TrackState::armed, "a press 200 ms after the bar line still waits for the next bar");
+        check (rig.track (2).state == TrackState::recording, "a press 200 ms after the bar line (under half a beat) still starts from that bar line");
+        rig.run ((start + 15 * bar + 500) - rig.time);
+        rig.tap (4);
+        rig.runSeconds (0.5);
+        rig.tap (7);                                    // undo, so the track can be recorded again
+        rig.run ((start + 17 * bar + 28800) - rig.time);  // 300 ms after: past half a beat, so it is not a slip
+        rig.tap (4);
+        check (rig.track (2).state == TrackState::armed, "a press 300 ms after the bar line (over half a beat) waits for the next bar");
     }
 
     // =========================================================================

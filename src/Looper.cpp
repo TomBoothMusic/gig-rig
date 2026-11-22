@@ -933,7 +933,7 @@ void Looper::startRecording (int track, int sw) noexcept
             // A foot that lands just after the bar line meant the bar line. The input ring still
             // holds what was played since, so the loop starts there, not a whole bar later.
             const auto into  = wrap (now - origin, bar);
-            const auto grace = juce::jmin ((juce::int64) (rate * activeOptions.lateStartMs * 0.001), bar / 4, ringSize / 4);
+            const auto grace = juce::jmin ((juce::int64) ((double) bar * activeOptions.lateStartBeats / juce::jmax (1, activeSong.beatsPerBar)), bar / 4, ringSize / 4);
 
             if (into > 0 && into <= grace)
             {
