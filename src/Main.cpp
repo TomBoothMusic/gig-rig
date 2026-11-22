@@ -45,10 +45,30 @@ public:
             return;
         }
 
+        // Only one window at a time. Two copies would both hear the pedal and both loop, each with
+        // its own timing, which sounds like loops drifting apart (it happened on 23 Nov 2026).
+        // The windowless modes above are not counted, so the checks can run beside an open app.
+        if (! onlyWindow.enter (0))
+        {
+            juce::AlertWindow::showAsync (juce::MessageBoxOptions::makeOptionsOk (juce::MessageBoxIconType::WarningIcon,
+                                                                                  "GigRig is already open",
+                                                                                  "Another copy of GigRig is already running, so this one will close. "
+                                                                                  "Look for it on the taskbar. Close it first if you want to open a newer build."),
+                                          [this] (int) { quit(); });
+            return;
+        }
+
+        holdingWindowLock = true;
         mainWindow = std::make_unique<MainWindow> (getApplicationName());
     }
 
-    void shutdown() override                { mainWindow.reset(); }
+    void shutdown() override
+    {
+        mainWindow.reset();
+
+        if (holdingWindowLock)
+            onlyWindow.exit();
+    }
     void systemRequestedQuit() override     { quit(); }
 
 private:
@@ -76,6 +96,8 @@ private:
     };
 
     std::unique_ptr<MainWindow> mainWindow;
+    juce::InterProcessLock onlyWindow { "GigRig-one-window" };
+    bool holdingWindowLock = false;
 };
 
 } // namespace gigrig

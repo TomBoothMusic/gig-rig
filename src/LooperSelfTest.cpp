@@ -531,6 +531,139 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // Tom's Dreams session of 23 Nov 2026, replayed press for press
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams", false, 0, 0);
+        rig.runSeconds (1.0);
+        const auto zero = rig.time;
+        const auto at = [&] (double seconds) { const auto t = zero + (juce::int64) (seconds * 96000.0 / 64) * 64; if (t > rig.time) rig.run (t - rig.time); };
+        const auto down = [&] (int sw, bool dbl = false) { rig.send (PedalEvent::Kind::down, sw, dbl); rig.run (64 * 8); rig.send (PedalEvent::Kind::up, sw); rig.run (64); };
+        const auto held = [&] (int sw, bool dbl = false) { rig.send (PedalEvent::Kind::down, sw, dbl); rig.runSeconds (2.0); rig.send (PedalEvent::Kind::hold, sw); rig.runSeconds (0.2); rig.send (PedalEvent::Kind::up, sw); };
+
+        at (0.000);   down (0);             // 17:19.046 T1 recording
+        at (2.120);   down (0);             // 17:21.166 closed, 1 bar
+        at (4.204);   down (0);             // 17:23.250 overdubbing
+        at (9.908);   down (7);             // 17:28.954 switch 8: undo
+        at (20.644);  down (0);             // 17:39.690 overdubbing
+        at (21.026);  held (0, true);       // 17:40.072 double: stopped; held: redo
+        at (29.002);  down (1);             // 17:48.048 T2 recording
+        at (40.959);  down (0);             // 18:00.005 T1 playing
+        at (44.067);  down (0);             // 18:03.113 T1 overdubbing
+        at (44.491);  held (0, true);       // 18:03.537 stopped; hold: undo
+        at (48.482);  down (0);             // 18:07.528 playing
+        at (48.701);  held (0, true);       // 18:07.747 stopped; hold: redo
+        at (52.089);  down (0);             // 18:11.135 playing
+        at (52.458);  down (0, true);       // 18:11.504 stopped
+        at (53.587);  down (0);             // 18:12.633 playing
+        at (54.008);  down (0, true);       // 18:13.054 stopped
+        at (57.885);  down (1);             // 18:16.931 T2 will finish
+        at (58.300);  down (1, true);       // T2 stopped when it closes
+        at (61.434);  held (1);             // 18:20.480 T2 playing; hold: cleared
+        at (65.685);  held (0);             // 18:24.731 T1 playing; hold: cleared
+        check (rig.track (0).state == TrackState::empty && rig.track (1).state == TrackState::empty, "Dreams replay: both tracks end up cleared, as in Tom's log");
+
+        at (72.469);
+        const auto start = rig.tap (0);     // 18:31.515 T1 recording
+        rig.run (203072 - (rig.time - start));
+        rig.tap (0);                        // 18:33.630 closed: 1 bar of 2.115 s
+        const auto length = rig.length (0);
+        rig.runSeconds (7.0);
+        check (length == 203072, "Dreams replay: the second attempt is one bar of 203,072 samples");
+        const auto from = start + 2 * length;
+        check (rig.worst (from, from + 2 * length, [&] (juce::int64 t) { return 1.02f * rig.loop (6, start, length, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, length, t); }) < exact,
+               "Dreams replay: after the earlier takes were cleared, the new one-bar loop plays back alone, with nothing left over from them");
+    }
+
+    // =========================================================================
+    // Dreams: switch 4 plays track 4 and stops every other track, so track 4 starts from its own beginning
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams");
+        const auto start = rig.tap (0);
+        rig.run (192000 - (rig.time - start));
+        rig.tap (0);                                    // track 1: one bar of 2 s
+        const auto bar = rig.bar();
+        check (bar == 192000, "Dreams restart: the first loop is one bar of 2 seconds");
+
+        rig.run ((start + 4 * bar + 60000) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records from bar 5
+        const auto t4Start = start + 5 * bar;
+        rig.run ((start + 7 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 records, track 4 is closed and stopped
+        rig.run ((start + 9 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // track 3 closes and plays
+        rig.run ((start + 9 * bar + 6400) - rig.time);
+        check (rig.track (3).state == TrackState::stopped && rig.length (3) == 2 * bar && rig.track (2).state == TrackState::playing,
+               "Dreams restart: track 4 is a stopped 2-bar loop and track 3 is playing");
+
+        rig.run ((start + 11 * bar + 70016) - rig.time);  // well into a bar, and into track 4's second bar by the old count
+        const auto press = rig.tap (3);                 // switch 4: track 4 plays; tracks 1, 3, 5 and 6 stop
+        rig.runSeconds (9.0);
+        check (rig.track (3).state == TrackState::playing && rig.track (2).state == TrackState::stopped && rig.track (0).state == TrackState::stopped,
+               "Dreams restart: switch 4 leaves track 4 playing alone");
+
+        const auto length = 2 * bar;
+        const auto from = press + rig.delayOut;
+        check (rig.worst (from + 4000, from + 2 * length,
+                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - from, length), 8); },
+                          [&] (juce::int64 t) { return Rig::mod (t - from, length) >= length - 800 || Rig::mod (t - from, length) < 4000; }) < exact,
+               "Dreams restart: track 4 starts from its own first note at the press, not part-way through, and loops from there");
+    }
+
+    // =========================================================================
+    // Dreams as Tom plays it: a one-bar loop on track 2 plays on when switch 4 brings track 4 back
+    // =========================================================================
+    for (const auto pressInBar : { 70016, 150016 })       // a bit after a bar line, and a bit before the next one
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams");
+        const auto start = rig.tap (0);
+        rig.run (192000 - (rig.time - start));
+        rig.tap (0);                                    // track 1: one bar of 2 s
+        const auto bar = rig.bar();
+
+        rig.run ((start + bar + 60000) - rig.time);
+        rig.tap (1);                                    // track 2 (the maraca): one bar, from bar 2
+        rig.run ((start + 3 * bar - 4992) - rig.time);
+        rig.tap (1);
+        const auto t2Start = start + 2 * bar;
+
+        rig.run ((start + 4 * bar + 60000) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records from bar 5
+        const auto t4Start = start + 5 * bar;
+        rig.run ((start + 7 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 records, track 4 is closed and stopped
+        rig.run ((start + 9 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // track 3 closes and plays
+
+        rig.run ((start + 11 * bar + pressInBar) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 plays; tracks 1 and 3 stop; track 2 plays on
+        rig.runSeconds (14.0);
+        check (rig.track (3).state == TrackState::playing && rig.track (1).state == TrackState::playing
+                 && rig.track (2).state == TrackState::stopped && rig.track (0).state == TrackState::stopped && rig.length (3) == 2 * bar,
+               "Dreams with the maraca: switch 4 leaves tracks 2 and 4 playing");
+
+        const auto length = 2 * bar;
+        const auto top = start + (pressInBar < bar / 2 ? 11 : 12) * bar + rig.delayOut;   // the nearest bar line, as heard
+        check (rig.worst (top + bar, top + bar + 2 * length,
+                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - top, length), 8) + rig.loop (5, t2Start, bar, t); },
+                          [&] (juce::int64 t) { return Rig::mod (t - top, length) >= length - 800 || rig.nearJoin (t2Start, bar, t); }) < exact,
+               pressInBar < bar / 2 ? "Dreams with the maraca: pressed just after a bar line, track 4 plays from its first bar, in time with track 2"
+                                    : "Dreams with the maraca: pressed just before a bar line, track 4's first bar starts on that bar line");
+
+        // Track 3 is set to come back in place (LOOP LENGTH on the RC-600): switch 3 brings it back where it would be by now.
+        rig.run ((start + 19 * bar + pressInBar) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 plays, track 4 stops, track 1 starts again
+        rig.runSeconds (11.0);
+        const auto t3Start = start + 7 * bar, later = start + 21 * bar;
+        check (rig.worst (later, later + 3 * bar,
+                          [&] (juce::int64 t) { return rig.loop (8, t3Start, length, t) + rig.loop (5, t2Start, bar, t) + 1.02f * rig.loop (6, start, bar, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (t3Start, length, t) || rig.nearJoin (t2Start, bar, t) || rig.nearJoin (start, bar, t); }) < exact,
+               "Dreams with the maraca: track 3 (set to come back in place) rejoins where it would be by now");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {

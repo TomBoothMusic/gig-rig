@@ -221,6 +221,7 @@ juce::String describeSong (const SongSetup& song)
         lines.add ("  " + trackLabel (t) + ": " + describeRcInputs (tr.rcInputs).paddedRight (' ', 20)
                      + (tr.bars > 0 ? juce::String (tr.bars) + (tr.bars == 1 ? " bar preset" : " bars preset") : juce::String ("free length"))
                      + (tr.stopMode == StopMode::loopEnd ? ", stops at the end of its loop" : tr.stopMode == StopMode::fade ? ", fades out" : "")
+                     + (tr.returnMode == ReturnMode::fromBarLine ? ", comes back from its first bar" : tr.returnMode == ReturnMode::atOnce ? ", comes back from its first note at once" : "")
                      + (tr.level != 100 ? ", level " + juce::String (tr.level) : juce::String()));
     }
 
@@ -631,6 +632,7 @@ void Looper::handle (const Message& m) noexcept
     }
 
     drainAssigns();
+    placeReturningTracks();
 }
 
 void Looper::handleDown (int sw, bool isDouble) noexcept
@@ -813,6 +815,66 @@ void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) no
 
         if (match && assignCount < (int) assignQueue.size())
             assignQueue[(size_t) assignCount++] = { a.action, a.targetTrack };
+    }
+}
+
+void Looper::placeReturningTracks() noexcept
+{
+    // Runs after a press and its linked actions, so it sees what is left playing (Dreams: switch 4
+    // plays track 4 and stops tracks 1, 3, 5 and 6, while a one-bar loop on track 2 plays on).
+    // Where a track that was started by this press comes in follows its ReturnMode.
+    int started = 0, others = 0;
+
+    for (const auto& tr : tracks)
+    {
+        if (! isActive (tr))
+            continue;
+
+        if (tr.length <= 0)
+            return;     // a first loop is still being recorded: leave the count alone
+
+        if (tr.state == TrackState::playing && tr.playStartedAt == now)
+            ++started;
+        else
+            ++others;
+    }
+
+    if (started == 0)
+        return;
+
+    for (int t = 0; t < numLoopTracks; ++t)
+    {
+        auto& tr = tracks[(size_t) t];
+
+        if (! isActive (tr) || tr.state != TrackState::playing || tr.playStartedAt != now)
+            continue;
+
+        if (others == 0)
+        {
+            if (started == 1)
+                origin = now - tr.phase;    // playing alone: from its first note, at once
+
+            return;
+        }
+
+        switch (activeSong.track[(size_t) t].returnMode)
+        {
+            case ReturnMode::inPlace:
+                break;
+
+            case ReturnMode::atOnce:
+                tr.phase = wrap (now - origin, tr.length);
+                break;
+
+            case ReturnMode::fromBarLine:
+                if (bar > 0)
+                {
+                    const auto into = wrap (now - origin, bar);
+                    const auto top = now - into + (into > bar / 2 ? bar : 0);
+                    tr.phase = wrap (top - origin, tr.length);
+                }
+                break;
+        }
     }
 }
 
@@ -1130,6 +1192,7 @@ void Looper::startPlaying (int track) noexcept
     }
 
     tr.state = TrackState::playing;
+    tr.playStartedAt = now;
     tr.stopAt = -1;
     tr.fadingOut = false;
     tr.gainUp = 1.0f / (float) startRamp;
@@ -1409,6 +1472,7 @@ void Looper::fireTimed() noexcept
     }
 
     drainAssigns();
+    placeReturningTracks();
 }
 
 juce::int64 Looper::nextTimed (juce::int64 after, juce::int64 limit) const noexcept
