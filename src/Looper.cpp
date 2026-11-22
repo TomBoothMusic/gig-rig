@@ -221,6 +221,7 @@ juce::String describeSong (const SongSetup& song)
         lines.add ("  " + trackLabel (t) + ": " + describeRcInputs (tr.rcInputs).paddedRight (' ', 20)
                      + (tr.bars > 0 ? juce::String (tr.bars) + (tr.bars == 1 ? " bar preset" : " bars preset") : juce::String ("free length"))
                      + (tr.stopMode == StopMode::loopEnd ? ", stops at the end of its loop" : tr.stopMode == StopMode::fade ? ", fades out" : "")
+                     + (tr.returnMode == ReturnMode::fromBarLine ? ", comes back from its first bar" : tr.returnMode == ReturnMode::atOnce ? ", comes back from its first note at once" : "")
                      + (tr.level != 100 ? ", level " + juce::String (tr.level) : juce::String()));
     }
 
@@ -631,7 +632,7 @@ void Looper::handle (const Message& m) noexcept
     }
 
     drainAssigns();
-    startAloneFromItsTop();
+    placeReturningTracks();
 }
 
 void Looper::handleDown (int sw, bool isDouble) noexcept
@@ -817,52 +818,64 @@ void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) no
     }
 }
 
-void Looper::startAloneFromItsTop() noexcept
+void Looper::placeReturningTracks() noexcept
 {
-    // One press can start a track and, through its linked actions, stop others (Dreams: switch 4
+    // Runs after a press and its linked actions, so it sees what is left playing (Dreams: switch 4
     // plays track 4 and stops tracks 1, 3, 5 and 6, while a one-bar loop on track 2 plays on).
-    // A stopped track does not keep its place silently: a track started again begins from its own
-    // first note, unless a loop at least as long is still playing, which it then rejoins in step.
-    Track* started = nullptr;
-    const Track* longest = nullptr;
-    int startedCount = 0;
+    // Where a track that was started by this press comes in follows its ReturnMode.
+    int started = 0, others = 0;
 
-    for (auto& tr : tracks)
+    for (const auto& tr : tracks)
     {
         if (! isActive (tr))
             continue;
 
-        if (tr.state == TrackState::playing && tr.playStartedAt == now)
-        {
-            started = &tr;
-            ++startedCount;
-        }
-        else if (tr.length > 0 && (longest == nullptr || tr.length > longest->length))
-        {
-            longest = &tr;
-        }
-        else if (tr.length <= 0)
-        {
+        if (tr.length <= 0)
             return;     // a first loop is still being recorded: leave the count alone
+
+        if (tr.state == TrackState::playing && tr.playStartedAt == now)
+            ++started;
+        else
+            ++others;
+    }
+
+    if (started == 0)
+        return;
+
+    for (int t = 0; t < numLoopTracks; ++t)
+    {
+        auto& tr = tracks[(size_t) t];
+
+        if (! isActive (tr) || tr.state != TrackState::playing || tr.playStartedAt != now)
+            continue;
+
+        if (others == 0)
+        {
+            if (started == 1)
+                origin = now - tr.phase;    // playing alone: from its first note, at once
+
+            return;
+        }
+
+        switch (activeSong.track[(size_t) t].returnMode)
+        {
+            case ReturnMode::inPlace:
+                break;
+
+            case ReturnMode::atOnce:
+                tr.phase = wrap (now - origin, tr.length);
+                break;
+
+            case ReturnMode::fromBarLine:
+                if (bar > 0)
+                {
+                    const auto into = wrap (now - origin, bar);
+                    const auto top = now - into + (into > bar / 2 ? bar : 0);
+                    tr.phase = wrap (top - origin, tr.length);
+                }
+                break;
         }
     }
-
-    if (startedCount != 1 || started->length <= 0)
-        return;
-
-    if (longest == nullptr)
-    {
-        origin = now - started->phase;      // playing alone: from its first note, at once
-        return;
-    }
-
-    if (started->length <= longest->length)
-        return;
-
-    // In time with the longest loop still playing: its nearest loop start becomes this track's first note.
-    const auto into = wrap (now - origin - longest->phase, longest->length);
-    const auto top = now - into + (into > longest->length / 2 ? longest->length : 0);
-    started->phase = wrap (top - origin, started->length);
 }
 
 void Looper::drainAssigns() noexcept
@@ -1459,7 +1472,7 @@ void Looper::fireTimed() noexcept
     }
 
     drainAssigns();
-    startAloneFromItsTop();
+    placeReturningTracks();
 }
 
 juce::int64 Looper::nextTimed (juce::int64 after, juce::int64 limit) const noexcept

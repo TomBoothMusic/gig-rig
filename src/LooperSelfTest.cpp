@@ -651,6 +651,16 @@ void runLooperSelfTest (const Check& check)
                           [&] (juce::int64 t) { return Rig::mod (t - top, length) >= length - 800 || rig.nearJoin (t2Start, bar, t); }) < exact,
                pressInBar < bar / 2 ? "Dreams with the maraca: pressed just after a bar line, track 4 plays from its first bar, in time with track 2"
                                     : "Dreams with the maraca: pressed just before a bar line, track 4's first bar starts on that bar line");
+
+        // Track 3 is set to come back in place (LOOP LENGTH on the RC-600): switch 3 brings it back where it would be by now.
+        rig.run ((start + 19 * bar + pressInBar) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 plays, track 4 stops, track 1 starts again
+        rig.runSeconds (11.0);
+        const auto t3Start = start + 7 * bar, later = start + 21 * bar;
+        check (rig.worst (later, later + 3 * bar,
+                          [&] (juce::int64 t) { return rig.loop (8, t3Start, length, t) + rig.loop (5, t2Start, bar, t) + 1.02f * rig.loop (6, start, bar, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (t3Start, length, t) || rig.nearJoin (t2Start, bar, t) || rig.nearJoin (start, bar, t); }) < exact,
+               "Dreams with the maraca: track 3 (set to come back in place) rejoins where it would be by now");
     }
 
     // =========================================================================

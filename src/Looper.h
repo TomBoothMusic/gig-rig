@@ -83,12 +83,20 @@ juce::String describeAssign (const LoopAssign&);
 
 enum class StopMode { immediate, fade, loopEnd };
 
+/** How a stopped track comes back in while other loops are playing (the RC-600's LOOP SYNC MODE):
+    inPlace     = wherever it would be by now in the song's count (LOOP LENGTH),
+    fromBarLine = from its own first bar, lined up on the nearest bar line (MEASURE),
+    atOnce      = from its own first note, the instant of the press (IMMEDIATE).
+    With nothing else playing every track starts from its first note at once. */
+enum class ReturnMode { inPlace, fromBarLine, atOnce };
+
 struct TrackSetup
 {
     int rcInputs = 0;       // RcInputBits
     int bars = 0;           // 0 = free (the length you play), otherwise a preset number of bars
     StopMode stopMode = StopMode::immediate;
     int level = 100;        // 0 to 200, as on the RC-600
+    ReturnMode returnMode = ReturnMode::inPlace;
 };
 
 /** One song's looper set-up: what an RC-600 memory holds, cut down to what this stage copies. */
@@ -321,7 +329,7 @@ private:
     void closeRecording (int track, juce::int64 length) noexcept;
     void cancelRecording (int track, bool logIt) noexcept;
     void startPlaying (int track) noexcept;
-    void startAloneFromItsTop() noexcept;
+    void placeReturningTracks() noexcept;
     void stopTrack (int track, bool immediately) noexcept;
     void finishStop (int track) noexcept;
     void beginOverdub (int track, juce::int64 pressedAt) noexcept;
