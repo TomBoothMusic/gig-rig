@@ -1,6 +1,13 @@
 #include "AudioEngine.h"
 #include "DeviceReport.h"
 
+#if JUCE_LINUX
+ #include <cerrno>
+ #include <cstring>
+ #include <pthread.h>
+ #include <sched.h>
+#endif
+
 namespace gigrig
 {
 
@@ -178,8 +185,11 @@ juce::Array<DeviceChoice> AudioEngine::listDevices()
     return choices;
 }
 
-juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize)
+juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize, double sampleRate)
 {
+    if (sampleRate > 0.0)
+        wantedRate = sampleRate;
+
     if (device != nullptr)
     {
         device->stop();
@@ -219,7 +229,8 @@ juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize)
     outputs.setRange (0, juce::jmin (32, outputNames.size()), true);
 
     const auto rates = opened->getAvailableSampleRates();
-    const auto rate = rates.contains (48000.0) || rates.isEmpty() ? 48000.0 : rates[0];
+    const auto rate = wantedRate > 0.0 && rates.contains (wantedRate) ? wantedRate
+                    : rates.contains (48000.0) || rates.isEmpty() ? 48000.0 : rates[0];
     const auto size = bufferSize > 0 ? bufferSize : opened->getDefaultBufferSize();
 
     const auto error = opened->open (inputs, outputs, rate, size);
@@ -228,6 +239,7 @@ juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize)
         return errorText = "\"" + choice.deviceName + "\" would not start: " + error;
 
     device = std::move (opened);
+    rtState.store (0);
     deviceIsCQ = looksLikeCQ (choice.deviceName) && inputNames.size() >= 16 && outputNames.size() >= 16;
     device->start (this);   // calls audioDeviceAboutToStart, then audio begins
     return {};
@@ -289,6 +301,32 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* d)
              d->getActiveOutputChannels().countNumberOfSetBits());
 }
 
+void AudioEngine::makeAudioThreadRealtime() noexcept
+{
+   #if JUCE_LINUX
+    // Priority 70 sits under the sound and USB interrupt threads (rtirq puts those
+    // at 80 to 90), the usual place for an audio thread on a tuned Linux machine.
+    // Allowed only once linux/install.sh has given the audio group realtime rights.
+    int policy = 0;
+    sched_param param {};
+
+    if (pthread_getschedparam (pthread_self(), &policy, &param) == 0 && (policy == SCHED_FIFO || policy == SCHED_RR))
+    {
+        rtPriority.store (param.sched_priority);
+        rtState.store (1);
+        return;
+    }
+
+    param.sched_priority = 70;
+    const auto result = pthread_setschedparam (pthread_self(), SCHED_FIFO, &param);
+    rtError.store (result);
+    rtPriority.store (result == 0 ? 70 : 0);
+    rtState.store (result == 0 ? 1 : -1);
+   #else
+    rtState.store (1);   // Windows: the ASIO driver runs its own high-priority thread
+   #endif
+}
+
 void AudioEngine::audioDeviceError (const juce::String& message)
 {
     errorText = message;
@@ -305,6 +343,14 @@ juce::Array<int> AudioEngine::availableBufferSizes() const
         return device->getAvailableBufferSizes();
 
     return simulated ? juce::Array<int> { 8, 16, 32, 64, 128, 256 } : juce::Array<int>();
+}
+
+juce::Array<double> AudioEngine::availableSampleRates() const
+{
+    if (device != nullptr)
+        return device->getAvailableSampleRates();
+
+    return simulated ? juce::Array<double> { currentSampleRate } : juce::Array<double>();
 }
 
 bool AudioEngine::hasControlPanel() const
@@ -531,6 +577,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
                                                     float* const* outputs, int numOuts, int numSamples,
                                                     const juce::AudioIODeviceCallbackContext&)
 {
+    if (rtState.load (std::memory_order_relaxed) == 0)
+        makeAudioThreadRealtime();
+
     const auto startTicks = juce::Time::getHighResolutionTicks();
     const auto period = currentSampleRate > 0.0 ? numSamples / currentSampleRate : 0.0;
 
@@ -935,6 +984,21 @@ juce::String AudioEngine::latencyText() const
         add ("Audio device: " + choice.label() + ", " + juce::String (currentSampleRate, 0) + " Hz, "
                + juce::String (currentBufferSize) + "-sample buffer, "
                + juce::String (currentInputs) + " in / " + juce::String (currentOutputs) + " out");
+
+       #if JUCE_LINUX
+        if (device != nullptr)
+        {
+            const auto state = rtState.load();
+
+            if (state == 1)
+                add ("Audio thread: realtime, priority " + juce::String (rtPriority.load()) + ".");
+            else if (state == -1)
+                add ("Audio thread: NOT realtime (the system said: " + juce::String (std::strerror (rtError.load()))
+                       + "). Run linux/install.sh, then log out and back in. See docs/linux-setup.md.");
+            else
+                add ("Audio thread: not started yet.");
+        }
+       #endif
 
         if (device != nullptr)
             add ("Driver's own latency figure: in " + ms (device->getInputLatencyInSamples() * 1000.0 / currentSampleRate)

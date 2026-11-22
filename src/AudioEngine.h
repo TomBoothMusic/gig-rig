@@ -113,9 +113,11 @@ public:
     /** Devices that have both inputs and outputs. Rescans the drivers. */
     juce::Array<DeviceChoice> listDevices();
 
-    /** Opens a device with all its channels at 48 kHz (bufferSize 0 = the driver's own choice).
+    /** Opens a device with all its channels (bufferSize 0 = the driver's own choice).
+        sampleRate 0 keeps the rate asked for last time; the first time, and whenever the
+        device does not offer the rate asked for, it opens at 48 kHz if the device offers it.
         Returns an error message, or an empty string if audio is running. */
-    juce::String open (const DeviceChoice& choice, int bufferSize = 0);
+    juce::String open (const DeviceChoice& choice, int bufferSize = 0, double sampleRate = 0.0);
     void close();
 
     /** A pretend device for the self-test: the test calls processBlock itself. */
@@ -130,6 +132,7 @@ public:
     int numOutputs() const noexcept             { return currentOutputs; }
     int driverLatencySamples() const;
     juce::Array<int> availableBufferSizes() const;
+    juce::Array<double> availableSampleRates() const;
     juce::String lastError() const              { return errorText; }
     bool hasControlPanel() const;
     void showControlPanel();
@@ -229,8 +232,13 @@ private:
     double currentSampleRate = 0.0;
     int currentBufferSize = 0, currentInputs = 0, currentOutputs = 0;
     juce::String errorText;
+    double wantedRate = 0.0;
 
     // ---- shared with the audio thread ----
+    // Linux: JUCE's ALSA thread is not a realtime thread, so the first callback asks the
+    // system to make it one. 0 = not tried yet, 1 = done, -1 = refused (errno in rtError).
+    std::atomic<int> rtState { 0 }, rtError { 0 }, rtPriority { 0 };
+    void makeAudioThreadRealtime() noexcept;
     LatencyProbe probe;
     GlitchWatch glitch;
     std::atomic<int> pingMask { 0b00110000 };   // returns 5 and 6: the CQ's USB stereo channel
