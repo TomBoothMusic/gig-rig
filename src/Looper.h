@@ -283,7 +283,7 @@ private:
         bool folding = false, foldDiscard = false;
         juce::int64 foldNext = 0, foldRemaining = 0;
 
-        juce::int64 stopAt = -1;
+        juce::int64 stopAt = -1, playStartedAt = -1;
         bool fadingOut = false;
 
         float level = 1.0f;
@@ -321,6 +321,7 @@ private:
     void closeRecording (int track, juce::int64 length) noexcept;
     void cancelRecording (int track, bool logIt) noexcept;
     void startPlaying (int track) noexcept;
+    void startAloneFromItsTop() noexcept;
     void stopTrack (int track, bool immediately) noexcept;
     void finishStop (int track) noexcept;
     void beginOverdub (int track, juce::int64 pressedAt) noexcept;

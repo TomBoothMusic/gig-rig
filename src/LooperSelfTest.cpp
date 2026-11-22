@@ -577,6 +577,42 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // Dreams: switch 4 plays track 4 and stops every other track, so track 4 starts from its own beginning
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams");
+        const auto start = rig.tap (0);
+        rig.run (192000 - (rig.time - start));
+        rig.tap (0);                                    // track 1: one bar of 2 s
+        const auto bar = rig.bar();
+        check (bar == 192000, "Dreams restart: the first loop is one bar of 2 seconds");
+
+        rig.run ((start + 4 * bar + 60000) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records from bar 5
+        const auto t4Start = start + 5 * bar;
+        rig.run ((start + 7 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 records, track 4 is closed and stopped
+        rig.run ((start + 9 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // track 3 closes and plays
+        rig.run ((start + 9 * bar + 6400) - rig.time);
+        check (rig.track (3).state == TrackState::stopped && rig.length (3) == 2 * bar && rig.track (2).state == TrackState::playing,
+               "Dreams restart: track 4 is a stopped 2-bar loop and track 3 is playing");
+
+        rig.run ((start + 11 * bar + 70016) - rig.time);  // well into a bar, and into track 4's second bar by the old count
+        const auto press = rig.tap (3);                 // switch 4: track 4 plays; tracks 1, 3, 5 and 6 stop
+        rig.runSeconds (9.0);
+        check (rig.track (3).state == TrackState::playing && rig.track (2).state == TrackState::stopped && rig.track (0).state == TrackState::stopped,
+               "Dreams restart: switch 4 leaves track 4 playing alone");
+
+        const auto length = 2 * bar;
+        const auto from = press + rig.delayOut;
+        check (rig.worst (from + 4000, from + 2 * length,
+                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - from, length), 8); },
+                          [&] (juce::int64 t) { return Rig::mod (t - from, length) >= length - 800 || Rig::mod (t - from, length) < 4000; }) < exact,
+               "Dreams restart: track 4 starts from its own first note at the press, not part-way through, and loops from there");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {

@@ -631,6 +631,7 @@ void Looper::handle (const Message& m) noexcept
     }
 
     drainAssigns();
+    startAloneFromItsTop();
 }
 
 void Looper::handleDown (int sw, bool isDouble) noexcept
@@ -814,6 +815,28 @@ void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) no
         if (match && assignCount < (int) assignQueue.size())
             assignQueue[(size_t) assignCount++] = { a.action, a.targetTrack };
     }
+}
+
+void Looper::startAloneFromItsTop() noexcept
+{
+    // One press can start a track and, through its linked actions, stop every other one (Dreams:
+    // switch 4 plays track 4 and stops tracks 1, 3, 5 and 6). The track is then playing alone, so
+    // it starts from its own beginning, as it does when everything was stopped before the press.
+    Track* started = nullptr;
+
+    for (auto& tr : tracks)
+    {
+        if (! isActive (tr))
+            continue;
+
+        if (tr.state != TrackState::playing || tr.playStartedAt != now || started != nullptr)
+            return;
+
+        started = &tr;
+    }
+
+    if (started != nullptr && started->length > 0)
+        origin = now - started->phase;
 }
 
 void Looper::drainAssigns() noexcept
@@ -1130,6 +1153,7 @@ void Looper::startPlaying (int track) noexcept
     }
 
     tr.state = TrackState::playing;
+    tr.playStartedAt = now;
     tr.stopAt = -1;
     tr.fadingOut = false;
     tr.gainUp = 1.0f / (float) startRamp;
@@ -1409,6 +1433,7 @@ void Looper::fireTimed() noexcept
     }
 
     drainAssigns();
+    startAloneFromItsTop();
 }
 
 juce::int64 Looper::nextTimed (juce::int64 after, juce::int64 limit) const noexcept
