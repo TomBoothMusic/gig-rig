@@ -14,6 +14,9 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 3 | The looper: six tracks that copy how the RC-600 loops, driven by the RC-600's switches, for a side-by-side test | Built, first version |
 | 4 onward | Songs from the RC-600 backup, effects, tablet app | Planned |
 
+The rig computer itself runs Linux. [docs/linux-setup.md](docs/linux-setup.md) sets one up with a
+single script, including a free trial on the laptop from a USB stick.
+
 ## Getting the app (no tools needed)
 
 1. Open the [latest release](https://github.com/TomBoothMusic/gig-rig/releases/latest). You need to be signed in to GitHub, because the repository is private.
@@ -178,7 +181,7 @@ Not copied yet: the RC-600's effects, rhythm, memory up/down, and tap tempo. A s
 
 Every change to the code is built automatically by GitHub (the **Actions** tab) for
 Windows and Linux. Each build also runs the app's self-test and a real device
-scan. Changes that reach the `main` branch are published on the
+scan, and the Linux build is installed on a fresh Ubuntu with the rig's set-up script. Changes that reach the `main` branch are published on the
 [Releases page](https://github.com/TomBoothMusic/gig-rig/releases) as a new numbered build.
 The build number shows in the app and at the top of every report.
 
@@ -204,7 +207,7 @@ GigRig --report report.txt      # write the device report, no window
 | `src/AudioEngine.*` | Opens the audio device, passes audio through, runs latency measurements and counts dropouts |
 | `src/LatencyProbe.*` | Plays a chirp, records every input and finds how many samples later it came back |
 | `src/GlitchWatch.*` | Sends a steady two-note tone, cancels it from what comes back and counts every break |
-| `src/AudioPanel.*` | The stage 1 tab |
+| `src/AudioPanel.*` | The stage 1 tab; remembers the audio device, rate and buffer for the next start |
 | `src/Pedal.*` | The RC-600's switches: CC numbers to switch names, and press, hold and double-press |
 | `src/PedalPanel.*` | The stage 2 tab, and the on-screen switch used by both new tabs |
 | `src/Looper.*` | The looper core: tracks, bar timing, overdub, undo, and the RC-600's switch functions and linked actions |
@@ -218,6 +221,11 @@ GigRig --report report.txt      # write the device report, no window
 | `src/Style.*` | Colours and the small shared widgets |
 | `src/SelfTest.*` | Checks run by the automatic builds, including a full latency measurement against a pretend cable |
 | `src/Main.cpp` | App start-up and the two windowless modes |
+| `linux/install.sh` | Sets up the Linux rig computer: realtime tuning, the app, start-up straight into it |
+| `linux/rig-check.sh` | Health check of the rig computer; changes nothing |
+| `linux/rollback.sh` | Switches the rig back to an earlier build |
+| `docs/linux-setup.md` | Step-by-step guide to the rig computer, and the laptop USB-stick trial |
+| `CLAUDE.md` | Notes for Claude: working rules, the rig computer, and how to add an effect |
 
 ## Licence note
 
