@@ -517,6 +517,7 @@ juce::String LooperPanel::reportText()
 
     lines.add ("Input sockets: " + sockets.joinIntoString (", "));
     lines.add ("Double-press window: " + juce::String (options.doubleWindowMs) + " ms");
+    lines.add ("Late press allowance: a new track pressed up to " + juce::String (options.lateStartMs) + " ms after a bar line starts from that bar line");
 
     if (! engine.isOpen())
         lines.add ("NOTE: no audio device was running when this was copied.");

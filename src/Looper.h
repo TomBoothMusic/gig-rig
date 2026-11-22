@@ -134,6 +134,11 @@ struct LooperOptions
     int outputMode = 0;
 
     int doubleWindowMs = 400;
+
+    /** A press for a new track that lands up to this long after a bar line counts as being on
+        that bar line. The looper is always listening, so what was played since the bar line is
+        in the loop too. Never more than a quarter of a bar. 0 = off. */
+    int lateStartMs = 150;
 };
 
 //==============================================================================
@@ -173,7 +178,7 @@ struct LoopLogEntry
     {
         songLoaded, armed, recording, loopClosed, tempoSet, playing, stopped, stopPending, overdub, overdubEnd,
         overdubCancelled, undo, redo, cleared, allStart, allStop, bank, recordingCancelled, recordingTooLong,
-        unsupported, closePending
+        unsupported, closePending, recordingLate
     };
 
     Kind kind = Kind::songLoaded;

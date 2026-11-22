@@ -394,7 +394,7 @@ void runLooperSelfTest (const Check& check)
         // A longer track, finished a little late (0.15 s after the bar): it ends on the bar just gone.
         rig.run ((start + 12 * bar + 20000) - rig.time);
         rig.tap (1);                                    // track 1 stop (switch 2), so only track 2 keeps the time
-        rig.run ((start + 13 * bar + 5000) - rig.time);
+        rig.run ((start + 13 * bar + 30000) - rig.time);
         rig.tap (4);                                    // track 3 rec/play (switch 5)
         rig.run ((start + 14 * bar + 64) - rig.time);
         check (rig.track (2).state == TrackState::recording, "a third track starts on the bar with the first track stopped");
@@ -412,6 +412,41 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // A press just after the bar line counts as on it, and nothing played is lost
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Standard layout");
+
+        const auto start = rig.tap (0);
+        rig.run (384000 - (rig.time - start));
+        rig.tap (0);                                    // 2 bars of 192,000
+        const auto bar = rig.bar();
+
+        rig.run ((start + 4 * bar + 9600) - rig.time);  // 100 ms after the bar line
+        rig.tap (2);
+        check (rig.track (1).state == TrackState::recording, "a new track pressed 100 ms after the bar line records at once, not a bar later");
+        check (std::any_of (rig.log.begin(), rig.log.end(), [] (const LoopLogEntry& e) { return e.kind == LoopLogEntry::Kind::recordingLate && e.a == 9600; }),
+               "and the log says the press came 100 ms after the bar line");
+
+        rig.run ((start + 6 * bar + 2000) - rig.time);
+        rig.tap (2);
+        check (rig.track (1).state == TrackState::playing && rig.length (1) == 2 * bar, "it closes as exactly 2 bars from that bar line");
+
+        rig.runSeconds (9.0);
+        const auto t2Start = start + 4 * bar, from = start + 8 * bar;
+        const auto guitar = [&] (juce::int64 t) { return rig.loop (6, start, 2 * bar, t); };
+        const auto bass = [&] (juce::int64 t) { return rig.loop (8, t2Start, 2 * bar, t); };
+
+        check (rig.worst (from, from + 2 * bar, [&] (juce::int64 t) { return guitar (t) + bass (t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, 2 * bar, t) || rig.nearJoin (t2Start, 2 * bar, t); }) < exact,
+               "the loop holds what was played from the bar line on, including the 100 ms before the press, in time to the sample");
+
+        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: too late to be a slip
+        rig.tap (4);
+        check (rig.track (2).state == TrackState::armed, "a press 200 ms after the bar line still waits for the next bar");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {
@@ -421,6 +456,7 @@ void runLooperSelfTest (const Check& check)
         rig.tap (0);
         check (rig.bar() == 152400 && std::abs (rig.looper.snapshot().bpm - 151.18) < 0.01, "the first loop is taken as its 4 preset bars: 151.2 BPM");
 
+        rig.runSeconds (0.3);                           // clear of the late-press allowance after the bar line
         rig.tap (6);                                    // bank 2
         check (rig.looper.snapshot().bank == 1, "switch 7 changes to bank 2");
         rig.tap (4);                                    // track 6 rec/play: preset 2 bars
@@ -780,6 +816,7 @@ void runLooperSelfTest (const Check& check)
         const auto length = rig.length (0);
         const auto bar = rig.bar();
 
+        rig.runSeconds (0.3);                           // clear of the late-press allowance after the bar line
         rig.tap (2);
         rig.run (bar - ((rig.time - start) % bar) + bar - 4800);
         rig.tap (2);
