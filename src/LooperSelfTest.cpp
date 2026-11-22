@@ -41,7 +41,7 @@ namespace
         std::function<float (juce::int64, int)> instrument;   // (real time, input socket) -> sample
         std::vector<LoopLogEntry> log;
 
-        Rig (double sampleRate, int blockSize, int in, int out, const char* song, bool fixedTempo = false, int outputMode = 0)
+        Rig (double sampleRate, int blockSize, int in, int out, const char* song, bool fixedTempo = false, int outputMode = 0, int leadMs = 0)
             : rate (sampleRate), block (blockSize), delayIn (in), delayOut (out)
         {
             looper.prepare (rate, 30.0);
@@ -50,6 +50,7 @@ namespace
             LooperOptions options;
             options.fixedTempo = fixedTempo;
             options.outputMode = outputMode;
+            options.firstLoopLeadMs = leadMs;       // off unless a test asks: the older tests count from the press itself
             looper.setOptions (options);
             looper.setSong (builtInSong (songIndex (song)));
 
@@ -441,9 +442,92 @@ void runLooperSelfTest (const Check& check)
                           [&] (juce::int64 t) { return rig.nearJoin (start, 2 * bar, t) || rig.nearJoin (t2Start, 2 * bar, t); }) < exact,
                "the loop holds what was played from the bar line on, including the 100 ms before the press, in time to the sample");
 
-        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: too late to be a slip
+        // The allowance is half a beat: 250 ms here (a 2 s bar of 4 beats).
+        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: still inside half a beat
         rig.tap (4);
-        check (rig.track (2).state == TrackState::armed, "a press 200 ms after the bar line still waits for the next bar");
+        check (rig.track (2).state == TrackState::recording, "a press 200 ms after the bar line (under half a beat) still starts from that bar line");
+        rig.run ((start + 15 * bar + 500) - rig.time);
+        rig.tap (4);
+        rig.runSeconds (0.5);
+        rig.tap (7);                                    // undo, so the track can be recorded again
+        rig.run ((start + 17 * bar + 28800) - rig.time);  // 300 ms after: past half a beat, so it is not a slip
+        rig.tap (4);
+        check (rig.track (2).state == TrackState::armed, "a press 300 ms after the bar line (over half a beat) waits for the next bar");
+    }
+
+    // =========================================================================
+    // The first loop starts a little before the press, so an attack struck with the switch is kept
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Standard layout", false, 0, 30);
+        const auto lead = (juce::int64) 2880;           // 30 ms
+
+        rig.runSeconds (1.0);
+        const auto start = rig.tap (0);
+        rig.run (384000 - (rig.time - start));
+        rig.tap (0);
+        const auto bar = rig.bar();
+        check (rig.length (0) == 384000 && bar == 192000, "with the lead-in the first loop is still exactly press to press: 2 bars of 192,000");
+
+        rig.runSeconds (9.0);
+        const auto from = start + 4 * bar;
+        check (rig.worst (from, from + 2 * bar, [&] (juce::int64 t) { return rig.loop (6, start - lead, 2 * bar, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start - lead, 2 * bar, t); }) < exact,
+               "the loop holds the 30 ms before the first press and still plays back in time to the sample");
+
+        // A second track pressed right on the beat (30 ms after the bar line, as the lead-in makes it) starts on that bar line.
+        rig.run ((start + 8 * bar) - rig.time);
+        rig.tap (2);
+        check (rig.track (1).state == TrackState::recording
+                 && std::any_of (rig.log.begin(), rig.log.end(), [&] (const LoopLogEntry& e) { return e.kind == LoopLogEntry::Kind::recordingLate && e.a == lead; }),
+               "a second track pressed exactly a whole number of bars after the first press starts at once, from the bar line 30 ms before");
+    }
+
+    // =========================================================================
+    // Tom's presses on 22 Nov 2026, replayed: four bass takes on track 2, cleared or undone between
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Standard layout", false, 0, 0);
+        rig.runSeconds (1.0);
+        const auto start = rig.tap (0);
+        rig.run (437568 - (rig.time - start));
+        rig.tap (0);
+        const auto bar = rig.bar();
+        const auto guitar = [&] (juce::int64 t) { return rig.loop (6, start, 2 * bar, t); };
+
+        const auto take = [&] (int phrase, juce::int64 startOffset, juce::int64 endOffset, const char* what)
+        {
+            const auto begin = start + phrase * 2 * bar;
+            rig.run ((begin + startOffset) - rig.time);
+            rig.tap (2);
+            rig.run ((begin + 2 * bar + endOffset) - rig.time);
+            rig.tap (2);
+            rig.run ((begin + 2 * bar + 4000) - rig.time);
+            const auto ok = rig.track (1).state == TrackState::playing && rig.length (1) == 2 * bar;
+            rig.run ((begin + 4 * bar + 4000) - rig.time);      // one whole pass of the new loop
+            const auto bass = [&] (juce::int64 t) { return rig.loop (8, begin, 2 * bar, t); };
+            const auto bad = rig.worst (begin + 2 * bar + 4000, begin + 4 * bar, [&] (juce::int64 t) { return guitar (t) + bass (t); },
+                                        [&] (juce::int64 t) { return rig.nearJoin (start, 2 * bar, t) || rig.nearJoin (begin, 2 * bar, t); });
+            check (ok && bad < exact, what);
+        };
+
+        take (3, 2368, 600, "take 1 (25 ms late, finished late): both bars come back as played, from the first pass");
+        rig.tap (3);                                    // track 2 stop
+        rig.runSeconds (0.5);
+        rig.hold (3);                                   // hold stop: clear
+        rig.runSeconds (0.5);
+
+        take (7, -2016, 600, "take 2 after a clear (21 ms early, finished late): both bars come back as played");
+        rig.runSeconds (0.5);
+        rig.tap (7);                                    // undo
+        rig.runSeconds (0.5);
+
+        take (11, 2976, -864, "take 3 over an undone take (31 ms late, finished 9 ms early): both bars come back as played");
+        rig.runSeconds (0.5);
+        rig.tap (7);
+        rig.runSeconds (0.5);
+
+        take (15, -1056, 1200, "take 4 over an undone take (11 ms early, finished late): both bars come back as played");
     }
 
     // =========================================================================

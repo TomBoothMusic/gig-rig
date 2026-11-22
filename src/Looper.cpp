@@ -914,11 +914,15 @@ void Looper::startRecording (int track, int sw) noexcept
     tr.gain = tr.gainTarget = 0.0f;
     tr.stopAt = -1;
 
+    tr.recLead = 0;
+
     if (! running)
     {
-        origin = now;
+        // Start a little before the press, so a note struck together with the switch keeps its attack.
+        tr.recLead = juce::jlimit<juce::int64> (0, ringSize / 4, (juce::int64) (rate * activeOptions.firstLoopLeadMs * 0.001));
+        origin = now - tr.recLead;
         running = true;
-        tr.recStart = now;
+        tr.recStart = origin;
     }
     else
     {
@@ -929,7 +933,7 @@ void Looper::startRecording (int track, int sw) noexcept
             // A foot that lands just after the bar line meant the bar line. The input ring still
             // holds what was played since, so the loop starts there, not a whole bar later.
             const auto into  = wrap (now - origin, bar);
-            const auto grace = juce::jmin ((juce::int64) (rate * activeOptions.lateStartMs * 0.001), bar / 4, ringSize / 4);
+            const auto grace = juce::jmin ((juce::int64) ((double) bar * activeOptions.lateStartBeats / juce::jmax (1, activeSong.beatsPerBar)), bar / 4, ringSize / 4);
 
             if (into > 0 && into <= grace)
             {
@@ -986,7 +990,8 @@ void Looper::pressToClose (int track, TrackState next) noexcept
         return;
     }
 
-    const auto elapsed = now - tr.recStart;
+    // The first loop is as long as press to press; the lead-in before the first press is not added.
+    const auto elapsed = now - tr.recStart - (bar <= 0 ? tr.recLead : 0);
 
     if (! tr.recForcedEnd)
     {
