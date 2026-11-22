@@ -27,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 MODE="rig"
-VERSION=""
+BUILD_TAG=""
 FROM_SOURCE=0
 FROM_FILE=""
 KEEP_PIPEWIRE=0
@@ -36,7 +36,7 @@ ASSUME_YES=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --test)          MODE="test" ;;
-        --version)       VERSION="${2:?--version needs a build name, such as build-42}"; shift ;;
+        --version)       BUILD_TAG="${2:?--version needs a build name, such as build-42}"; shift ;;
         --build)         FROM_SOURCE=1 ;;
         --file)          FROM_FILE="$(realpath "${2:?--file needs the path of a GigRig-Linux.tar.gz}")"; shift ;;
         --keep-pipewire) KEEP_PIPEWIRE=1 ;;
@@ -282,7 +282,7 @@ if [ "$FROM_SOURCE" -eq 1 ]; then
     cp "$RIG_HOME/compile/GigRig_artefacts/Release/GigRig" "$RIG_HOME/builds/$label/GigRig"
 elif [ -n "$FROM_FILE" ]; then
     [ -f "$FROM_FILE" ] || fail "there is no file $FROM_FILE"
-    label="${VERSION:-file-$(date +%Y%m%d-%H%M%S)}"
+    label="${BUILD_TAG:-file-$(date +%Y%m%d-%H%M%S)}"
     mkdir -p "$RIG_HOME/builds/$label"
     tar -xzf "$FROM_FILE" -C "$RIG_HOME/builds/$label"
     ok "Unpacked $FROM_FILE as $label"
@@ -295,11 +295,11 @@ else
         gh auth login --hostname github.com --git-protocol https --web \
             || fail "GitHub sign-in did not finish. Run this script again to retry."
     fi
-    if [ -z "$VERSION" ]; then
-        VERSION="$(gh release view --repo "$REPO" --json tagName -q .tagName)" \
+    if [ -z "$BUILD_TAG" ]; then
+        BUILD_TAG="$(gh release view --repo "$REPO" --json tagName -q .tagName)" \
             || fail "could not find the latest build on GitHub."
     fi
-    label="$VERSION"
+    label="$BUILD_TAG"
     if [ -x "$RIG_HOME/builds/$label/GigRig" ]; then
         ok "Build $label is already here"
     else
