@@ -70,7 +70,19 @@ void TrackTile::paint (juce::Graphics& g)
     g.setFont (juce::Font (juce::FontOptions (18.0f, juce::Font::bold)));
     g.drawText ("T" + juce::String (index + 1), top.removeFromLeft (30.0f), juce::Justification::centredLeft);
 
-    if (current)
+    const bool somethingUndone = view.state != TrackState::empty && (view.undone || (view.hasOverdub && view.overdubUndone));
+
+    if (somethingUndone)
+    {
+        // Like the RC-600's red light: something on this track is undone and can be brought back.
+        const auto badge = top.removeFromRight (104.0f).reduced (0.0f, 2.0f);
+        g.setColour (style::red);
+        g.fillRoundedRectangle (badge, 4.0f);
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+        g.drawText ("UNDONE: redo?", badge, juce::Justification::centred);
+    }
+    else if (current)
     {
         g.setColour (style::textDim);
         g.setFont (juce::Font (juce::FontOptions (11.0f)));
