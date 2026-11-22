@@ -613,6 +613,47 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // Dreams as Tom plays it: a one-bar loop on track 2 plays on when switch 4 brings track 4 back
+    // =========================================================================
+    for (const auto pressInBar : { 70016, 150016 })       // a bit after a bar line, and a bit before the next one
+    {
+        Rig rig (96000.0, 64, 384, 448, "Dreams");
+        const auto start = rig.tap (0);
+        rig.run (192000 - (rig.time - start));
+        rig.tap (0);                                    // track 1: one bar of 2 s
+        const auto bar = rig.bar();
+
+        rig.run ((start + bar + 60000) - rig.time);
+        rig.tap (1);                                    // track 2 (the maraca): one bar, from bar 2
+        rig.run ((start + 3 * bar - 4992) - rig.time);
+        rig.tap (1);
+        const auto t2Start = start + 2 * bar;
+
+        rig.run ((start + 4 * bar + 60000) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records from bar 5
+        const auto t4Start = start + 5 * bar;
+        rig.run ((start + 7 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // switch 3: track 3 records, track 4 is closed and stopped
+        rig.run ((start + 9 * bar - 4992) - rig.time);
+        rig.tap (2);                                    // track 3 closes and plays
+
+        rig.run ((start + 11 * bar + pressInBar) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 plays; tracks 1 and 3 stop; track 2 plays on
+        rig.runSeconds (14.0);
+        check (rig.track (3).state == TrackState::playing && rig.track (1).state == TrackState::playing
+                 && rig.track (2).state == TrackState::stopped && rig.track (0).state == TrackState::stopped && rig.length (3) == 2 * bar,
+               "Dreams with the maraca: switch 4 leaves tracks 2 and 4 playing");
+
+        const auto length = 2 * bar;
+        const auto top = start + (pressInBar < bar / 2 ? 11 : 12) * bar + rig.delayOut;   // the nearest bar line, as heard
+        check (rig.worst (top + bar, top + bar + 2 * length,
+                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - top, length), 8) + rig.loop (5, t2Start, bar, t); },
+                          [&] (juce::int64 t) { return Rig::mod (t - top, length) >= length - 800 || rig.nearJoin (t2Start, bar, t); }) < exact,
+               pressInBar < bar / 2 ? "Dreams with the maraca: pressed just after a bar line, track 4 plays from its first bar, in time with track 2"
+                                    : "Dreams with the maraca: pressed just before a bar line, track 4's first bar starts on that bar line");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {

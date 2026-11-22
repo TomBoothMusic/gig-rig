@@ -819,24 +819,50 @@ void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) no
 
 void Looper::startAloneFromItsTop() noexcept
 {
-    // One press can start a track and, through its linked actions, stop every other one (Dreams:
-    // switch 4 plays track 4 and stops tracks 1, 3, 5 and 6). The track is then playing alone, so
-    // it starts from its own beginning, as it does when everything was stopped before the press.
+    // One press can start a track and, through its linked actions, stop others (Dreams: switch 4
+    // plays track 4 and stops tracks 1, 3, 5 and 6, while a one-bar loop on track 2 plays on).
+    // A stopped track does not keep its place silently: a track started again begins from its own
+    // first note, unless a loop at least as long is still playing, which it then rejoins in step.
     Track* started = nullptr;
+    const Track* longest = nullptr;
+    int startedCount = 0;
 
     for (auto& tr : tracks)
     {
         if (! isActive (tr))
             continue;
 
-        if (tr.state != TrackState::playing || tr.playStartedAt != now || started != nullptr)
-            return;
-
-        started = &tr;
+        if (tr.state == TrackState::playing && tr.playStartedAt == now)
+        {
+            started = &tr;
+            ++startedCount;
+        }
+        else if (tr.length > 0 && (longest == nullptr || tr.length > longest->length))
+        {
+            longest = &tr;
+        }
+        else if (tr.length <= 0)
+        {
+            return;     // a first loop is still being recorded: leave the count alone
+        }
     }
 
-    if (started != nullptr && started->length > 0)
-        origin = now - started->phase;
+    if (startedCount != 1 || started->length <= 0)
+        return;
+
+    if (longest == nullptr)
+    {
+        origin = now - started->phase;      // playing alone: from its first note, at once
+        return;
+    }
+
+    if (started->length <= longest->length)
+        return;
+
+    // In time with the longest loop still playing: its nearest loop start becomes this track's first note.
+    const auto into = wrap (now - origin - longest->phase, longest->length);
+    const auto top = now - into + (into > longest->length / 2 ? longest->length : 0);
+    started->phase = wrap (top - origin, started->length);
 }
 
 void Looper::drainAssigns() noexcept
