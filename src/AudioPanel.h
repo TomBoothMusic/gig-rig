@@ -23,8 +23,9 @@ public:
         starts the CQ when it is there. */
     void refreshDevices (bool openCQ);
 
-    /** Starts a device and brings every control in line with it. */
-    void openDevice (const DeviceChoice& choice, int bufferSize);
+    /** Starts a device and brings every control in line with it (sampleRate 0 = keep the last one asked for).
+        Remembers the device, rate and buffer, so the next start (on Linux, after a reboot) opens the same way. */
+    void openDevice (const DeviceChoice& choice, int bufferSize, double sampleRate = 0.0);
 
 private:
     void timerCallback() override;
@@ -37,8 +38,8 @@ private:
     AudioEngine& engine;
     juce::Array<DeviceChoice> choices;
 
-    juce::Label deviceLabel, bufferLabel, pingLabel, playLabel, toneLabel, dropoutLabel, glitchLabel, inputsLabel, returnsLabel;
-    juce::ComboBox deviceBox, bufferBox, pingBox, playBox;
+    juce::Label deviceLabel, rateLabel, bufferLabel, pingLabel, playLabel, toneLabel, dropoutLabel, glitchLabel, inputsLabel, returnsLabel;
+    juce::ComboBox deviceBox, rateBox, bufferBox, pingBox, playBox;
     juce::TextButton panelButton { "Driver settings" }, measureButton { "Measure latency" },
                      sweepButton { "Measure every size, 8 to 256" }, resetButton { "Reset count" }, glitchButton { "Glitch check" };
     juce::OwnedArray<juce::TextButton> toneButtons;

@@ -1,0 +1,107 @@
+# Notes for Claude working in this repository
+
+This is the software for Tom's all-in-one gig rig: one box to replace his
+pedalboard, Boss RC-600 looper and Allen & Heath CQ12T mixer. Tom is a working
+musician and a fitter and machinist, not a programmer. He tests every build on
+real gear and pastes the app's reports back.
+
+The design lives in the project's design doc (a Claude Doc, linked from the
+project's instructions). Read it before design decisions; the code follows it.
+
+## Working rules
+
+- **Plain language for Tom.** Anything he reads (README, guides, the app's own
+  words, PR descriptions) uses full sentences and no jargon. Click-by-click steps.
+- **The app reports, Tom pastes.** New features get a line in the app's report
+  (the **Copy report** button) so results come back as text, not descriptions.
+- **The self-test grows with the code.** `GigRig --self-test <file>` runs on
+  every build in CI. Add checks for new logic, timing checked to the sample.
+- **CI is the proof.** GitHub Actions builds Windows and Linux on every PR and
+  runs the self-test, a device scan and the Linux install script. A build is
+  ready only when CI is green. Merges to `main` publish a numbered release
+  (`build-<n>`), which is how Tom (and the rig computer) get builds.
+- **A working gig system is never put at risk.** The rig computer runs a pinned
+  release. New work goes to a new release, is tested away from gigs, and
+  `linux/rollback.sh` goes back in one command.
+- **Licence:** JUCE under AGPLv3. Fine for Tom's private build; see the README.
+
+## Building
+
+C++20, JUCE 9 (fetched by CMake), CMake 3.22+. See the README "For developers".
+
+In a cloud container without ALSA and X11 headers, a compile check still works:
+
+```
+git clone --depth 1 --branch 9.0.5 https://github.com/juce-framework/JUCE.git ../JUCE
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_JUCE=$PWD/../JUCE \
+  -DGIGRIG_ENABLE_JACK=OFF \
+  -DCMAKE_CXX_FLAGS="-DJUCE_ALSA=0 -DJUCE_USE_XRANDR=0 -DJUCE_USE_XINERAMA=0 -DJUCE_USE_XCURSOR=0 -DJUCE_USE_XINPUT=0"
+cmake --build build --parallel
+xvfb-run -a build/GigRig_artefacts/Release/GigRig --self-test result.txt
+```
+
+Real audio and MIDI are proven only on Tom's hardware.
+
+## The rig computer (Linux)
+
+- Set up by `linux/install.sh`; everything it changes is listed at the end of
+  `docs/linux-setup.md`. Health check: `linux/rig-check.sh` (changes nothing).
+- Ubuntu 24.04 LTS, kernel options `preempt=full threadirqs usbcore.autosuspend=-1`,
+  PipeWire masked so the app opens the interface directly through ALSA.
+- Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
+  Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`).
+- The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
+  `gnome-screenshot -f shot.png` can show what is on screen.
+- If you are running on the rig itself: never update packages, change kernel
+  options or restart the app while Tom might be playing. Ask first. Changes go
+  through the scripts in `linux/` so they can be repeated on a fresh install.
+
+## Adding an effect
+
+Tom wants to keep adding effects for years, mostly after his heavy-use
+subscription ends, without ever risking a gig. Effects are not built yet (they
+come after the looper stage), so this section is the contract to build to. When
+the first effect lands, turn it into exact steps with file names and keep it true.
+
+**The shape of an effect**
+
+1. One effect = one self-contained module: its own folder under `src/effects/<name>/`,
+   with the DSP, its parameter list and its self-test checks. It must not reach
+   into other effects or the engine's internals.
+2. Every effect implements the same small interface (planned):
+   `prepare (sampleRate, maxBlockSize)`, `process (buffer)` (audio thread: no
+   memory allocation, no locks, no file or network access, no logging),
+   `reset()`, a list of named parameters with ranges, units and defaults
+   (changed from the message thread, smoothed on the audio thread), and a
+   latency figure in samples.
+3. Effects register in one list (a registry), so adding one is: add the folder,
+   add one line to the registry, add it to CMake.
+4. Parameters are named and stable: songs and presets refer to them by name, so
+   renaming one breaks saved songs. Add new ones instead.
+5. Sound tweaks happen with live sliders and presets in the app, not by
+   rebuilding (design doc: "no rebuild for tweaks").
+6. Neural Amp Modeler captures and, possibly, open-source LV2 plug-ins are the
+   no-code way to add sounds. Prefer them when they fit.
+
+**Checks every effect must pass (in the self-test, so CI enforces them)**
+
+- No crash and no NaN or infinity on silence, full-scale noise, a sine sweep,
+  and a sudden jump of every parameter between its extremes.
+- No silence where there should be sound, and no sound out of silence (unless
+  the effect is meant to make sound, such as a tail).
+- No clicks when it is switched on and off or when parameters move.
+- Within its CPU budget: time `process` at 96 kHz and 64 samples and fail above
+  the budget (start with 5% of one block per effect and adjust when the whole
+  chain is known).
+- Reports its latency truthfully (an impulse through it lands where it says).
+
+**Getting it to Tom**
+
+1. Open a PR. CI must be green.
+2. Tom tries it on the laptop (Windows build) or on the rig with
+   `linux/install.sh --version <new build>` between gigs, A/B against the pedal
+   it copies where there is one.
+3. If anything is wrong at any point: `linux/rollback.sh`.
+4. Keep the design doc's effects list and the funny pedal names (in project
+   memory) in step.

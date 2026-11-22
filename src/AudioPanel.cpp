@@ -21,12 +21,61 @@ namespace
     }
 
     juce::String oneDecimal (double value)     { return juce::String (value, 1); }
+
+    // The last device, rate and buffer chosen, so that a start-up (on the rig, after every
+    // boot) opens audio the same way. Plain text, one "key=value" per line.
+    struct SavedAudio
+    {
+        DeviceChoice choice;
+        double rate = 0.0;
+        int buffer = 0;
+    };
+
+    juce::File savedAudioFile()
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                   .getChildFile ("GigRig").getChildFile ("audio-settings.txt");
+    }
+
+    SavedAudio loadSavedAudio()
+    {
+        SavedAudio saved;
+        juce::StringArray lines;
+        lines.addLines (savedAudioFile().loadFileAsString());
+
+        for (const auto& line : lines)
+        {
+            const auto key = line.upToFirstOccurrenceOf ("=", false, false).trim();
+            const auto value = line.fromFirstOccurrenceOf ("=", false, false).trim();
+
+            if (key == "type")        saved.choice.typeName = value;
+            else if (key == "device") saved.choice.deviceName = value;
+            else if (key == "rate")   saved.rate = value.getDoubleValue();
+            else if (key == "buffer") saved.buffer = value.getIntValue();
+        }
+
+        return saved;
+    }
+
+    void saveAudio (const DeviceChoice& choice, double rate, int buffer)
+    {
+        const auto file = savedAudioFile();
+        file.getParentDirectory().createDirectory();
+        file.replaceWithText ("type=" + choice.typeName + "\ndevice=" + choice.deviceName
+                                + "\nrate=" + juce::String (rate, 0) + "\nbuffer=" + juce::String (buffer) + "\n");
+    }
+
+    juce::String rateText (double rate)
+    {
+        return juce::roundToInt (rate) % 1000 == 0 ? juce::String (rate / 1000.0, 0) + " kHz" : juce::String (rate / 1000.0, 1) + " kHz";
+    }
 }
 
 AudioPanel::AudioPanel (AudioEngine& e)
     : engine (e)
 {
     style::body (deviceLabel, "Audio device");
+    style::body (rateLabel, "Rate");
     style::body (bufferLabel, "Buffer");
     style::body (pingLabel, "Send the ping to");
     style::body (playLabel, "Play-through");
@@ -38,7 +87,7 @@ AudioPanel::AudioPanel (AudioEngine& e)
     inputsLabel.setColour (juce::Label::textColourId, style::textDim);
     returnsLabel.setColour (juce::Label::textColourId, style::textDim);
 
-    for (auto* box : { &deviceBox, &bufferBox, &pingBox, &playBox })
+    for (auto* box : { &deviceBox, &rateBox, &bufferBox, &pingBox, &playBox })
         styleBox (*box);
 
     pingBox.addItem ("The CQ's USB stereo channel (returns 5 and 6)", 1);
@@ -81,6 +130,15 @@ AudioPanel::AudioPanel (AudioEngine& e)
         }
     };
 
+    rateBox.setTooltip ("Sample rate. On Windows the CQ's rate is set in its driver settings, so only that one shows here.");
+    rateBox.onChange = [this]
+    {
+        const auto rate = (double) rateBox.getSelectedId();
+
+        if (engine.isOpen() && rate > 0.0 && ! juce::approximatelyEqual (rate, engine.sampleRate()))
+            openDevice (engine.currentChoice(), engine.bufferSize(), rate);
+    };
+
     bufferBox.onChange = [this]
     {
         if (engine.isOpen() && bufferBox.getSelectedId() > 0 && bufferBox.getSelectedId() != engine.bufferSize())
@@ -113,7 +171,8 @@ AudioPanel::AudioPanel (AudioEngine& e)
 
     style::readOnlyEditor (resultsView);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &deviceLabel, &deviceBox, &bufferLabel, &bufferBox, &panelButton,
+    for (auto* c : std::initializer_list<juce::Component*> { &deviceLabel, &deviceBox, &rateLabel, &rateBox,
+                                                             &bufferLabel, &bufferBox, &panelButton,
                                                              &verdict, &measureButton, &sweepButton, &pingLabel, &pingBox,
                                                              &playLabel, &playBox, &resetButton, &dropoutLabel,
                                                              &glitchButton, &glitchLabel,
@@ -141,6 +200,9 @@ void AudioPanel::resized()
     r.removeFromRight (10);
     bufferBox.setBounds (r.removeFromRight (190));
     bufferLabel.setBounds (r.removeFromRight (52));
+    r.removeFromRight (10);
+    rateBox.setBounds (r.removeFromRight (100));
+    rateLabel.setBounds (r.removeFromRight (42));
     r.removeFromRight (10);
     deviceBox.setBounds (r);
 
@@ -200,16 +262,21 @@ void AudioPanel::refreshDevices (bool openCQ)
 
     if (! engine.isOpen() && openCQ)
     {
-        // ASIO first: it is the low-latency route on Windows.
-        const DeviceChoice* found = nullptr;
+        // The device chosen last time if it is here; otherwise the CQ, ASIO first
+        // (the low-latency route on Windows).
+        const auto saved = loadSavedAudio();
+        const DeviceChoice* found = choices.contains (saved.choice) ? &choices.getReference (choices.indexOf (saved.choice)) : nullptr;
 
-        for (const auto& c : choices)
-            if (looksLikeCQ (c.deviceName) && (found == nullptr || (c.typeName == "ASIO" && found->typeName != "ASIO")))
-                found = &c;
+        if (found == nullptr)
+            for (const auto& c : choices)
+                if (looksLikeCQ (c.deviceName) && (found == nullptr || (c.typeName == "ASIO" && found->typeName != "ASIO")))
+                    found = &c;
 
         if (found != nullptr)
         {
-            openDevice (*found, 0);
+            // An ASIO driver keeps its own buffer setting (its settings window), so only other
+            // driver types (ALSA on the rig) are asked for the remembered buffer.
+            openDevice (*found, found->typeName == "ASIO" ? 0 : saved.buffer, saved.rate);
             return;
         }
     }
@@ -217,9 +284,13 @@ void AudioPanel::refreshDevices (bool openCQ)
     syncToEngine();
 }
 
-void AudioPanel::openDevice (const DeviceChoice& choice, int bufferSize)
+void AudioPanel::openDevice (const DeviceChoice& choice, int bufferSize, double sampleRate)
 {
-    engine.open (choice, bufferSize);
+    engine.open (choice, bufferSize, sampleRate);
+
+    if (engine.isOpen())
+        saveAudio (choice, engine.sampleRate(), engine.bufferSize());
+
     syncToEngine();
 }
 
@@ -229,9 +300,20 @@ void AudioPanel::syncToEngine()
     deviceBox.setSelectedId (index >= 0 ? noDeviceId + 1 + index : noDeviceId, juce::dontSendNotification);
 
     bufferBox.clear (juce::dontSendNotification);
+    rateBox.clear (juce::dontSendNotification);
 
     if (engine.isOpen())
     {
+        auto rates = engine.availableSampleRates();
+        rates.addIfNotAlreadyThere (engine.sampleRate());
+        rates.sort();
+
+        for (auto rate : rates)
+            if (rate >= 1.0)
+                rateBox.addItem (rateText (rate), juce::roundToInt (rate));
+
+        rateBox.setSelectedId (juce::roundToInt (engine.sampleRate()), juce::dontSendNotification);
+
         auto sizes = engine.availableBufferSizes();
         sizes.addIfNotAlreadyThere (engine.bufferSize());
         sizes.sort();
@@ -255,6 +337,7 @@ void AudioPanel::setControlsEnabled()
 
     deviceBox.setEnabled (free);
     bufferBox.setEnabled (open && free);
+    rateBox.setEnabled (open && free && rateBox.getNumItems() > 1);
     panelButton.setEnabled (open && free && engine.hasControlPanel());
     measureButton.setEnabled (open && free);
     sweepButton.setEnabled (open && free);

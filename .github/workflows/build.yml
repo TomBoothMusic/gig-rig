@@ -94,9 +94,62 @@ jobs:
           path: ${{ matrix.asset }}
           if-no-files-found: error
 
+  # Runs the rig computer's set-up script on a fresh Ubuntu 24.04, as the mini PC
+  # will, with the Linux build just made. Proves the script, the realtime rights
+  # and the build's self-test; there is no audio hardware here.
+  linux-install:
+    name: Linux install script
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check the scripts for mistakes
+        run: shellcheck -S warning linux/*.sh
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: Linux
+          path: downloads
+
+      - name: Full rig set-up
+        run: linux/install.sh --yes --file downloads/GigRig-Linux.tar.gz --version ci-test
+
+      - name: Run it again (must be safe to repeat)
+        run: linux/install.sh --yes --file downloads/GigRig-Linux.tar.gz --version ci-test
+
+      - name: Realtime rights apply to a fresh log-in
+        run: |
+          sudo -iu "$USER" bash -c 'echo "groups: $(id -nG)"; echo "rtprio: $(ulimit -r)"; echo "memlock: $(ulimit -l)"' | tee limits.txt
+          grep -qw audio limits.txt
+          grep -q '^rtprio: 95$' limits.txt
+          grep -q '^memlock: unlimited$' limits.txt
+
+      - name: Settings in place
+        run: |
+          test -x "$HOME/gigrig/current/GigRig"
+          test -x "$HOME/.local/bin/gigrig"
+          test -f "$HOME/.config/autostart/gigrig.desktop"
+          grep -q 'preempt=full threadirqs' /etc/default/grub.d/90-gigrig.cfg
+          systemctl is-enabled gigrig-tune.service
+          cat /sys/module/usbcore/parameters/autosuspend
+          test "$(cat /sys/module/usbcore/parameters/autosuspend)" = "-1"
+
+      - name: Health check (no audio hardware here, so its result is shown, not judged)
+        run: sudo -iu "$USER" "$GITHUB_WORKSPACE/linux/rig-check.sh" || true
+
+      - name: Rollback switches builds
+        run: |
+          cp -r "$HOME/gigrig/builds/ci-test" "$HOME/gigrig/builds/ci-older"
+          linux/rollback.sh ci-older
+          test "$(readlink "$HOME/gigrig/current")" = "builds/ci-older"
+          linux/rollback.sh ci-test
+
   release:
     name: Publish download
-    needs: build
+    needs: [build, linux-install]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
