@@ -228,6 +228,12 @@ juce::String runSelfTest (bool& passed)
         check (driverDelayGrown (history, 96000, 64, 384 + 1856) != nullptr
                  && driverDelayGrown (history, 96000, 64, 384 + 1856)->total() == 608, "23 ms where the driver once said 6 ms is flagged, against the lowest seen");
         check (driverDelayGrown (history, 96000, 64, 896) == nullptr, "the 3 ms that safe mode adds is not flagged");
+
+        const juce::Array<int> cqSizes { 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 };
+        check (AudioEngine::nudgeBufferSize (64, cqSizes) == 128, "start-up nudge for the CQ: 64 is opened at 128 first");
+        check (AudioEngine::nudgeBufferSize (4096, cqSizes) == 2048, "start-up nudge: the biggest size goes down instead of up");
+        check (AudioEngine::nudgeBufferSize (64, { 64 }) == 0 && AudioEngine::nudgeBufferSize (0, cqSizes) == 0,
+               "start-up nudge: nothing to do with only one size, or no size");
         check (driverDelayGrown (history, 96000, 256, 4000) == nullptr, "a setting never seen before is not flagged");
 
         row = summarisePings ({ {}, {}, {} }, 16, true);
