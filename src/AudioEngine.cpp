@@ -187,6 +187,56 @@ juce::Array<DeviceChoice> AudioEngine::listDevices()
 
 juce::String AudioEngine::open (const DeviceChoice& newChoice, int bufferSize, double sampleRate)
 {
+    startNudge = {};
+    auto error = openOnce (newChoice, bufferSize, sampleRate);
+
+    // The CQ's ASIO driver can come up with its output side sized for a much bigger buffer
+    // (19.33 ms instead of 5.33 ms at 96 kHz / 64) when it is opened at the size it already
+    // had. Opening at another size and coming back clears it (found with Tom, 22 Nov 2026).
+    if (error.isEmpty() && device != nullptr && deviceIsCQ && newChoice.typeName == "ASIO")
+    {
+        const auto wanted = currentBufferSize;
+        const auto before = device->getOutputLatencyInSamples();
+        const auto other  = nudgeBufferSize (wanted, device->getAvailableBufferSizes());
+
+        if (other > 0)
+        {
+            openOnce (newChoice, other, sampleRate);
+            error = openOnce (newChoice, wanted, sampleRate);
+
+            if (error.isEmpty() && device != nullptr)
+            {
+                const auto ms = [this] (int samples) { return juce::String (samples * 1000.0 / currentSampleRate, 2) + " ms"; };
+                const auto after = device->getOutputLatencyInSamples();
+
+                startNudge = "Start-up nudge: opened at " + juce::String (other) + " and back to " + juce::String (currentBufferSize)
+                           + "; driver's output delay " + (after < before ? "came down from " + ms (before) + " to " + ms (after)
+                                                                           : "was " + ms (before) + " before and " + ms (after) + " after");
+            }
+        }
+    }
+
+    return error;
+}
+
+int AudioEngine::nudgeBufferSize (int wanted, const juce::Array<int>& available)
+{
+    if (wanted <= 0)
+        return 0;
+
+    for (auto candidate : { wanted * 2, wanted / 2 })
+        if (candidate > 0 && candidate != wanted && available.contains (candidate))
+            return candidate;
+
+    for (auto candidate : available)
+        if (candidate != wanted)
+            return candidate;
+
+    return 0;
+}
+
+juce::String AudioEngine::openOnce (const DeviceChoice& newChoice, int bufferSize, double sampleRate)
+{
     if (sampleRate > 0.0)
         wantedRate = sampleRate;
 
@@ -1004,6 +1054,9 @@ juce::String AudioEngine::latencyText() const
             add ("Driver's own latency figure: in " + ms (device->getInputLatencyInSamples() * 1000.0 / currentSampleRate)
                    + " + out " + ms (device->getOutputLatencyInSamples() * 1000.0 / currentSampleRate)
                    + " = " + ms (driverLatencySamples() * 1000.0 / currentSampleRate));
+
+        if (startNudge.isNotEmpty())
+            add ("  " + startNudge);
 
         if (! simulated)
         {

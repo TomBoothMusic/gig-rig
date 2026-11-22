@@ -279,6 +279,8 @@ juce::String describeLogEntry (const LoopLogEntry& e, double sampleRate)
         case K::songLoaded:         return stamp + "Song loaded; every track cleared";
         case K::armed:              return stamp + who + "waiting for the next bar to record";
         case K::recording:          return stamp + who + "recording";
+        case K::recordingLate:      return stamp + who + "recording from the bar line: the press came "
+                                             + juce::String (sampleRate > 0.0 ? (double) e.a * 1000.0 / sampleRate : 0.0, 0) + " ms after it";
         case K::closePending:       return stamp + who + "will finish recording at " + juce::String (e.b, 0) + (e.b == 1.0 ? " bar" : " bars");
         case K::loopClosed:         return stamp + who + "loop closed: " + length() + " (" + juce::String (e.a) + " samples)"
                                              + (e.b > 0.0 ? ", " + juce::String (e.b, 0) + (e.b == 1.0 ? " bar" : " bars") : juce::String());
@@ -903,6 +905,8 @@ void Looper::startRecording (int track, int sw) noexcept
     auto& tr = tracks[(size_t) track];
     const auto& setup = activeSong.track[(size_t) track];
 
+    juce::int64 lateBy = 0;
+
     tr.dubDirty = tr.dubDirty || tr.hasDub;
     tr.length = tr.phase = 0;
     tr.hasBase = tr.baseUndone = tr.hasDub = tr.dubUndone = false;
@@ -919,12 +923,26 @@ void Looper::startRecording (int track, int sw) noexcept
     else
     {
         tr.recStart = bar > 0 && activeSong.quantise ? nextBar (now) : now;
+
+        if (tr.recStart > now)
+        {
+            // A foot that lands just after the bar line meant the bar line. The input ring still
+            // holds what was played since, so the loop starts there, not a whole bar later.
+            const auto into  = wrap (now - origin, bar);
+            const auto grace = juce::jmin ((juce::int64) (rate * activeOptions.lateStartMs * 0.001), bar / 4, ringSize / 4);
+
+            if (into > 0 && into <= grace)
+            {
+                tr.recStart = now - into;
+                lateBy = into;
+            }
+        }
     }
 
     tr.recActive = true;
     tr.preCaptured = false;
     tr.recLength = 0;
-    tr.recWrittenTo = now;
+    tr.recWrittenTo = juce::jmin (now, tr.recStart);
     tr.recPressedAt = now;
     tr.recComp = juce::jmin (compensation.load (std::memory_order_relaxed), (int) (ringSize / 4));
     tr.recStartedBySwitch = sw;
@@ -949,7 +967,7 @@ void Looper::startRecording (int track, int sw) noexcept
     else
     {
         tr.state = TrackState::recording;
-        log (LoopLogEntry::Kind::recording, track);
+        log (lateBy > 0 ? LoopLogEntry::Kind::recordingLate : LoopLogEntry::Kind::recording, track, lateBy);
         fireAssigns (LoopAssign::Source::trackRecDub, 0, track);
     }
 }

@@ -118,6 +118,9 @@ public:
         device does not offer the rate asked for, it opens at 48 kHz if the device offers it.
         Returns an error message, or an empty string if audio is running. */
     juce::String open (const DeviceChoice& choice, int bufferSize = 0, double sampleRate = 0.0);
+
+    /** The other buffer size to open at first, so the CQ's driver sets its output side up afresh. 0 = none. */
+    static int nudgeBufferSize (int wanted, const juce::Array<int>& available);
     void close();
 
     /** A pretend device for the self-test: the test calls processBlock itself. */
@@ -219,6 +222,8 @@ private:
 
     void prepare (double rate, int block, int ins, int outs);
     juce::String reopen (int newBufferSize);
+    juce::String openOnce (const DeviceChoice& choice, int bufferSize, double sampleRate);
+    juce::String startNudge;
     int dropoutTotal() const;
     void startRow();
     void finishRow();

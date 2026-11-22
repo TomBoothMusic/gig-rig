@@ -394,7 +394,7 @@ void runLooperSelfTest (const Check& check)
         // A longer track, finished a little late (0.15 s after the bar): it ends on the bar just gone.
         rig.run ((start + 12 * bar + 20000) - rig.time);
         rig.tap (1);                                    // track 1 stop (switch 2), so only track 2 keeps the time
-        rig.run ((start + 13 * bar + 5000) - rig.time);
+        rig.run ((start + 13 * bar + 30000) - rig.time);
         rig.tap (4);                                    // track 3 rec/play (switch 5)
         rig.run ((start + 14 * bar + 64) - rig.time);
         check (rig.track (2).state == TrackState::recording, "a third track starts on the bar with the first track stopped");
@@ -412,6 +412,41 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
+    // A press just after the bar line counts as on it, and nothing played is lost
+    // =========================================================================
+    {
+        Rig rig (96000.0, 64, 384, 448, "Standard layout");
+
+        const auto start = rig.tap (0);
+        rig.run (384000 - (rig.time - start));
+        rig.tap (0);                                    // 2 bars of 192,000
+        const auto bar = rig.bar();
+
+        rig.run ((start + 4 * bar + 9600) - rig.time);  // 100 ms after the bar line
+        rig.tap (2);
+        check (rig.track (1).state == TrackState::recording, "a new track pressed 100 ms after the bar line records at once, not a bar later");
+        check (std::any_of (rig.log.begin(), rig.log.end(), [] (const LoopLogEntry& e) { return e.kind == LoopLogEntry::Kind::recordingLate && e.a == 9600; }),
+               "and the log says the press came 100 ms after the bar line");
+
+        rig.run ((start + 6 * bar + 2000) - rig.time);
+        rig.tap (2);
+        check (rig.track (1).state == TrackState::playing && rig.length (1) == 2 * bar, "it closes as exactly 2 bars from that bar line");
+
+        rig.runSeconds (9.0);
+        const auto t2Start = start + 4 * bar, from = start + 8 * bar;
+        const auto guitar = [&] (juce::int64 t) { return rig.loop (6, start, 2 * bar, t); };
+        const auto bass = [&] (juce::int64 t) { return rig.loop (8, t2Start, 2 * bar, t); };
+
+        check (rig.worst (from, from + 2 * bar, [&] (juce::int64 t) { return guitar (t) + bass (t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, 2 * bar, t) || rig.nearJoin (t2Start, 2 * bar, t); }) < exact,
+               "the loop holds what was played from the bar line on, including the 100 ms before the press, in time to the sample");
+
+        rig.run ((start + 13 * bar + 19200) - rig.time);  // 200 ms after the bar line: too late to be a slip
+        rig.tap (4);
+        check (rig.track (2).state == TrackState::armed, "a press 200 ms after the bar line still waits for the next bar");
+    }
+
+    // =========================================================================
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {
@@ -421,6 +456,7 @@ void runLooperSelfTest (const Check& check)
         rig.tap (0);
         check (rig.bar() == 152400 && std::abs (rig.looper.snapshot().bpm - 151.18) < 0.01, "the first loop is taken as its 4 preset bars: 151.2 BPM");
 
+        rig.runSeconds (0.3);                           // clear of the late-press allowance after the bar line
         rig.tap (6);                                    // bank 2
         check (rig.looper.snapshot().bank == 1, "switch 7 changes to bank 2");
         rig.tap (4);                                    // track 6 rec/play: preset 2 bars
@@ -654,20 +690,37 @@ void runLooperSelfTest (const Check& check)
         const auto length = rig.length (0);
         rig.runSeconds (3.0);
 
-        rig.tap (1);                                    // switch 2: track 1 stop
+        rig.run (length / 3 + 4321);                    // somewhere in the middle of a bar
+        const auto trackStop = rig.tap (1);             // switch 2: track 1 stop
         check (rig.track (0).state == TrackState::stopped && ! rig.looper.snapshot().running && rig.looper.snapshot().tempoKnown,
                "stop stops the track; the tempo is kept");
         rig.runSeconds (1.0);
+        check (rig.worst (trackStop + 250 + 600, rig.time, [] (juce::int64) { return 0.0f; }) < exact,
+               "a track's stop switch is immediate by default: silent within a few milliseconds, not at the end of the loop");
+
+        for (int i = 0; i < numBuiltInSongs(); ++i)
+            if (builtInSong (i).rcMemory == 0)
+                for (const auto& tr : builtInSong (i).track)
+                    check (tr.stopMode == StopMode::immediate, "every layout that is not copied from an RC-600 memory stops its tracks immediately");
         const auto again = rig.tap (0);
         check (rig.track (0).state == TrackState::playing, "rec/play on a stopped track plays it");
         rig.runSeconds (5.0);
         check (rig.worst (again + 250 + 200, again + length - 500, [&] (juce::int64 t) { return f (start + (t - again)); }) < exact,
                "started with everything stopped, the loop plays from its beginning");
 
-        rig.tap (8);                                    // switch 9: all stop
-        check (rig.track (0).state == TrackState::stopped, "all start/stop stops everything");
-        rig.tap (8);
+        // All start/stop, the way Tom uses it: everything stops the moment it is pressed, wherever
+        // in the bar that is, and the next press starts every track from beat 1 straight away.
+        rig.run (length / 3 + 12345);                   // somewhere in the middle of a bar
+        const auto allStop = rig.tap (8);               // switch 9: all stop
+        check (rig.track (0).state == TrackState::stopped && ! rig.looper.snapshot().running, "all start/stop stops everything");
+        rig.runSeconds (0.7);
+        check (rig.worst (allStop + 250 + 600, rig.time, [] (juce::int64) { return 0.0f; }) < exact,
+               "all stop is immediate: silent within a few milliseconds, not at the end of the bar");
+        const auto allStart = rig.tap (8);
         check (rig.track (0).state == TrackState::playing, "and starts everything again");
+        rig.runSeconds (5.0);
+        check (rig.worst (allStart + 250 + 200, allStart + length - 500, [&] (juce::int64 t) { return f (start + (t - allStart)); }) < exact,
+               "all start does not wait for a bar line: every loop plays from beat 1 from the press");
 
         rig.tap (7);                                    // switch 8: undo/redo on the current track
         check (rig.track (0).undone, "undo with no overdub hides the whole recording");
@@ -763,6 +816,7 @@ void runLooperSelfTest (const Check& check)
         const auto length = rig.length (0);
         const auto bar = rig.bar();
 
+        rig.runSeconds (0.3);                           // clear of the late-press allowance after the bar line
         rig.tap (2);
         rig.run (bar - ((rig.time - start) % bar) + bar - 4800);
         rig.tap (2);
