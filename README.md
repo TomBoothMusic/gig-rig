@@ -228,7 +228,9 @@ aux lead from step 2 into the **Dream's input**, and plug the **Dream's output**
 **CQ socket 8** in place of the pedalboard's lead (so the RC-600 and anything after the Dream
 are left out). Then open the **Amp capture** tab and follow the six steps on screen, once for
 each Dream setting you use (edge of breakup, and the sparkly clean one with the vibrato
-channel). Put the leads back afterwards. Send Claude the WAV
+channel). Set the Dream as you play it, but with its **reverb and vibrato/tremolo depth off**:
+an amp model cannot learn effects that move over time, and the app adds those back later as
+separate effects. Leave the Dream's speaker emulation on. Put the leads back afterwards. Send Claude the WAV
 files and the .txt files beside them from Documents\GigRig\Amp captures. Claude turns each
 one into an amp model for the next build.
 
