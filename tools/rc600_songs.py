@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turns an RC-600 backup's DATA folder into the song table in src/TestSongs.cpp.
 
-    python3 tools/rc600_songs.py <path to DATA folder>  >  songs.txt
+    python3 tools/rc600_songs.py <path to DATA folder> [memory numbers to leave out]  >  songs.txt
 
 Prints one entry per used memory (a memory whose name is not the factory "Memory NN" and that is
 not the MIDI CTRL memory), in the layout of rawSongs[]. Paste the output over the copied songs.
@@ -28,7 +28,10 @@ def sec(t, name):
 
 def main():
     folder = pathlib.Path(sys.argv[1])
+    leave_out = {int(a) for a in sys.argv[2:]}
     for n in range(1, 100):
+        if n in leave_out:
+            continue
         t = live(folder, n)
         if t is None:
             continue

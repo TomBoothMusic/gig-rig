@@ -119,6 +119,9 @@ struct SongSetup
 int numBuiltInSongs() noexcept;
 const SongSetup& builtInSong (int index) noexcept;
 
+/** For the self-test: a Song box song by name, or one of the two self-test-only songs. */
+SongSetup selfTestSong (const char* name);
+
 /** Everything that tells you how a song is set up, in words, for the screen and the report. */
 juce::String describeSong (const SongSetup&);
 

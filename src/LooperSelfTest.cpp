@@ -52,7 +52,7 @@ namespace
             options.outputMode = outputMode;
             options.firstLoopLeadMs = leadMs;       // off unless a test asks: the older tests count from the press itself
             looper.setOptions (options);
-            looper.setSong (builtInSong (songIndex (song)));
+            looper.setSong (selfTestSong (song));
 
             // Every socket carries a different, noise-like signal that is the same every time it is asked for.
             instrument = [] (juce::int64 t, int socket)
@@ -283,7 +283,7 @@ void runLooperSelfTest (const Check& check)
         check (b.source == LoopAssign::Source::trackPlayStop && b.sourceTrack == 0 && b.action == LoopAction::playStop && b.targetTrack == 2,
                "assign source 6, target 23 is: track 1 finishing a recording toggles track 3");
         check (decodeRcAssign (42, 34).sw == 9 && decodeRcAssign (42, 34).action == LoopAction::playStop, "assign source 42 is CTL3");
-        check (songIndex ("Standard layout") >= 0 && songIndex ("One press per track") >= 0 && songIndex ("Dirty Slap") >= 0 && songIndex ("Dreams") >= 0 && songIndex ("Songbird") >= 0, "the test songs are built in");
+        check (songIndex ("Standard layout") >= 0 && songIndex ("One press per track") >= 0 && songIndex ("Dirty Slap") >= 0 && songIndex ("Dreams") >= 0 && songIndex ("Kiss Me") >= 0, "the test songs are built in");
         check (describeSong (builtInSong (songIndex ("Dreams"))).contains ("Switch 4 (bank 1) also does: T3 stop"), "a song's linked actions read in plain words");
     }
 
@@ -667,7 +667,7 @@ void runLooperSelfTest (const Check& check)
     // Preset bar counts: Dirty Slap (4, 4, free, 4, 12 and 2 bars)
     // =========================================================================
     {
-        Rig rig (96000.0, 64, 300, 594, "Dirty Slap");
+        Rig rig (96000.0, 64, 300, 594, "Fixture: preset bars");
         const auto start = rig.tap (0);
         rig.run (609600 - (rig.time - start));          // 6.35 s: 4 bars at 151.2 BPM
         rig.tap (0);
@@ -693,7 +693,7 @@ void runLooperSelfTest (const Check& check)
 
     // ---- the other way to treat the first loop: the song's saved tempo ----------
     {
-        Rig rig (48000.0, 64, 150, 250, "Dirty Slap", true);
+        Rig rig (48000.0, 64, 150, 250, "Fixture: preset bars", true);
         check (rig.looper.snapshot().tempoKnown && rig.bar() == 76190, "with the saved-tempo option, the tempo is known before anything is recorded");
         const auto start = rig.tap (0);
         rig.run ((start + 4 * 76190 + 64) - rig.time);
@@ -990,7 +990,7 @@ void runLooperSelfTest (const Check& check)
     }
 
     {
-        Rig rig (48000.0, 64, 150, 250, "CCR Acoustic");    // saved at 88.2 BPM
+        Rig rig (48000.0, 64, 150, 250, "Fixture: slow tempo");    // saved at 88.2 BPM
         const auto start = rig.tap (0);
         rig.run (64 * 4000 - (rig.time - start));           // 5.33 s: two bars at 90 BPM
         rig.tap (0);
@@ -999,7 +999,7 @@ void runLooperSelfTest (const Check& check)
     }
 
     {
-        Rig rig (48000.0, 64, 150, 250, "Songbird");
+        Rig rig (48000.0, 64, 150, 250, "Fixture: loop-end stops");
         const juce::int64 bar = 48000;
         const auto start = rig.tap (0);
         rig.run (bar - (rig.time - start));
