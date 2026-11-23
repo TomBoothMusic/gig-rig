@@ -168,6 +168,64 @@ If loops sound slightly early or late against your playing, move **Timing trim**
 
 Not copied yet: the RC-600's effects, rhythm, memory up/down, and tap tempo. A switch set to one of those shows as "Effect (later)" or similar and does nothing.
 
+## The effects, first batch: drives through your Dream '65
+
+New in this build: an **Effects** tab and an **Amp capture** tab. The Effects tab starts
+switched off, so the looper works exactly as before until you tick **Effects on**.
+
+### Setting up (about 10 minutes)
+
+1. Plug the guitar's **dry** signal into **CQ socket 10** (straight from the guitar, or a split
+   taken before the OD200). On the CQ, turn channel 10 right down in the main mix, so you
+   hear only what the app sends back.
+2. Patch a spare **CQ output** into the **Dream '65's input**, and the Dream's output into the
+   CQ socket it uses now (socket 8). Turn that CQ output well down to start with.
+3. On the CQ, make sure channel **ST1** has Input Source = USB (as for the looper), and send
+   ST1 to that output only, not to the main speakers.
+4. In the app, open the **Effects** tab. Tick **Effects on** and **This chain on**. Input should
+   say Socket 10 and Out to should say Returns 3+4 (ST1).
+5. Play. You should hear the guitar through the Tube Screamer copy and your Dream '65.
+   If it is too quiet or too loud, adjust that CQ output's level until a clean note with the
+   drive switched off sounds like the guitar straight into the Dream.
+
+### Part A: try the drives (as long as you like)
+
+- The row of boxes is the chain, in order: Tube Screamer, Blues Driver, Klon and
+  Marshall in a box. Tick **On** under each to switch it in or out.
+- Click a box to see its knobs below. They work like the pedal's knobs while you play.
+  Double-click a slider to put it back to its starting point.
+- **Move left** and **Move right** change the order. **Add** puts in another effect (the same
+  drive twice is fine, or the Clean boost). **Remove** takes one out.
+- To use a drive as a boost: gain or drive down, level up.
+- **Effects / Dry** flips between the chain and your plain guitar. **Level match** (play for
+  8 seconds) makes the chain as loud as the dry sound, so the comparison is fair.
+- When you like a sound, type a name under **Presets** (for example "Blues") and press
+  **Save as**. **Load** brings it back.
+- Optional: under **RC-600 switches for the effects**, choose CTL4 and an action (for example
+  slot 2 on/off) to switch it with your foot. That switch stops working for the looper
+  while the effects are on.
+- If you want Claude to hear a sound, press **Capture**, play for up to 3 minutes, press it
+  again, and send the WAV from Documents\GigRig\Effect captures.
+
+### Part B: capture your Dream '65 settings (3 minutes each)
+
+Open the **Amp capture** tab and follow the six steps on screen, once for each Dream setting
+you use (edge of breakup, and the clean one with the vibrato channel). Send Claude the WAV
+files and the .txt files beside them from Documents\GigRig\Amp captures. Claude turns each
+one into an amp model for the next build.
+
+### Part C (optional): the Bass9 copy
+
+The Bass9 copy built on 20 November is now one of the effects. To try it: pick **Chain 2**,
+tick **This chain on**, set Input to the socket with the Bass9's DRY OUT, choose
+**Bass9 PRECISION copy** and press **Add**. Set the reference to the socket with the real
+Bass9 and use **Effects / Reference** to compare.
+
+### What to send Claude
+
+Press **Copy effects results** on the Effects tab and paste it, with what you liked and
+didn't. Mention which drives, which order and which settings.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.

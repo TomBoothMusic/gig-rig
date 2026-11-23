@@ -60,29 +60,21 @@ Real audio and MIDI are proven only on Tom's hardware.
 ## Adding an effect
 
 Tom wants to keep adding effects for years, mostly after his heavy-use
-subscription ends, without ever risking a gig. Effects are not built yet (they
-come after the looper stage), so this section is the contract to build to. When
-the first effect lands, turn it into exact steps with file names and keep it true.
+subscription ends, without ever risking a gig. The first batch (four drives, a
+clean boost, the Bass9 copy) was built on 23 Nov 2026; **`docs/effects.md` has
+the exact steps, file names and rules. Keep it true.** In short:
 
-**The shape of an effect**
-
-1. One effect = one self-contained module: its own folder under `src/effects/<name>/`,
-   with the DSP, its parameter list and its self-test checks. It must not reach
-   into other effects or the engine's internals.
-2. Every effect implements the same small interface (planned):
-   `prepare (sampleRate, maxBlockSize)`, `process (buffer)` (audio thread: no
-   memory allocation, no locks, no file or network access, no logging),
-   `reset()`, a list of named parameters with ranges, units and defaults
-   (changed from the message thread, smoothed on the audio thread), and a
-   latency figure in samples.
-3. Effects register in one list (a registry), so adding one is: add the folder,
-   add one line to the registry, add it to CMake.
-4. Parameters are named and stable: songs and presets refer to them by name, so
-   renaming one breaks saved songs. Add new ones instead.
+1. One effect = one folder `src/effects/<id>/` (plain C++, no JUCE) following
+   `src/effects/Effect.h`. It must not reach into other effects or the engine.
+2. One line in `src/effects/Registry.cpp`, one line in `CMakeLists.txt`.
+3. The standard checks in `src/effects/EffectChecks.cpp` then run on it in CI
+   automatically; add its own character checks if it has one worth guarding.
+4. Effect and setting ids are saved in presets and songs: never rename them.
 5. Sound tweaks happen with live sliders and presets in the app, not by
    rebuilding (design doc: "no rebuild for tweaks").
 6. Neural Amp Modeler captures and, possibly, open-source LV2 plug-ins are the
-   no-code way to add sounds. Prefer them when they fit.
+   no-code way to add sounds. Prefer them when they fit. The Amp capture tab
+   records an amp pedal for a NAM model (see `docs/effects.md`).
 
 **Checks every effect must pass (in the self-test, so CI enforces them)**
 
