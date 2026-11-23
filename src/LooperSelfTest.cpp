@@ -990,7 +990,7 @@ void runLooperSelfTest (const Check& check)
     }
 
     {
-        Rig rig (48000.0, 64, 150, 250, "CCR Acoustic");    // saved at 88.2 BPM
+        Rig rig (48000.0, 64, 150, 250, "Fixture: slow tempo");    // saved at 88.2 BPM
         const auto start = rig.tap (0);
         rig.run (64 * 4000 - (rig.time - start));           // 5.33 s: two bars at 90 BPM
         rig.tap (0);
