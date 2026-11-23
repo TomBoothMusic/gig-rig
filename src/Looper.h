@@ -323,7 +323,8 @@ private:
     void handleHold (int sw) noexcept;
     void handleUp (int sw) noexcept;
     void perform (LoopAction, int track, int sw, bool allowTentative) noexcept;
-    void fireAssigns (LoopAssign::Source, int bankOrZero, int swOrTrack) noexcept;
+    void fireAssigns (LoopAssign::Source, int bankOrZero, int swOrTrack, int edge = 0) noexcept;
+    void finishOtherRecordings (int track) noexcept;
     void drainAssigns() noexcept;
 
     void recPlay (int track, int sw, bool allowTentative) noexcept;
@@ -373,8 +374,10 @@ private:
     juce::int64 now = 0, origin = 0, bar = 0;   // bar = samples in one bar, 0 = not known yet
     bool running = false;
     int bank = 0, currentTrack = 0, currentBlock = 0;
+    int lastRecTrack = -1, recTrackBefore = -1;     // the track of the last recording or overdub: what Undo/redo acts on
+    bool runningBefore = false;                     // was anything going just before this press
 
-    struct PendingAssign { LoopAction action; int track; };
+    struct PendingAssign { LoopAction action; int track; int edge; };     // edge: 0 = a switch, 1 = the source track began to play, 2 = it stopped
     std::array<PendingAssign, 64> assignQueue {};
     int assignCount = 0;
     bool drainingAssigns = false;

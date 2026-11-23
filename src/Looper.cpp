@@ -86,6 +86,13 @@ SwitchFunction decodeRcFunction (int code) noexcept
         return f;
     }
 
+    if (code >= 217 && code <= 222)
+    {
+        f.track = code - 217;       // TRK1 to TRK6 PLAY/STOP, from the list after the effect functions
+        f.push = A::playStop;
+        return f;
+    }
+
     f.track = -2;
 
     switch (code)
@@ -195,13 +202,16 @@ juce::String describeAssign (const LoopAssign& a)
         case LoopAssign::Source::off:            return {};
         case LoopAssign::Source::pedal:          from = pedalSwitchName (a.sw) + (a.bank >= 0 ? " (bank " + juce::String (a.bank + 1) + ")" : juce::String()); break;
         case LoopAssign::Source::trackRecDub:    from = trackLabel (a.sourceTrack) + " starting to record or overdub"; break;
-        case LoopAssign::Source::trackPlayStop:  from = trackLabel (a.sourceTrack) + " finishing a recording or overdub"; break;
+        case LoopAssign::Source::trackPlayStop:  from = trackLabel (a.sourceTrack) + " starting to play"; break;
     }
 
     SwitchFunction f;
     f.push = a.action;
     f.track = a.targetTrack;
     f.rcCode = 0;
+
+    if (a.source == LoopAssign::Source::trackPlayStop && a.action == LoopAction::playStop)
+        return from + " also starts " + trackLabel (a.targetTrack) + " (recording, if it is empty), and stopping it stops " + trackLabel (a.targetTrack);
 
     return from + " also does: " + (a.action == LoopAction::unsupported ? "an effect or setting change (RC-600 target " + juce::String (a.rcTarget) + ", not copied yet)"
                                                                          : describeFunction (f));
@@ -292,7 +302,7 @@ juce::String describeLogEntry (const LoopLogEntry& e, double sampleRate)
         case K::overdub:            return stamp + who + "overdubbing";
         case K::overdubEnd:         return stamp + who + "overdub finished; playing";
         case K::overdubCancelled:   return stamp + who + "overdub taken back (the press turned into a hold or double-press)";
-        case K::undo:               return stamp + who + (e.a == 1 ? "undo: the whole recording is hidden" : "undo: the last overdub is hidden");
+        case K::undo:               return stamp + who + (e.a == 2 ? "undo: the recording is deleted; the track is empty" : e.a == 1 ? "undo: the whole recording is hidden" : "undo: the last overdub is hidden");
         case K::redo:               return stamp + who + (e.a == 1 ? "redo: the recording is back" : "redo: the last overdub is back");
         case K::cleared:            return stamp + who + "cleared";
         case K::allStart:           return stamp + "All start";
@@ -516,6 +526,7 @@ void Looper::resetAll (bool logIt) noexcept
     origin = now;
     bank = 0;
     currentTrack = 0;
+    lastRecTrack = recTrackBefore = -1;
     assignCount = 0;
     bar = 0;
 
@@ -624,6 +635,8 @@ void Looper::handle (const Message& m) noexcept
     if (sw < 0 || sw >= numPedalSwitches)
         return;
 
+    runningBefore = running;
+
     switch (m.event.kind)
     {
         case PedalEvent::Kind::down:  handleDown (sw, m.event.isDouble); break;
@@ -639,7 +652,9 @@ void Looper::handleDown (int sw, bool isDouble) noexcept
 {
     auto& p = presses[(size_t) sw];
     const auto fn = sw < 9 ? functions[bank][sw] : SwitchFunction();
-    const auto track = fn.track == -1 ? currentTrack : fn.track;
+    // Undo/redo acts on the last thing recorded, whichever switch was pressed since.
+    const bool isUndo = fn.push == LoopAction::undoRedo || fn.push == LoopAction::undoOrClear;
+    const auto track = fn.track != -1 ? fn.track : isUndo && lastRecTrack >= 0 ? lastRecTrack : currentTrack;
     const auto bankBefore = bank;
 
     p.fn = fn;
@@ -803,7 +818,7 @@ void Looper::perform (LoopAction action, int track, int sw, bool allowTentative)
     }
 }
 
-void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) noexcept
+void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key, int edge) noexcept
 {
     for (const auto& a : activeSong.assign)
     {
@@ -814,29 +829,24 @@ void Looper::fireAssigns (LoopAssign::Source source, int bankOrZero, int key) no
                                                                : a.sourceTrack == key;
 
         if (match && assignCount < (int) assignQueue.size())
-            assignQueue[(size_t) assignCount++] = { a.action, a.targetTrack };
+            assignQueue[(size_t) assignCount++] = { a.action, a.targetTrack, edge };
     }
 }
 
 void Looper::placeReturningTracks() noexcept
 {
-    // Runs after a press and its linked actions, so it sees what is left playing (Dreams: switch 4
+    // Runs after a press and its linked actions, so it sees everything the press did (Dreams: switch 4
     // plays track 4 and stops tracks 1, 3, 5 and 6, while a one-bar loop on track 2 plays on).
     // Where a track that was started by this press comes in follows its ReturnMode.
-    int started = 0, others = 0;
+    int started = 0;
 
     for (const auto& tr : tracks)
     {
-        if (! isActive (tr))
-            continue;
-
-        if (tr.length <= 0)
-            return;     // a first loop is still being recorded: leave the count alone
+        if (isActive (tr) && tr.length <= 0 && bar <= 0)
+            return;     // the first loop is still being recorded: leave the count alone
 
         if (tr.state == TrackState::playing && tr.playStartedAt == now)
             ++started;
-        else
-            ++others;
     }
 
     if (started == 0)
@@ -846,17 +856,20 @@ void Looper::placeReturningTracks() noexcept
     {
         auto& tr = tracks[(size_t) t];
 
-        if (! isActive (tr) || tr.state != TrackState::playing || tr.playStartedAt != now)
+        if (tr.state != TrackState::playing || tr.playStartedAt != now || tr.length <= 0)
             continue;
 
-        if (others == 0)
+        if (! runningBefore)
         {
+            // Everything was stopped: one track alone starts from its first note, at once.
+            // (All start has already put every track at its start.)
             if (started == 1)
-                origin = now - tr.phase;    // playing alone: from its first note, at once
+                origin = now - tr.phase;
 
             return;
         }
 
+        // Something was going until this press (even if the press also stopped it), so the count carries on.
         switch (activeSong.track[(size_t) t].returnMode)
         {
             case ReturnMode::inPlace:
@@ -889,7 +902,37 @@ void Looper::drainAssigns() noexcept
     for (int i = 0; i < assignCount; ++i)
     {
         const auto item = assignQueue[(size_t) i];
-        perform (item.action, item.track == -1 ? currentTrack : item.track, -1, false);
+        const bool isUndo = item.action == LoopAction::undoRedo || item.action == LoopAction::undoOrClear;
+        const auto track = item.track != -1 ? item.track : isUndo && lastRecTrack >= 0 ? lastRecTrack : currentTrack;
+
+        if (item.edge != 0 && item.action == LoopAction::playStop && track >= 0 && track < numLoopTracks)
+        {
+            // One track following another (Throw Your Arms: track 3 records each time track 1 plays).
+            auto& tr = tracks[(size_t) track];
+
+            if (item.edge == 1)
+            {
+                if (tr.state == TrackState::empty)
+                    startRecording (track, -1);
+                else if (tr.state == TrackState::stopped && tr.hasBase && ! tr.baseUndone)
+                    startPlaying (track);
+            }
+            else if (isRecordingState (tr.state))
+            {
+                cancelRecording (track, true);
+            }
+            else if (isActive (tr))
+            {
+                stopTrack (track, false);
+            }
+
+            continue;
+        }
+
+        if (item.edge == 2)
+            continue;
+
+        perform (item.action, track, -1, false);
     }
 
     assignCount = 0;
@@ -931,6 +974,8 @@ void Looper::recPlay (int track, int sw, bool allowTentative) noexcept
                 tr.tentativeSwitch = sw;
                 tr.tentativeAt = now;
                 tr.state = TrackState::overdubbing;
+                recTrackBefore = lastRecTrack;
+                lastRecTrack = track;
                 log (LoopLogEntry::Kind::overdub, track);
             }
             else
@@ -966,6 +1011,9 @@ void Looper::startRecording (int track, int sw) noexcept
 {
     auto& tr = tracks[(size_t) track];
     const auto& setup = activeSong.track[(size_t) track];
+
+    finishOtherRecordings (track);
+    lastRecTrack = track;
 
     juce::int64 lateBy = 0;
 
@@ -1035,6 +1083,28 @@ void Looper::startRecording (int track, int sw) noexcept
         tr.state = TrackState::recording;
         log (lateBy > 0 ? LoopLogEntry::Kind::recordingLate : LoopLogEntry::Kind::recording, track, lateBy);
         fireAssigns (LoopAssign::Source::trackRecDub, 0, track);
+    }
+}
+
+void Looper::finishOtherRecordings (int track) noexcept
+{
+    // One recording at a time, as on the RC-600: starting to record a track finishes whatever
+    // else was being recorded or overdubbed, and that goes straight to playing.
+    for (int o = 0; o < numLoopTracks; ++o)
+    {
+        if (o == track)
+            continue;
+
+        switch (tracks[(size_t) o].state)
+        {
+            case TrackState::armed:        cancelRecording (o, true); break;
+            case TrackState::recording:    pressToClose (o, TrackState::playing); break;
+            case TrackState::overdubbing:  endOverdub (o); break;
+
+            case TrackState::empty: case TrackState::closing: case TrackState::playing:
+            case TrackState::stopping: case TrackState::stopped:
+                break;
+        }
     }
 }
 
@@ -1153,7 +1223,7 @@ void Looper::closeRecording (int track, juce::int64 length) noexcept
     else
         log (LoopLogEntry::Kind::playing, track);
 
-    fireAssigns (LoopAssign::Source::trackPlayStop, 0, track);
+    fireAssigns (LoopAssign::Source::trackPlayStop, 0, track, next == TrackState::stopped ? 2 : 1);
 
     if (next == TrackState::overdubbing)
     {
@@ -1198,6 +1268,7 @@ void Looper::startPlaying (int track) noexcept
     tr.gainUp = 1.0f / (float) startRamp;
     updateGain (tr);
     log (LoopLogEntry::Kind::playing, track);
+    fireAssigns (LoopAssign::Source::trackPlayStop, 0, track, 1);
 }
 
 void Looper::stopTrack (int track, bool immediately) noexcept
@@ -1272,6 +1343,7 @@ void Looper::finishStop (int track) noexcept
     tr.fadingOut = false;
     updateGain (tr);
     log (LoopLogEntry::Kind::stopped, track);
+    fireAssigns (LoopAssign::Source::trackPlayStop, 0, track, 2);
     updateTransport();
 }
 
@@ -1307,6 +1379,7 @@ void Looper::beginOverdub (int track, juce::int64 pressedAt) noexcept
     tr.gateOff = never;
     tr.dubWrittenTo = tr.gateOn;
     tr.state = TrackState::overdubbing;
+    lastRecTrack = track;
     updateGain (tr);
     fireAssigns (LoopAssign::Source::trackRecDub, 0, track);
 }
@@ -1323,7 +1396,6 @@ void Looper::endOverdub (int track) noexcept
     tr.gateOff = now + tr.dubComp / 2;
     tr.state = TrackState::playing;
     log (LoopLogEntry::Kind::overdubEnd, track);
-    fireAssigns (LoopAssign::Source::trackPlayStop, 0, track);
 }
 
 void Looper::confirmTentative (int track) noexcept
@@ -1346,6 +1418,9 @@ void Looper::cancelTentative (int track, bool logIt) noexcept
 
     tr.tentative = false;
     tr.state = TrackState::playing;
+
+    if (lastRecTrack == track)
+        lastRecTrack = recTrackBefore;
 
     if (logIt)
         log (LoopLogEntry::Kind::overdubCancelled, track);
@@ -1374,11 +1449,10 @@ void Looper::undo (int track) noexcept
     }
     else if (tr.hasBase)
     {
-        tr.baseUndone = ! tr.baseUndone;
-        tr.gainUp = 1.0f / (float) startRamp;
-        tr.gainDown = 1.0f / (float) stopRamp;
-        updateGain (tr);
-        log (tr.baseUndone ? LoopLogEntry::Kind::undo : LoopLogEntry::Kind::redo, track, 1);
+        // Nothing but the first recording on the track: undo throws it away and leaves the track
+        // empty (Tom, 23 Nov 2026), so the next press records afresh, and a lone first loop can set a new tempo.
+        log (LoopLogEntry::Kind::undo, track, 2);
+        clearTrack (track, false);
     }
 }
 
@@ -1432,12 +1506,16 @@ void Looper::allStartStop() noexcept
 
     for (int t = 0; t < numLoopTracks; ++t)
         if (tracks[(size_t) t].hasBase && ! tracks[(size_t) t].baseUndone)
+        {
             startPlaying (t);
+            tracks[(size_t) t].phase = 0;       // every track from its own first note
+        }
 }
 
 //==============================================================================
 void Looper::fireTimed() noexcept
 {
+    runningBefore = running;
     const auto window = (juce::int64) (rate * activeOptions.doubleWindowMs * 0.001);
 
     for (int t = 0; t < numLoopTracks; ++t)

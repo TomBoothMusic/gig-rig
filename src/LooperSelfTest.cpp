@@ -600,16 +600,19 @@ void runLooperSelfTest (const Check& check)
 
         rig.run ((start + 11 * bar + 70016) - rig.time);  // well into a bar, and into track 4's second bar by the old count
         const auto press = rig.tap (3);                 // switch 4: track 4 plays; tracks 1, 3, 5 and 6 stop
-        rig.runSeconds (9.0);
+        rig.runSeconds (11.0);
         check (rig.track (3).state == TrackState::playing && rig.track (2).state == TrackState::stopped && rig.track (0).state == TrackState::stopped,
                "Dreams restart: switch 4 leaves track 4 playing alone");
 
+        // The same press stopped the other tracks, so the count carries on: track 4 (MEASURE on the RC-600)
+        // lines its first bar up on the nearest bar line, exactly as it does with the maraca still playing.
+        juce::ignoreUnused (press);
         const auto length = 2 * bar;
-        const auto from = press + rig.delayOut;
-        check (rig.worst (from + 4000, from + 2 * length,
-                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - from, length), 8); },
-                          [&] (juce::int64 t) { return Rig::mod (t - from, length) >= length - 800 || Rig::mod (t - from, length) < 4000; }) < exact,
-               "Dreams restart: track 4 starts from its own first note at the press, not part-way through, and loops from there");
+        const auto top = start + 11 * bar + rig.delayOut;
+        check (rig.worst (top + bar, top + bar + 2 * length,
+                          [&] (juce::int64 t) { return rig.instrument (t4Start + rig.delayOut + Rig::mod (t - top, length), 8); },
+                          [&] (juce::int64 t) { return Rig::mod (t - top, length) >= length - 800; }) < exact,
+               "Dreams restart: track 4 plays from its own first bar, lined up on the bar line nearest the press");
     }
 
     // =========================================================================
@@ -940,15 +943,120 @@ void runLooperSelfTest (const Check& check)
                "all start does not wait for a bar line: every loop plays from beat 1 from the press");
 
         rig.tap (7);                                    // switch 8: undo/redo on the current track
-        check (rig.track (0).undone, "undo with no overdub hides the whole recording");
+        check (rig.track (0).state == TrackState::empty && ! rig.looper.snapshot().tempoKnown,
+               "undo with no overdub deletes the recording: the track is empty and the next first loop sets a new tempo");
         rig.runSeconds (1.0);
         check (rig.worst (rig.time - 20000, rig.time, [] (juce::int64) { return 0.0f; }) < exact, "and it is silent");
-        rig.tap (7);
-        check (! rig.track (0).undone, "redo brings it back");
+        rig.tap (0);
+        rig.runSeconds (1.5);
+        rig.tap (0);
+        check (rig.track (0).state == TrackState::playing, "a new loop can be recorded straight after");
 
         rig.tap (1);
         rig.hold (1);                                   // switch 2 held: clear (STOP4)
         check (rig.track (0).state == TrackState::empty, "holding the stop switch clears the track");
+    }
+
+    // =========================================================================
+    // Tom's song test of 23 Nov 2026
+    // =========================================================================
+    {
+        // One recording at a time: pressing another track finishes the one being recorded and plays it.
+        Rig rig (96000.0, 64, 384, 448, "Dirty Slap");
+        const auto start = rig.tap (0);                 // track 1 records
+        rig.run (192000 - (rig.time - start));
+        rig.tap (2);                                    // switch 3 = track 2 rec/play, pressed while track 1 is still recording
+        const auto bar = rig.bar();
+        check (rig.track (0).state == TrackState::playing && rig.length (0) == 192000 && bar == 192000,
+               "pressing track 2 while track 1 records finishes track 1 there and plays it");
+        check (rig.track (1).state == TrackState::recording, "and track 2 records from that same moment");
+        rig.run ((start + 3 * bar - 4992) - rig.time);
+        rig.tap (4);                                    // switch 5 = track 3: track 2 finishes on the bar
+        rig.run ((start + 3 * bar + 6400) - rig.time);
+        check (rig.track (1).state == TrackState::playing && rig.length (1) == 2 * bar && rig.track (2).state == TrackState::recording,
+               "pressing track 3 while track 2 records finishes track 2 on the bar and track 3 records");
+        rig.tap (7);                                    // undo: the last recording is track 3, still being recorded
+        check (rig.track (2).state == TrackState::empty && rig.track (1).state == TrackState::playing, "undo while a first take is recording leaves that track empty");
+        rig.runSeconds (13.0);
+        const auto from = start + 5 * bar, t2Start = start + bar;
+        check (rig.worst (from, from + 4 * bar,
+                          [&] (juce::int64 t) { return rig.loop (6, start, bar, t) + rig.loop (8, t2Start, 2 * bar, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, bar, t) || rig.nearJoin (t2Start, 2 * bar, t); }) < exact,
+               "both loops play back exactly as played");
+
+        // Undo follows the last recording, not the last switch pressed.
+        rig.tap (0);                                    // overdub on track 1
+        rig.runSeconds (1.5);
+        rig.tap (0);
+        check (rig.track (0).hasOverdub && ! rig.track (0).overdubUndone, "an overdub is laid on track 1");
+        rig.tap (3);                                    // switch 4: track 2 stop (the last switch pressed is now a track 2 switch)
+        rig.runSeconds (0.5);
+        rig.tap (7);
+        check (rig.track (0).overdubUndone && rig.track (1).hasAudio, "undo removes the overdub on track 1, though a track 2 switch was pressed since");
+
+        // All start: every track from its own first note, though track 2 was recorded a bar into the count.
+        rig.runSeconds (0.5);
+        rig.tap (8);
+        rig.runSeconds (0.7);
+        const auto allStart = rig.tap (8);
+        rig.runSeconds (9.0);
+        const auto heardFrom = allStart + rig.delayOut;
+        check (rig.worst (heardFrom + 4000, heardFrom + 4 * bar,
+                          [&] (juce::int64 t) { return rig.instrument (start + rig.delayOut + Rig::mod (t - heardFrom, bar), 6)
+                                                         + rig.instrument (t2Start + rig.delayOut + Rig::mod (t - heardFrom, 2 * bar), 8); },
+                          [&] (juce::int64 t) { return Rig::mod (t - heardFrom, bar) >= bar - 800 || Rig::mod (t - heardFrom, bar) < 4000; }) < exact,
+               "all start plays every track from its own first note");
+    }
+
+    {
+        // Throw Your Arms: track 3 goes into record each time track 1 plays.
+        Rig rig (96000.0, 64, 384, 448, "Throw Arms");
+        const auto start = rig.tap (0);
+        rig.run (192000 - (rig.time - start));
+        rig.tap (0);
+        check (rig.track (0).state == TrackState::playing && rig.track (2).state == TrackState::recording, "Throw Arms: when track 1 plays, track 3 starts recording");
+        rig.runSeconds (1.0);
+        rig.tap (7);
+        check (rig.track (0).state == TrackState::playing && rig.track (2).state == TrackState::empty, "Throw Arms: undo sets track 3 back to empty and track 1 plays on");
+        rig.runSeconds (1.0);
+        rig.tap (1);                                    // switch 2: track 1 stop
+        check (rig.track (0).state == TrackState::stopped && rig.track (2).state == TrackState::empty, "Throw Arms: stopping track 1 leaves track 3 empty");
+        rig.runSeconds (1.0);
+        rig.tap (0);
+        check (rig.track (0).state == TrackState::playing && rig.track (2).state == TrackState::recording, "Throw Arms: playing track 1 again starts track 3 recording again");
+        rig.runSeconds (1.0);
+        rig.tap (1);
+        check (rig.track (0).state == TrackState::stopped && rig.track (2).state == TrackState::empty, "Throw Arms: stopping track 1 while track 3 records throws that take away");
+    }
+
+    {
+        // Kiss Me: switch 5 records track 5 and brings track 3 in under it, from track 3's first bar.
+        Rig rig (96000.0, 64, 384, 448, "Kiss Me");
+        const auto start = rig.tap (2);                 // track 3: one bar of 2 s
+        rig.run (192000 - (rig.time - start));
+        rig.tap (2);
+        const auto bar = rig.bar();
+        rig.run ((start + 2 * bar - 4992) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records, track 3 stops
+        rig.run ((start + 4 * bar - 4992) - rig.time);
+        rig.tap (3);                                    // track 4 closes (2 bars) and plays
+        rig.run ((start + 5 * bar - 40000) - rig.time);
+        rig.tap (4);                                    // switch 5, a little before the bar line: track 5 records, track 3 plays, track 4 stops
+        rig.runSeconds (7.0);
+        check (bar == 192000 && rig.track (4).state == TrackState::recording && rig.track (2).state == TrackState::playing && rig.track (3).state == TrackState::stopped,
+               "Kiss Me: switch 5 records track 5, plays track 3 and stops track 4");
+        const auto top = start + 5 * bar + rig.delayOut;
+        check (rig.worst (top, top + 2 * bar,
+                          [&] (juce::int64 t) { return rig.instrument (start + rig.delayOut + Rig::mod (t - top, bar), 6); },
+                          [&] (juce::int64 t) { return Rig::mod (t - top, bar) >= bar - 800; }) < exact,
+               "Kiss Me: track 3 comes in from its first bar on the bar line where track 5 starts recording");
+    }
+
+    {
+        const auto zombie = selfTestSong ("Zombie");
+        check (decodeRcFunction (218).push == LoopAction::playStop && decodeRcFunction (218).track == 1
+                 && describeSong (zombie).contains ("Switch 6: T2 play/stop"),
+               "Zombie: switch 6 is track 2 play/stop (RC-600 function 218)");
     }
 
     // =========================================================================
