@@ -71,6 +71,13 @@ private:
     juce::OwnedArray<juce::ToggleButton> paramToggles;
     juce::OwnedArray<juce::TextButton> paramResets;
 
+    // For an effect that loads a file (the amp model): which one, and its folder.
+    bool showModel = false;
+    juce::Label modelLabel;
+    juce::ComboBox modelBox;
+    juce::TextButton modelFolderButton { "Open folder" };
+    juce::StringArray modelNames;
+
     // Presets.
     juce::ComboBox presetBox;
     juce::TextEditor presetName;

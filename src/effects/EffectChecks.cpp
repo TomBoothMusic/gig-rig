@@ -419,6 +419,105 @@ void driveChecks (const std::string& id, const Check& check)
     else if (id == "fuzz")      driveCommonChecks (id, "fuzz", "volume", check);
 }
 
+void gateChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+
+    // Hiss alone (-75 dB) is turned right down; a note over the same hiss comes through whole.
+    std::vector<float> hiss ((size_t) rate);
+    unsigned seed = 1;
+    for (auto& v : hiss)
+    {
+        seed = seed * 1664525u + 1013904223u;
+        v = (float) (((seed >> 8) / 8388608.0) - 1.0) * 0.00018f;
+    }
+
+    auto fx = makeEffect ("gate");
+    fx->prepare (rate, 64);
+    const auto quiet = run (*fx, hiss);
+    const auto inDb = 20.0 * std::log10 (rms (hiss, (size_t) (0.5 * rate)));
+    const auto outDb = 20.0 * std::log10 (std::max (rms (quiet, (size_t) (0.5 * rate)), 1.0e-12));
+    check (outDb < inDb - 40.0 && fx->meterValue() < -40.0f,
+           "gate: hiss on its own is turned down (" + num (inDb) + " dB in, " + num (outDb) + " dB out, meter " + num (fx->meterValue()) + " dB)");
+
+    auto note = sine (196.0, 1.0, 0.05, rate);
+    for (size_t i = 0; i < note.size(); ++i) note[i] += hiss[i % hiss.size()];
+    fx->reset();
+    const auto played = run (*fx, note);
+    const auto lossDb = 20.0 * std::log10 (rms (played, (size_t) (0.1 * rate)) / rms (note, (size_t) (0.1 * rate)));
+    check (std::abs (lossDb) < 0.2 && fx->meterValue() > -0.5f, "gate: a played note goes through untouched (" + num (lossDb, 2) + " dB)");
+
+    // A note that stops: the gate closes after it, but not before its tail has died away.
+    {
+        auto x = sine (196.0, 1.0, 0.05, rate);
+        for (size_t i = (size_t) (0.5 * rate); i < x.size(); ++i)
+            x[i] *= (float) std::exp (-(double) (i - 0.5 * rate) / (0.05 * rate));   // dies away over a few hundred ms
+        fx->reset();
+        const auto y = run (*fx, x);
+        double tailIn = 0.0, tailOut = 0.0;
+        for (size_t i = (size_t) (0.55 * rate); i < (size_t) (0.65 * rate); ++i) { tailIn += x[i] * x[i]; tailOut += y[i] * y[i]; }
+        check (std::abs (10.0 * std::log10 (tailOut / tailIn)) < 1.0 && fx->meterValue() < -60.0f,
+               "gate: a note's tail rings on, then the gate closes (" + num (10.0 * std::log10 (tailOut / tailIn), 2) + " dB on the tail, closed to " + num (fx->meterValue()) + " dB)");
+    }
+}
+
+void ampChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    const size_t from = (size_t) (0.4 * rate);
+
+    // A new amp starts with the default model (the self-test sets one up before these run).
+    {
+        auto fx = makeEffect ("amp");
+        check (fx->status().rfind ("playing", 0) == 0, "amp: a new amp starts with a model (" + fx->status() + ")");
+    }
+
+    // A real model changes the sound (it is not a straight wire) and keeps it in proportion.
+    {
+        auto fx = makeEffect ("amp");
+        fx->prepare (rate, 64);
+        const auto x = sine (196.0, 0.8, 0.1, rate);
+        const auto y = run (*fx, x);
+        double h = 0.0;
+        for (int k = 2; k <= 6; ++k) h += std::pow (strength (y, from, 196.0 * k, rate), 2.0);
+        const double f = strength (y, from, 196.0, rate);
+        const auto gainDb = 20.0 * std::log10 (rms (y, from) / rms (x, from));
+        check (allFinite (y) && f > 1.0e-4 && std::abs (gainDb) < 40.0,
+               "amp: a guitar note comes out shaped by the model (" + num (gainDb) + " dB, harmonics " + num (100.0 * std::sqrt (h) / std::max (f, 1.0e-9)) + "%)");
+    }
+
+    // Changing model while playing fades across without a click.
+    {
+        auto fx = makeEffect ("amp");
+        fx->prepare (rate, 64);
+        const auto x = sine (196.0, 1.2, 0.1, rate);
+        auto steady = run (*fx, x);
+        const float steadyStep = biggestStep (steady, from, steady.size());
+
+        auto y = x;
+        for (size_t i = 0; i < y.size(); i += 64)
+        {
+            if (i == (size_t) (0.6 * rate))
+                fx->setText ("model", "Dream 65 - Clean");
+            float* c[1] { y.data() + i };
+            fx->process (c, 1, (int) std::min<size_t> (64, y.size() - i));
+        }
+        const float step = biggestStep (y, from, y.size());
+        check (allFinite (y) && step < std::max (steadyStep, 0.01f) * 2.5f && fx->status().find ("Clean") != std::string::npos,
+               "amp: changing model while playing fades across without a click (biggest step " + num (step, 4) + ", steady " + num (steadyStep, 4) + ")");
+    }
+
+    // A model that isn't there says so, and the amp keeps playing the one it had.
+    {
+        auto fx = makeEffect ("amp");
+        fx->prepare (rate, 64);
+        fx->setText ("model", "No such amp");
+        const auto y = run (*fx, sine (196.0, 0.6, 0.1, rate));
+        check (fx->status().find ("can't find") != std::string::npos && rms (y, from) > 1.0e-4,
+               "amp: a missing model is reported and the amp keeps its sound (" + fx->status() + ")");
+    }
+}
+
 void fuzzChecks (const Check& check)
 {
     driveChecks ("fuzz", check);

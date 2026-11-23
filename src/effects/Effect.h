@@ -84,6 +84,11 @@ public:
         build machine. The self-test fails the build above it. */
     virtual double cpuBudgetPercent() const noexcept        { return 5.0; }
 
+    /** A meter for the effect's screen, such as a gate's or compressor's gain reduction in dB
+        (0 = none, negative = turned down). Written by the audio thread, read by the screen. */
+    virtual bool hasMeter() const noexcept                  { return false; }
+    float meterValue() const noexcept                       { return meter.load (std::memory_order_relaxed); }
+
     /** True for effects meant to make sound on their own (a tail, a tone). */
     virtual bool makesSoundFromSilence() const noexcept     { return false; }
 
@@ -108,6 +113,9 @@ protected:
 
     static constexpr int chunk = 16;
 
+    /** Audio thread: sets what meterValue() reads. */
+    void setMeter (float v) noexcept                        { meter.store (v, std::memory_order_relaxed); }
+
 private:
     struct Smooth
     {
@@ -115,6 +123,7 @@ private:
         float coeff = 1.0f;     // most it moves per chunk
     };
 
+    std::atomic<float> meter { 0.0f };
     std::vector<ParamInfo> infos;
     std::unique_ptr<std::atomic<float>[]> targets;
     std::vector<Smooth> smooth;

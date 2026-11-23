@@ -27,6 +27,54 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 # ---------------------------------------------------------------------------
+# Neural Amp Modeler core (MIT licence) plays the amp models trained from the
+# Amp capture tab. It needs Eigen (MPL2), pinned to the commit NAM itself uses.
+# Local copies: -DFETCHCONTENT_SOURCE_DIR_NAMCORE=... -DFETCHCONTENT_SOURCE_DIR_EIGEN=...
+# ---------------------------------------------------------------------------
+FetchContent_Declare(
+    namcore
+    GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
+    GIT_TAG        v0.3.0
+    GIT_SHALLOW    TRUE
+    GIT_SUBMODULES ""
+    SOURCE_SUBDIR  no-cmake-here)    # only the sources are used: their own CMake projects are not run
+FetchContent_Declare(
+    eigen
+    URL https://gitlab.com/libeigen/eigen/-/archive/87300c93cae6a8afd9a4f8aa8d9d5c5324cf02e1/eigen-87300c93cae6a8afd9a4f8aa8d9d5c5324cf02e1.tar.gz
+    SOURCE_SUBDIR  no-cmake-here)
+FetchContent_MakeAvailable(namcore eigen)
+
+# An object library, not a static one: NAM registers its model types from static
+# initialisers, which a linker would otherwise drop as unused.
+add_library(namcore OBJECT
+    ${namcore_SOURCE_DIR}/NAM/activations.cpp
+    ${namcore_SOURCE_DIR}/NAM/convnet.cpp
+    ${namcore_SOURCE_DIR}/NAM/dsp.cpp
+    ${namcore_SOURCE_DIR}/NAM/get_dsp.cpp
+    ${namcore_SOURCE_DIR}/NAM/lstm.cpp
+    ${namcore_SOURCE_DIR}/NAM/util.cpp
+    ${namcore_SOURCE_DIR}/NAM/wavenet.cpp)
+target_include_directories(namcore SYSTEM PUBLIC
+    ${namcore_SOURCE_DIR}
+    ${namcore_SOURCE_DIR}/NAM
+    ${namcore_SOURCE_DIR}/Dependencies/nlohmann
+    ${eigen_SOURCE_DIR})
+target_compile_definitions(namcore PUBLIC NAM_SAMPLE_FLOAT)
+set_target_properties(namcore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+    target_compile_options(namcore PRIVATE /bigobj /W0)
+else()
+    target_compile_options(namcore PRIVATE -w)
+endif()
+
+# The amp models trained from Tom's captures, built into the app. On start the app
+# copies any that are missing into Documents/GigRig/Amp models.
+juce_add_binary_data(GigRigData SOURCES
+    resources/amp-models/dream65-breakup.nam
+    resources/amp-models/dream65-clean.nam
+    resources/amp-models/dream65-driven.nam)
+
+# ---------------------------------------------------------------------------
 # The app. Stage 0 was a device check; stage 1 adds the audio engine with
 # play-through and a round-trip latency meter. Later stages keep growing it.
 # ---------------------------------------------------------------------------
@@ -38,6 +86,7 @@ juce_add_gui_app(GigRig
 target_sources(GigRig PRIVATE
     src/Main.cpp
     src/MainComponent.cpp
+    src/AmpModels.cpp
     src/AudioEngine.cpp
     src/AudioPanel.cpp
     src/DeviceCheckPanel.cpp
@@ -67,6 +116,8 @@ target_sources(GigRig PRIVATE
     src/effects/marshall/MarshallBox.cpp
     src/effects/fuzz/Fuzz.cpp
     src/effects/boost/CleanBoost.cpp
+    src/effects/gate/NoiseGate.cpp
+    src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp
     src/effects/bass9/Bass9Checks.cpp)
@@ -96,6 +147,8 @@ target_link_libraries(GigRig
         juce::juce_audio_devices
         juce::juce_audio_formats
         juce::juce_gui_basics
+        namcore
+        GigRigData
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

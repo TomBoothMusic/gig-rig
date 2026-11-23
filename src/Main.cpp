@@ -1,5 +1,6 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "AmpModels.h"
 #include "DeviceReport.h"
 #include "MainComponent.h"
 #include "SelfTest.h"
@@ -44,6 +45,10 @@ public:
             quit();
             return;
         }
+
+        // The amp models built into the app go to Documents/GigRig/Amp models before anything
+        // can load an amp (the self-test uses its own copy).
+        ampmodels::setUp (ampmodels::folder());
 
         // Only one window at a time. Two copies would both hear the pedal and both loop, each with
         // its own timing, which sounds like loops drifting apart (it happened on 23 Nov 2026).

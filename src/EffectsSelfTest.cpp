@@ -1,3 +1,4 @@
+#include "AmpModels.h"
 #include "AudioEngine.h"
 #include "effects/EffectChecks.h"
 
@@ -72,6 +73,17 @@ namespace
 
 void runEffectsSelfTest (const Check& check)
 {
+    // ---- the amp models built into the app: installed into a folder of their own ----
+    {
+        const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("GigRig self-test amp models");
+        dir.deleteRecursively();
+        const int wrote = ampmodels::setUp (dir);
+        const auto list = ampmodels::names (dir);
+        check (wrote == 3 && list.size() == 3 && list.contains (ampmodels::defaultName()),
+               "amp models: the three built-in Dream '65 models are copied into the models folder (" + list.joinIntoString (", ") + ")");
+        check (ampmodels::setUp (dir) == 0, "amp models: starting again leaves models that are already there alone");
+    }
+
     // ---- every effect, the chain and the oversampler ----
     fx::runEffectChecks ([&check] (bool ok, const std::string& what) { check (ok, "effects: " + juce::String (what)); });
 

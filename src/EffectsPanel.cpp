@@ -1,4 +1,5 @@
 #include "EffectsPanel.h"
+#include "AmpModels.h"
 #include "effects/Registry.h"
 
 namespace gigrig
@@ -102,6 +103,11 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     style::body (outLabel, "Out to");
     style::body (looperLabel, "Looper hears it as");
     style::body (listenLabel, "Listen to");
+    style::body (modelLabel, "Model");
+    style::combo (modelBox);
+    modelFolderButton.onClick = [] { ampmodels::folder().createDirectory(); ampmodels::folder().startAsProcess(); };
+    for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
+        addChildComponent (c);
     style::body (levelLabel, "Chain level");
     style::heading (slotsLabel, "EFFECTS IN THIS CHAIN, IN ORDER (CLICK ONE TO SET IT UP)");
     style::heading (presetLabel, "PRESETS");
@@ -427,6 +433,9 @@ void EffectsPanel::rebuildEditor()
     paramSliders.clear();
     paramChoices.clear();
     paramToggles.clear();
+    showModel = false;
+    for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
+        c->setVisible (false);
 
     auto& ch = rack.chain (chainIndex);
     const auto& m = ch.model();
@@ -494,6 +503,38 @@ void EffectsPanel::rebuildEditor()
             t->getProperties().set ("param", p);
             addAndMakeVisible (t);
         }
+    }
+
+    // A file to load (the amp's model): a list of what is in the models folder.
+    const auto keys = fx->textKeys();
+    if (std::find (keys.begin(), keys.end(), "model") != keys.end())
+    {
+        showModel = true;
+        modelNames = ampmodels::names (ampmodels::folder());
+        const auto now = juce::String (fx->getText ("model"));
+        if (now.isNotEmpty() && ! modelNames.contains (now))
+            modelNames.add (now);
+
+        modelBox.clear (juce::dontSendNotification);
+        for (int i = 0; i < modelNames.size(); ++i)
+            modelBox.addItem (modelNames[i], i + 1);
+        modelBox.setSelectedId (modelNames.indexOf (now) + 1, juce::dontSendNotification);
+
+        const int s = slotIndex;
+        modelBox.onChange = [this, s]
+        {
+            const auto name = modelNames[modelBox.getSelectedId() - 1];
+            if (name.isEmpty())
+                return;
+            rack.chain (chainIndex).setText (s, "model", name.toStdString());
+            rack.markChanged();
+            if (auto* f = rack.chain (chainIndex).effect (s))
+                captureNote = "Amp: " + juce::String (f->status());
+        };
+
+        for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
+            c->setVisible (true);
+        captureNote = "Amp: " + juce::String (fx->status());
     }
 
     resized();
@@ -676,6 +717,14 @@ void EffectsPanel::timerCallback()
 
         if (levelNote.isNotEmpty()) s << levelNote << "\n";
         if (captureNote.isNotEmpty()) s << captureNote << "\n";
+
+        // The chosen effect's own meter (the gate: how far it is turning down now).
+        if (auto* f = rack.chain (chainIndex).effect (slotIndex); f != nullptr && f->hasMeter())
+        {
+            const float db = f->meterValue();
+            s << "Turning down by: " << (db > -0.5f ? juce::String ("nothing (open)") : juce::String (-db, 0) + " dB") << "\n";
+        }
+
         statusLabel.setText (s.trimEnd(), juce::dontSendNotification);
     }
 }
@@ -802,6 +851,15 @@ void EffectsPanel::resized()
                 paramChoices[choiceI++]->setBounds (cell.removeFromLeft (200).reduced (0, 2));
             else if (toggleI < paramToggles.size())
                 paramToggles[toggleI++]->setBounds (cell.removeFromLeft (80));
+        }
+
+        if (showModel)
+        {
+            const int p = paramLabels.size(), col = p % 2, line = p / 2;
+            juce::Rectangle<int> cell (grid.getX() + col * colW, grid.getY() + line * 28, colW - 12, 28);
+            modelLabel.setBounds (cell.removeFromLeft (130));
+            modelBox.setBounds (cell.removeFromLeft (240).reduced (0, 2));
+            modelFolderButton.setBounds (cell.removeFromLeft (100).reduced (4, 2));
         }
     }
 
