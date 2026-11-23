@@ -782,6 +782,8 @@ void Looper::perform (LoopAction action, int track, int sw, bool allowTentative)
                     stopTrack (track, false);
                 else if (tr.hasBase && ! tr.baseUndone)
                     startPlaying (track);
+                else if (tr.state == TrackState::empty)
+                    startRecording (track, sw);     // RC-600 rule: play on a track with nothing on it records
             }
             break;
 
@@ -1098,7 +1100,14 @@ void Looper::finishOtherRecordings (int track) noexcept
         switch (tracks[(size_t) o].state)
         {
             case TrackState::armed:        cancelRecording (o, true); break;
-            case TrackState::recording:    pressToClose (o, TrackState::playing); break;
+
+            case TrackState::recording:
+                if (tracks[(size_t) o].recPressedAt == now)
+                    cancelRecording (o, true);      // started by this very press: nothing to keep
+                else
+                    pressToClose (o, TrackState::playing);
+                break;
+
             case TrackState::overdubbing:  endOverdub (o); break;
 
             case TrackState::empty: case TrackState::closing: case TrackState::playing:

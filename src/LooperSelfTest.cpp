@@ -1032,24 +1032,56 @@ void runLooperSelfTest (const Check& check)
     {
         // Kiss Me: switch 5 records track 5 and brings track 3 in under it, from track 3's first bar.
         Rig rig (96000.0, 64, 384, 448, "Kiss Me");
-        const auto start = rig.tap (2);                 // track 3: one bar of 2 s
+        const auto start = rig.tap (0);                 // track 1: one bar of 2 s
         rig.run (192000 - (rig.time - start));
-        rig.tap (2);
+        rig.tap (0);
         const auto bar = rig.bar();
         rig.run ((start + 2 * bar - 4992) - rig.time);
-        rig.tap (3);                                    // switch 4: track 4 records, track 3 stops
+        rig.tap (2);                                    // track 3 (verse guitar): one bar, from bar 3
+        const auto t3Start = start + 2 * bar;
+        rig.run ((start + 3 * bar - 4992) - rig.time);
+        rig.tap (2);
         rig.run ((start + 4 * bar - 4992) - rig.time);
-        rig.tap (3);                                    // track 4 closes (2 bars) and plays
-        rig.run ((start + 5 * bar - 40000) - rig.time);
+        rig.tap (3);                                    // switch 4: track 4 records; tracks 3 and 1 stop
+        rig.run ((start + 6 * bar - 4992) - rig.time);
+        rig.tap (3);                                    // track 4 closes (2 bars) and plays; the same switch starts track 1 again
+        rig.run ((start + 7 * bar - 40000) - rig.time);
         rig.tap (4);                                    // switch 5, a little before the bar line: track 5 records, track 3 plays, track 4 stops
         rig.runSeconds (7.0);
-        check (bar == 192000 && rig.track (4).state == TrackState::recording && rig.track (2).state == TrackState::playing && rig.track (3).state == TrackState::stopped,
+        check (bar == 192000 && rig.track (4).state == TrackState::recording && rig.track (2).state == TrackState::playing
+                 && rig.track (3).state == TrackState::stopped && rig.track (0).state == TrackState::playing,
                "Kiss Me: switch 5 records track 5, plays track 3 and stops track 4");
-        const auto top = start + 5 * bar + rig.delayOut;
+        const auto top = start + 7 * bar + rig.delayOut;
         check (rig.worst (top, top + 2 * bar,
-                          [&] (juce::int64 t) { return rig.instrument (start + rig.delayOut + Rig::mod (t - top, bar), 6); },
-                          [&] (juce::int64 t) { return Rig::mod (t - top, bar) >= bar - 800; }) < exact,
+                          [&] (juce::int64 t) { return rig.instrument (t3Start + rig.delayOut + Rig::mod (t - top, bar), 6) + rig.loop (6, start, bar, t); },
+                          [&] (juce::int64 t) { return Rig::mod (t - top, bar) >= bar - 800 || rig.nearJoin (start, bar, t); }) < exact,
                "Kiss Me: track 3 comes in from its first bar on the bar line where track 5 starts recording");
+    }
+
+    {
+        // Dancing in the Moonlight: CTL3 plays tracks 4, 5 and 6. Play on an empty track records (the RC-600's rule).
+        Rig rig (96000.0, 64, 384, 448, "Dancing Moon");
+        const auto start = rig.tap (3);                 // track 4: one bar of 2 s
+        rig.run (192000 - (rig.time - start));
+        rig.tap (3);
+        const auto bar = rig.bar();
+        rig.run ((start + 2 * bar - 4992) - rig.time);
+        rig.tap (4);                                    // track 5: one bar
+        rig.run ((start + 3 * bar - 4992) - rig.time);
+        rig.tap (4);
+        rig.run ((start + 4 * bar + 30016) - rig.time);
+        rig.tap (8);                                    // all stop
+        rig.runSeconds (1.0);
+        check (rig.track (3).state == TrackState::stopped && rig.track (4).state == TrackState::stopped && rig.track (5).state == TrackState::empty,
+               "Dancing Moon: tracks 4 and 5 are recorded and stopped, track 6 is empty");
+        rig.tap (9);                                    // CTL3
+        check (rig.track (3).state == TrackState::playing && rig.track (4).state == TrackState::playing && rig.track (5).state == TrackState::recording,
+               "Dancing Moon: CTL3 plays tracks 4 and 5 and starts recording on the empty track 6");
+        rig.runSeconds (3.0);
+        rig.tap (9);
+        rig.runSeconds (2.5);
+        check (rig.track (3).state == TrackState::stopped && rig.track (4).state == TrackState::stopped && rig.track (5).state == TrackState::stopped && rig.track (5).hasAudio,
+               "Dancing Moon: CTL3 again stops all three, and track 6 keeps what was recorded");
     }
 
     {
