@@ -1,9 +1,11 @@
 #include "Registry.h"
 
+#include "amp/NamAmp.h"
 #include "bass9/Bass9.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
 #include "fuzz/Fuzz.h"
+#include "gate/NoiseGate.h"
 #include "klon/Klon.h"
 #include "marshall/MarshallBox.h"
 #include "tubescreamer/TubeScreamer.h"
@@ -15,6 +17,8 @@ void tubeScreamerChecks (const Check&);
 void driveChecks (const std::string& id, const Check&);
 void bass9Checks (const Check&);
 void fuzzChecks (const Check&);
+void ampChecks (const Check&);
+void gateChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -32,6 +36,10 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Fuzz>(); }, fuzzChecks },
         { "boost",    "Clean boost",         "Drive", "Louder with a little colour, to push a drive or the amp.",
           [] { return std::make_unique<CleanBoost>(); }, {} },
+        { "gate",     "Noise gate",          "Utility", "Turns the hiss and hum down when you stop playing; opens in a couple of milliseconds when you play.",
+          [] { return std::make_unique<NoiseGate>(); }, gateChecks },
+        { "amp",      "Amp model (NAM)",     "Amp",   "An amp and its cab from a capture: Tom's Dream '65 settings, or any .nam model in Documents\\GigRig\\Amp models.",
+          [] { return std::make_unique<NamAmp>(); }, ampChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
     };

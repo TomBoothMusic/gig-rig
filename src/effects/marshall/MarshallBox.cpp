@@ -34,14 +34,14 @@ void MarshallBox::update()
 
     pre = dbToGain ((float) (-16.0 + 52.0 * g));
 
-    inHp.highPass (inner, 110.0);           // small coupling caps: tight lows before the gain
+    inHp.highPass (inner, 150.0);           // small coupling caps: tight lows before the gain (raised 23 Nov 2026: Tom found it a bit bassy)
     bright.highShelf (inner, 2500.0, 4.0 * (1.0 - g * 0.5), 0.7);   // the bright cap, strongest at lower gain
     hp1.highPass (inner, 140.0);  lp1.lowPass (inner, 9000.0);
-    hp2.highPass (inner, 70.0);   lp2.lowPass (inner, 7000.0);
-    hp3.highPass (inner, 35.0);   lp3.lowPass (inner, 6000.0);
+    hp2.highPass (inner, 110.0);  lp2.lowPass (inner, 7000.0);
+    hp3.highPass (inner, 60.0);   lp3.lowPass (inner, 6000.0);
 
     const auto knob = [this] (int p) { return value (p) / 10.0; };
-    tight.highPass (rate, 60.0, 0.6);
+    tight.highPass (rate, 80.0, 0.6);
     bass.lowShelf (rate, 120.0, -12.0 + 18.0 * knob (pBass), 0.8);
     middle.peak (rate, 650.0, 0.7, -14.0 + 20.0 * knob (pMiddle));
     trebleShelf.highShelf (rate, 2800.0, -12.0 + 20.0 * knob (pTreble), 0.8);

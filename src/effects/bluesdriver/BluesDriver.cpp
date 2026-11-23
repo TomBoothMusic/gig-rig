@@ -29,12 +29,14 @@ void BluesDriver::update()
     const double rate = sampleRate(), inner = rate * os.getFactor();
     const double g = value (pGain) / 10.0;
 
-    // About x1.5 to x300 over the two stages, shared between them.
-    const double total = 1.5 * std::pow (200.0, std::pow (g, 1.3));
+    // About x1.5 to x750 over the two stages, shared between them. (Tom, 23 Nov 2026: the first
+    // version clipped only on the peaks, "sparse, you can hear the clips", next to the OD200's
+    // Blues Driver mode, so the same knob setting now drives it harder and more evenly.)
+    const double total = 1.5 * std::pow (500.0, std::pow (g, 1.15));
     g1 = (float) std::pow (total, 0.55);
     g2 = (float) std::pow (total, 0.45);
 
-    inHp.highPass (inner, 80.0);
+    inHp.highPass (inner, 110.0);      // a touch less low end into the clipping (Tom: a touch bassy)
     mid1Lp.lowPass (inner, 7000.0);
     mid1Hp.highPass (inner, 40.0);
     mid2Lp.lowPass (inner, 5500.0);
@@ -64,9 +66,9 @@ void BluesDriver::processChunk (float* const* ch, int numCh, int n) noexcept
         for (int i = 0; i < m; ++i)
         {
             float v = inHp.run (u[i] * 2.0f, c) * g1;
-            v = shape::uneven (v, 0.9f, 1.4f);                  // stage 1
+            v = shape::uneven (v, 0.9f, 1.15f);                 // stage 1
             v = mid1Hp.run (mid1Lp.run (v, c), c) * g2;
-            v = shape::uneven (v, 0.75f, 1.1f);                 // stage 2, firmer
+            v = shape::uneven (v, 0.8f, 0.95f);                 // stage 2: nearly even, so notes saturate smoothly
             v = mid2Lp.run (v, c);
             u[i] = dcBlock.run (v, c);
         }

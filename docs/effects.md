@@ -110,7 +110,39 @@ the same rate always gives the same sound: clicks, sweeps at five levels, plucke
 chords at many levels, guitar-shaped noise, then a repeat of plucked notes. A WAV file
 (such as NAM's standard input file) can be used instead; it is resampled to the device rate.
 
+## Amp models (NAM)
+
+The effect `amp` (`src/effects/amp/NamAmp.*`) plays a `.nam` file with the Neural Amp
+Modeler core (MIT licence, fetched by CMake at tag v0.3.0, with Eigen at the commit NAM pins).
+- The model runs at 48 kHz. At 96 kHz the effect takes the sound down to 48 kHz and back up
+  around it with the half-band filters from `Oversampler.h` (10 samples of delay, reported).
+- Its text setting `model` is a file name in `Documents/GigRig/Amp models` (or a full path).
+  Loading happens on the message thread; a new model fades in over 20 ms.
+- What the model puts out for silence is measured on load and taken off, so silence stays silent.
+- The models trained from Tom's captures are built into the app (`resources/amp-models`, listed
+  in `CMakeLists.txt` and in `src/AmpModels.cpp`) and copied into the models folder on start.
+  To ship a new one: add the file in both places. The first in the list is what a new amp starts with.
+- `namcore` is an OBJECT library on purpose: NAM registers its model types from static
+  initialisers, which a static library would let the linker drop ("Factory not found for name").
+- CPU: a standard WaveNet model is the heaviest effect so far (budget 45% of a block in the
+  self-test, measured on the cloud build machine).
+
+### Training an amp model
+
+`tools/nam/train_from_capture.py` turns an Amp capture WAV into `model.nam` (see its header
+for setting it up). It needs Python with `neural-amp-modeler==0.10.0`: that version writes
+the classic format (0.5.4) the app's NAM core reads. A GPU makes it minutes; on 4 CPU cores a
+standard model takes about 30 s per epoch, so 100 epochs is under an hour. Check the ESR it
+reports on the held-back section: under 0.01 is very good, under 0.03 is usable.
+
+The 23 November 2026 captures (Break Up, Clean, Driven) are in the project files under
+`effects/amp-captures-2026-11-23`.
+
 ## Test main for the plain-C++ effect checks
+
+The amp checks expect a model: call `gigrig::fx::NamAmp::setModelFolder` and
+`setDefaultModel` first (with `resources/amp-models` copied under the names in
+`src/AmpModels.cpp`), and link the NAM core and Eigen.
 
 ```cpp
 #include "EffectChecks.h"

@@ -190,7 +190,12 @@ compare one drive against the other and nothing else changes.
      channel 10 gain so the meter is healthy but well clear of red when you dig in.
    - Channel **ST1**: Input Source = USB (as for the looper). Processing off. Send it to that
      aux only, not to the main mix. Start with the aux output turned **well down**: it is a
-     line-level output going into a pedal input.
+     line-level output going into a pedal input. Set its send to that aux to **pre-fader**, so
+     it still works with the ST1 fader down.
+   - **Every other send to that aux off.** Open the aux's mix and turn every channel's send to
+     it right down except ST1: channel 8 (your board coming back) and the **FX returns** (the
+     CQ's own reverb) especially. If either sends to the aux, the sound goes round in a circle
+     and howls, or rings in the reverb tail (Tom found both on 23 November 2026).
 4. In the app, open the **Effects** tab. Tick **Effects on** and **This chain on**. Input should
    say Socket 10 and Out to should say Returns 3+4 (ST1).
 5. Switch the OD200 off and play. You should hear the Tube Screamer copy through the rest of
@@ -245,6 +250,51 @@ Bass9 and use **Effects / Reference** to compare.
 
 Press **Copy effects results** on the Effects tab and paste it, with what you liked and
 didn't. Mention which drives, which order and which settings.
+
+## The effects, second batch: your Dream '65 as amp models
+
+New in this build:
+- **Amp model (NAM)**: an effect that plays your Dream '65 from the three captures you made on
+  23 November (Break Up, Clean and Driven). They come built into the app and are copied to
+  Documents\GigRig\Amp models the first time it opens. Any other `.nam` file you put in that
+  folder shows up in the list too.
+- **Noise gate**: turns the hiss and hum down when you stop playing. Put it after the drives.
+  Its Threshold sets how quiet the guitar has to be before it closes; Depth sets how far it
+  turns down.
+- The **Marshall in a box** has less low end, and the **Blues Driver** saturates more evenly.
+  Your saved presets still load, but they will sound a little different, so check them.
+
+### Setting up the A/B against your real Dream (about 10 minutes)
+
+Keep the leads as they were for the amp captures: OD200 output into CQ socket 10, Aux 1 into
+the Dream's input, and the Dream's output straight into CQ socket 8.
+
+1. On the CQ, pull **channel 8's fader** down (the app plays the real Dream for you), and make
+   sure the **USB stereo channel** (where the loops come back) is up in the main mix.
+2. In the app, open the **Effects** tab. Tick **Effects on**.
+3. **Chain 1** ("Drive test") feeds the real Dream: tick **This chain on** and click **Dry**.
+4. Click **Chain 2**. Tick **This chain on**. Set:
+   - Input: **Socket 10**
+   - Out to: **Returns 5+6 (the USB stereo channel)**
+   - Looper hears it as: **Not recorded**
+   - The box beside the **Reference** button: **Socket 8** (the real Dream)
+5. In Chain 2, choose **Amp model (NAM)** on the right and press **Add**. Click its box: the
+   **Model** list shows the three Dream captures. Pick the one that matches how the Dream is
+   set right now (for example Break Up).
+6. Click **Effects** to hear the model, **Reference** to hear the real Dream. Press **Level match**
+   with Reference selected and play for 8 seconds, so both are equally loud.
+
+The model's **Input** knob at 0 dB drives it exactly as hard as during the capture, as long as
+channel 10's gain hasn't moved since then.
+
+To try drives in front of both: set up the drives in Chain 1 and save them as a preset, load
+the same preset in Chain 2, then add the amp model after them. Both paths then get the
+same drives, one through the real Dream and one through the model.
+
+### What to send Claude
+
+Press **Copy effects results** and paste it, with how each model compares with the real Dream
+(tone, feel, how it cleans up when you play softer, any fizz or noise) and how the gate behaves.
 
 ## The Device check tab
 
