@@ -416,6 +416,39 @@ void driveChecks (const std::string& id, const Check& check)
     else if (id == "klon")      driveCommonChecks (id, "gain", "output", check);
     else if (id == "marshall")  driveCommonChecks (id, "gain", "level", check);
     else if (id == "ts")        driveCommonChecks (id, "drive", "level", check);
+    else if (id == "fuzz")      driveCommonChecks (id, "fuzz", "volume", check);
+}
+
+void fuzzChecks (const Check& check)
+{
+    driveChecks ("fuzz", check);
+
+    constexpr double rate = 96000.0;
+    const size_t from = (size_t) (0.4 * rate);
+
+    // Full fuzz squares a note off: the loudest peak is close to the average level
+    // (a sine is 3 dB apart, a square 0 dB).
+    {
+        auto fx = makeEffect ("fuzz");
+        fx->setParam ("fuzz", 10.0f);
+        fx->prepare (rate, 64);
+        const auto y = run (*fx, sine (196.0, 0.8, 0.1, rate));
+        const auto crestDb = 20.0 * std::log10 (peak (y, from) / rms (y, from));
+        check (crestDb < 6.0, "fuzz: full fuzz squares the note off (peak " + num (crestDb) + " dB over average)");
+    }
+
+    // Low bias gates a quiet note tail far more than a healthy bias does.
+    {
+        const auto quiet = [&] (float bias)
+        {
+            auto fx = makeEffect ("fuzz");
+            fx->setParam ("bias", bias);
+            fx->prepare (rate, 64);
+            return rms (run (*fx, sine (196.0, 0.8, 0.002, rate)), from);
+        };
+        const auto healthy = quiet (5.0f), starved = quiet (0.0f);
+        check (starved < healthy * 0.5, "fuzz: low bias gates a quiet note (" + num (20.0 * std::log10 (starved / std::max (healthy, 1.0e-12)) + 0.0) + " dB against bias 5)");
+    }
 }
 
 void tubeScreamerChecks (const Check& check)

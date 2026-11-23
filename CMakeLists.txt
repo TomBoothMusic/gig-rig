@@ -65,6 +65,7 @@ target_sources(GigRig PRIVATE
     src/effects/bluesdriver/BluesDriver.cpp
     src/effects/klon/Klon.cpp
     src/effects/marshall/MarshallBox.cpp
+    src/effects/fuzz/Fuzz.cpp
     src/effects/boost/CleanBoost.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp

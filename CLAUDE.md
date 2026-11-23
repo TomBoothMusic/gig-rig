@@ -60,7 +60,7 @@ Real audio and MIDI are proven only on Tom's hardware.
 ## Adding an effect
 
 Tom wants to keep adding effects for years, mostly after his heavy-use
-subscription ends, without ever risking a gig. The first batch (four drives, a
+subscription ends, without ever risking a gig. The first batch (four drives, a fuzz, a
 clean boost, the Bass9 copy) was built on 23 Nov 2026; **`docs/effects.md` has
 the exact steps, file names and rules. Keep it true.** In short:
 

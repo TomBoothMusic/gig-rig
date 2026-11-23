@@ -847,10 +847,10 @@ AmpCapturePanel::AmpCapturePanel (AudioEngine& e)
 {
     style::body (stepsLabel,
         "Records your amp pedal (the Dream '65) so Claude can make a copy of it. One capture per amp setting you use.\n"
-        "1. Patch a spare CQ output into the Dream's input, and the Dream's output into a CQ input socket.\n"
+        "1. Patch a free CQ aux output into the Dream's input, and the Dream's output straight into a CQ input socket (socket 8 in place of the pedalboard's lead is fine).\n"
         "2. On the CQ, send the return chosen below to that output only (not to the main speakers), output level well down.\n"
         "3. Set the Dream exactly as you play it. Type a name for the setting, for example \"Dream A edge of breakup\".\n"
-        "4. Press 'Set from my playing' and play your guitar into the socket you test drives with, so the test sound is as loud as you are.\n"
+        "4. Press 'Set from my playing' and play into socket 10 with the lead that normally feeds the Dream, so the test sound is as loud as you are.\n"
         "5. Press Start capture. It plays a test sound for about two and a half minutes and records what comes back. Keep the room quiet; "
         "you will hear the test sound through the Dream if it reaches a speaker.\n"
         "6. When it finishes, send Claude the WAV file from Documents\\GigRig\\Amp captures (Open captures folder).");

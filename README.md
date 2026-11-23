@@ -168,25 +168,39 @@ If loops sound slightly early or late against your playing, move **Timing trim**
 
 Not copied yet: the RC-600's effects, rhythm, memory up/down, and tap tempo. A switch set to one of those shows as "Effect (later)" or similar and does nothing.
 
-## The effects, first batch: drives through your Dream '65
+## The effects, first batch: drives in your pedalboard
 
 New in this build: an **Effects** tab and an **Amp capture** tab. The Effects tab starts
 switched off, so the looper works exactly as before until you tick **Effects on**.
 
+The app's drives go into your pedalboard in place of the OD200, like any other pedal. The
+rest of your board, your Dream '65 and everything after it stay exactly as they are, so you
+compare one drive against the other and nothing else changes.
+
 ### Setting up (about 10 minutes)
 
-1. Plug the guitar's **dry** signal into **CQ socket 10** (straight from the guitar, or a split
-   taken before the OD200). On the CQ, turn channel 10 right down in the main mix, so you
-   hear only what the app sends back.
-2. Patch a spare **CQ output** into the **Dream '65's input**, and the Dream's output into the
-   CQ socket it uses now (socket 8). Turn that CQ output well down to start with.
-3. On the CQ, make sure channel **ST1** has Input Source = USB (as for the looper), and send
-   ST1 to that output only, not to the main speakers.
+1. Unplug the lead going **into** the OD200 (or coming out of it, if you want the app's drives
+   after it) and plug that lead into **CQ socket 10** instead. This is the signal the app's
+   drives work on.
+2. Run a lead from a free **CQ aux output** (for example Aux 1) back into the pedalboard, where
+   the lead you just moved came from (the OD200's input, or the next pedal after it).
+3. On the CQ:
+   - Channel 10: turn it right down in the main mix and in every aux, so you only hear what
+     comes back through the pedalboard. The USB send stays post preamp, as it is now. Set the
+     channel 10 gain so the meter is healthy but well clear of red when you dig in.
+   - Channel **ST1**: Input Source = USB (as for the looper). Processing off. Send it to that
+     aux only, not to the main mix. Start with the aux output turned **well down**: it is a
+     line-level output going into a pedal input.
 4. In the app, open the **Effects** tab. Tick **Effects on** and **This chain on**. Input should
    say Socket 10 and Out to should say Returns 3+4 (ST1).
-5. Play. You should hear the guitar through the Tube Screamer copy and your Dream '65.
-   If it is too quiet or too loud, adjust that CQ output's level until a clean note with the
-   drive switched off sounds like the guitar straight into the Dream.
+5. Switch the OD200 off and play. You should hear the Tube Screamer copy through the rest of
+   your board. With every drive in the app switched off you should hear your normal clean
+   sound: if it is louder or quieter than with the app unplugged, set the aux output level
+   until it matches.
+
+To compare with the OD200 by feel: switch the app's drives off and the OD200 on, and back.
+The app adds about 9 ms at this point in the chain (the mixer's USB round trip); say if you
+can feel it.
 
 ### Part A: try the drives (as long as you like)
 
@@ -194,8 +208,8 @@ switched off, so the looper works exactly as before until you tick **Effects on*
   Marshall in a box. Tick **On** under each to switch it in or out.
 - Click a box to see its knobs below. They work like the pedal's knobs while you play.
   Double-click a slider to put it back to its starting point.
-- **Move left** and **Move right** change the order. **Add** puts in another effect (the same
-  drive twice is fine, or the Clean boost). **Remove** takes one out.
+- **Move left** and **Move right** change the order. **Add** puts in another effect: the new
+  **Fuzz Face style** fuzz, the Clean boost, or the same drive twice. **Remove** takes one out.
 - To use a drive as a boost: gain or drive down, level up.
 - **Effects / Dry** flips between the chain and your plain guitar. **Level match** (play for
   8 seconds) makes the chain as loud as the dry sound, so the comparison is fair.
@@ -209,8 +223,12 @@ switched off, so the looper works exactly as before until you tick **Effects on*
 
 ### Part B: capture your Dream '65 settings (3 minutes each)
 
-Open the **Amp capture** tab and follow the six steps on screen, once for each Dream setting
-you use (edge of breakup, and the clean one with the vibrato channel). Send Claude the WAV
+For this part the app plays a test sound into the Dream instead of the guitar. Move the
+aux lead from step 2 into the **Dream's input**, and plug the **Dream's output** straight into
+**CQ socket 8** in place of the pedalboard's lead (so the RC-600 and anything after the Dream
+are left out). Then open the **Amp capture** tab and follow the six steps on screen, once for
+each Dream setting you use (edge of breakup, and the sparkly clean one with the vibrato
+channel). Put the leads back afterwards. Send Claude the WAV
 files and the .txt files beside them from Documents\GigRig\Amp captures. Claude turns each
 one into an amp model for the next build.
 

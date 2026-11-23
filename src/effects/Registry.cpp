@@ -3,6 +3,7 @@
 #include "bass9/Bass9.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
+#include "fuzz/Fuzz.h"
 #include "klon/Klon.h"
 #include "marshall/MarshallBox.h"
 #include "tubescreamer/TubeScreamer.h"
@@ -13,6 +14,7 @@ namespace gigrig::fx
 void tubeScreamerChecks (const Check&);
 void driveChecks (const std::string& id, const Check&);
 void bass9Checks (const Check&);
+void fuzzChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -26,6 +28,8 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Klon>(); }, [] (const Check& c) { driveChecks ("klon", c); } },
         { "marshall", "Marshall in a box",   "Drive", "Cranked Plexi / JCM800-style preamp with bass, middle, treble and presence.",
           [] { return std::make_unique<MarshallBox>(); }, [] (const Check& c) { driveChecks ("marshall", c); } },
+        { "fuzz",     "Fuzz Face style",     "Drive", "Round, woolly two-transistor fuzz, with a bias knob for the sputtery dying-battery sound.",
+          [] { return std::make_unique<Fuzz>(); }, fuzzChecks },
         { "boost",    "Clean boost",         "Drive", "Louder with a little colour, to push a drive or the amp.",
           [] { return std::make_unique<CleanBoost>(); }, {} },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
