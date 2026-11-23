@@ -2,6 +2,7 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include "EffectsRack.h"
 #include "GlitchWatch.h"
 #include "LatencyProbe.h"
 #include "Looper.h"
@@ -191,6 +192,9 @@ public:
         measurement or a glitch check. Its loops come back on the returns. */
     Looper& looper() noexcept                       { return loopCore; }
 
+    /** The effects (stage 6 onwards). They run before the looper, so loops record them. */
+    EffectsRack& effects() noexcept                 { return fxRack; }
+
     /** Where the looper's timing correction comes from. */
     struct LoopTiming
     {
@@ -245,6 +249,7 @@ private:
     std::atomic<int> rtState { 0 }, rtError { 0 }, rtPriority { 0 };
     void makeAudioThreadRealtime() noexcept;
     LatencyProbe probe;
+    EffectsRack fxRack;
     GlitchWatch glitch;
     std::atomic<int> pingMask { 0b00110000 };   // returns 5 and 6: the CQ's USB stereo channel
     std::atomic<int> playMode { (int) PlayThrough::off };

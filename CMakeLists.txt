@@ -42,6 +42,9 @@ target_sources(GigRig PRIVATE
     src/AudioPanel.cpp
     src/DeviceCheckPanel.cpp
     src/DeviceReport.cpp
+    src/EffectsPanel.cpp
+    src/EffectsRack.cpp
+    src/EffectsSelfTest.cpp
     src/GlitchWatch.cpp
     src/LatencyProbe.cpp
     src/Looper.cpp
@@ -52,7 +55,21 @@ target_sources(GigRig PRIVATE
     src/PedalPanel.cpp
     src/SelfTest.cpp
     src/Style.cpp
-    src/TestSongs.cpp)
+    src/TestSongs.cpp
+    # The effects: one folder each (see docs/effects.md). A new effect adds its .cpp files here.
+    src/effects/Effect.cpp
+    src/effects/Chain.cpp
+    src/effects/Registry.cpp
+    src/effects/EffectChecks.cpp
+    src/effects/tubescreamer/TubeScreamer.cpp
+    src/effects/bluesdriver/BluesDriver.cpp
+    src/effects/klon/Klon.cpp
+    src/effects/marshall/MarshallBox.cpp
+    src/effects/fuzz/Fuzz.cpp
+    src/effects/boost/CleanBoost.cpp
+    src/effects/bass9/BassMachine.cpp
+    src/effects/bass9/Bass9.cpp
+    src/effects/bass9/Bass9Checks.cpp)
 
 target_compile_definitions(GigRig PRIVATE
     JUCE_WEB_BROWSER=0
@@ -77,6 +94,7 @@ endif()
 target_link_libraries(GigRig
     PRIVATE
         juce::juce_audio_devices
+        juce::juce_audio_formats
         juce::juce_gui_basics
     PUBLIC
         juce::juce_recommended_config_flags

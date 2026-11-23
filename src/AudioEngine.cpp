@@ -337,6 +337,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     probe.prepare (rate, ins);
     glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
     loopCore.prepare (rate, simulated ? loopSecondsSimulated : loopSecondsReal);
+    fxRack.prepare (rate, scratchSize, ins);
     updateLoopTiming();
     tonePhase = 0.0;
     hotSamples = 0;
@@ -765,8 +766,16 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         }
     }
 
+    // ---- the effects: before the looper, so loops record them ------------------
+    const bool quiet = pinging || checking || measuring.load();
+
+    if (quiet)
+        fxRack.bypassBlock (inputs, numIns, numSamples);
+    else
+        fxRack.process (inputs, numIns, numSamples);
+
     // ---- the looper: its loops come back on the returns ---------------------------
-    if (! pinging && ! checking && ! measuring.load())
+    if (! quiet)
     {
         float* loopOutputs[numLoopOutputs];
 
@@ -780,7 +789,8 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
             loopOutputs[5] = output (1);
         }
 
-        loopCore.process (inputs, numIns, loopOutputs, numSamples);
+        loopCore.process (fxRack.looperInputs (inputs, numIns), numIns, loopOutputs, numSamples);
+        fxRack.addOutputs (output, numSamples);
     }
 
     // ---- meters, clipping and the feedback guard ----------------------------

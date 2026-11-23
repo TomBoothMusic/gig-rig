@@ -5,6 +5,7 @@
 #include "AudioEngine.h"
 #include "AudioPanel.h"
 #include "DeviceCheckPanel.h"
+#include "EffectsPanel.h"
 #include "LooperPanel.h"
 #include "PedalPanel.h"
 
@@ -35,6 +36,8 @@ private:
     DeviceCheckPanel devicePanel;
     PedalPanel pedalPanel { pedal };
     LooperPanel looperPanel { engine, pedal };
+    EffectsPanel effectsPanel { engine };
+    AmpCapturePanel ampPanel { engine };
     juce::TooltipWindow tooltips { this };
 
     DeviceChoice reopenChoice;      // what was running before a rescan, to start it again after
