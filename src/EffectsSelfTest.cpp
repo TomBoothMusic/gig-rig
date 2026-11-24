@@ -213,6 +213,27 @@ void runEffectsSelfTest (const Check& check)
                    "effects: a held switch puts the whammy's pedal at the toe and letting go brings it back to the heel");
         }
 
+        // A held switch works a delay throw: Catching on the press, Ready on the release.
+        {
+            const auto before = rack.chain (0).model();
+            fx::ChainModel tm;
+            tm.slots.push_back ({ "boost", true, {}, {} });
+            tm.slots.push_back ({ "digitaldelay", true, {}, {} });
+            rack.chain (0).setModel (tm);
+            const float off = rack.chain (0).model().slots[1].param ("throw", 0.0f);
+            const bool held = rack.holdThrow (0, true);
+            const float catching = rack.chain (0).model().slots[1].param ("throw", -1.0f);
+            rack.holdThrow (0, false);
+            const float ready = rack.chain (0).model().slots[1].param ("throw", -1.0f);
+            rack.setPedalAssign (0, { 10, 0, 5 });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false);
+            const bool says = rack.pedalText().contains ("delay throw while held");
+            rack.setPedalAssign (0, { -1, 0, 0 });
+            rack.chain (0).setModel (before);
+            check (std::abs (off) < 0.1f && held && std::abs (catching - 2.0f) < 0.1f && std::abs (ready - 1.0f) < 0.1f && taken && says && ! rack.holdThrow (0, true),
+                   "effects: a held switch makes the chain's delay catch what is sung (a throw), and letting go leaves it ringing out and clean");
+        }
+
         // The feedback guard.
         rack.chain (0).setModel (boostOnly (24.0f));
         r = rack.routing (0);

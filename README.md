@@ -538,6 +538,15 @@ take with both chains on, play it, and flip **Effects / Reference**.
 3. Watch the status line: it says which note it hears and which it sings. Try Cocaine in F and
    Lucky in A against what the RC-600's Harmonist does.
 4. Tick **Flanger** on for Come As You Are. Try the **Tape delay** and **Digital delay**.
+5. **The delay throw** (the "after love, after love, after love" in Believe). Under
+   **RC-600 switches for the effects**, choose CTL3 or CTL4 and **Chain 3: delay throw while
+   held** (use the number of your Vocal chain). Make sure **Digital delay** is ticked **On** in
+   the chain. Now sing: the voice is clean. Hold the switch while you sing "after love" and let
+   go: the delay catches only those words, and they repeat and die away on their own while
+   everything you sing next stays clean. **Repeats** sets how many times they come back,
+   **Mix** how loud, and **Note value** the rhythm (tap the tempo first, or the looper sets it).
+   The delay's **Throw** box shows what it is doing: *Ready* while it waits, *Catching* while
+   the switch is held. Set it back to *Off* to have an ordinary always-on delay again.
 
 This is a first version of the harmony, tested here only on a made-up voice, so your ears are
 the real test. Things to listen for and tell Claude: wrong notes or warbling (and on which

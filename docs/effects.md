@@ -178,6 +178,19 @@ says how its effect works; the points a future session needs:
   half-band filters are not linear-phase, so "the dry sound, late" is only true of level, not
   sample for sample.
 
+## The delay throw
+
+Tom's use (25 Nov 2026): a tempo-synced delay on a held switch that catches one phrase
+("...after love, after love" in Believe) while the rest of the song stays clean.
+`digitaldelay` has a choice setting `throw`: 0 Off (always on), 1 Ready (nothing goes in),
+2 Catching. `EffectsRack::holdThrow` (pedal action 5, "delay throw while held") sets the
+first effect in the chain that has a `throw` setting to 2 on the press and 1 on the release.
+The way in opens in 5 ms and shuts in 15, and the output is never touched, so the repeats
+ring out. Give another delay the same three-way `throw` setting and the switch works it too.
+DECIDED by Tom (25 Nov 2026): the throw stays in the effects engine, in the vocal chain before
+the looper, so it catches the live voice only and never the backing-vocal loops. Every other
+vocal delay and reverb belongs in the mixer, after the looper.
+
 ## The test take
 
 `EffectsRack::startTake / stopTake / playTake` (buttons on the Effects tab, or one pedal switch

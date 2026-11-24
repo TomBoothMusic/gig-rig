@@ -654,6 +654,42 @@ void delayChecks (const std::string& id, const Check& check)
     loud.resize ((size_t) (8.0 * rate), 0.0f);
     const auto r = run (*fx, loud);
     check (allFinite (r) && peak (r) < 4.0f, id + ": Repeats at full with a loud note stays under control (peak " + num (gainToDb (peak (r))) + " dB)");
+
+    // The throw: clean while it waits, catches while the switch is held, and what it caught
+    // rings out after the switch is let go while nothing new goes in.
+    if (fx->paramIndex ("throw") >= 0)
+    {
+        fx->setParam ("feedback", 50.0f);
+        fx->setParam ("time", 250.0f);
+        fx->setParam ("throw", 1.0f);
+        fx->reset();
+        const auto word = pluck (rate, 1.0);
+        const auto clean = run (*fx, word);
+        float changed = 0.0f;
+        for (size_t i = 0; i < word.size(); ++i) changed = std::max (changed, std::abs (clean[i] - word[i]));
+        check (changed < 1.0e-6f, id + ": throw: while it waits for the switch the sound is clean, with no echo at all");
+
+        fx->reset();
+        fx->setParam ("throw", 2.0f);                         // the switch goes down on the first word
+        auto y = run (*fx, pluck (rate, 0.06));
+        fx->setParam ("throw", 1.0f);                         // and is let go
+        const auto quiet = run (*fx, std::vector<float> ((size_t) (0.56 * rate), 0.0f));
+        const auto later = run (*fx, pluck (rate, 0.6));      // a second word at 0.62 s, switch up
+        y.insert (y.end(), quiet.begin(), quiet.end());
+        y.insert (y.end(), later.begin(), later.end());
+
+        const auto caught = loudestBetween (y, 0.2, 0.3, rate);
+        const auto rings = loudestBetween (y, 0.7, 0.8, rate);
+        const auto stray = loudestBetween (y, 0.84, 0.96, rate);     // the second word's echo would land at 0.87 s
+        check (std::abs (caught.first - 0.250) < 0.004 && caught.second > 0.05f,
+               id + ": throw: a word sung while the switch is held comes back as an echo (" + num (caught.first * 1000.0, 1) + " ms later)");
+        check (std::abs (rings.first - 0.750) < 0.006 && rings.second > 0.01f,
+               id + ": throw: after the switch is let go the repeats ring out on their own (third repeat " + num (gainToDb (rings.second)) + " dB)");
+        check (stray.second < 0.003f,
+               id + ": throw: a word sung after the switch is let go is not caught (" + num (gainToDb (std::max (stray.second, 1.0e-9f))) + " dB where its echo would be)");
+
+        fx->setParam ("throw", 0.0f);
+    }
 }
 
 void springChecks (const Check& check)
