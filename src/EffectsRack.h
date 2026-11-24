@@ -70,7 +70,8 @@ public:
     void toggleListen (int c);
 
     // ---- pedal switches (an RC-600 switch taken from the looper) ----
-    /** action: 0 = A/B (effects against dry or the reference), 1 = the whole chain on/off, 10 + k = slot k on/off. */
+    /** action: 0 = A/B (effects against dry or the reference), 1 = the whole chain on/off,
+        2 = tap tempo (for synced delays, any chain), 10 + k = slot k on/off. */
     struct PedalAssign
     {
         int sw = -1;        // pedal switch (0..8 = switches 1 to 9, 9 = CTL3, 10 = CTL4), -1 = none
@@ -180,10 +181,35 @@ public:
                     juce::FloatVectorOperations::add (out, returnMix.data() + (size_t) r * (size_t) blockCapacity, numSamples);
     }
 
+    /** The song's tempo for effects that follow it, such as a synced delay (0 = not known yet).
+        Audio thread, before process(). */
+    void setTempo (double looperBpm) noexcept
+    {
+        const double bpm = looperBpm > 0.0 ? looperBpm : tappedBpm.load (std::memory_order_relaxed);
+        tempoFromLoop.store (looperBpm > 0.0, std::memory_order_relaxed);
+        tempoNow.store (bpm, std::memory_order_relaxed);
+        for (auto& c : chains)
+            c.chain.setTempo (bpm);
+    }
+
+    /** Tap tempo, for synced delays when no loop has set the tempo. Any thread except audio:
+        a press at 'ms' (Time::getMillisecondCounterHiRes). Two taps set it; up to four are
+        averaged; a gap over 2 seconds starts again. */
+    void tap (double ms);
+    /** The tempo the effects use now, and where it came from (for the screen and report). */
+    double effectsTempo() const noexcept                { return tempoNow.load(); }
+    juce::String tempoText() const;
+
     /** Silences the rack (measuring, glitch check): nothing out, and the looper hears the raw inputs. */
     void bypassBlock (const float* const* inputs, int numIns, int numSamples) noexcept;
 
 private:
+    std::atomic<double> tempoNow { 0.0 }, tappedBpm { 0.0 };
+    std::atomic<bool> tempoFromLoop { false };
+    juce::SpinLock tapLock;
+    double lastTapMs = -1.0e9;
+    std::vector<double> tapGaps;
+
     struct ChainSlot
     {
         fx::Chain chain;

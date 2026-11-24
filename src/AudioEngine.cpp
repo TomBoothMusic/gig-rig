@@ -769,6 +769,8 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
     // ---- the effects: before the looper, so loops record them ------------------
     const bool quiet = pinging || checking || measuring.load();
 
+    fxRack.setTempo (loopCore.tempoNow());
+
     if (quiet)
         fxRack.bypassBlock (inputs, numIns, numSamples);
     else

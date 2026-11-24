@@ -315,6 +315,19 @@ New in this build:
 - A new chain now starts with its **Reference** set to **Socket 8**, where the board and the
   Dream come back.
 
+### Stacking presets
+
+**Load** replaces everything in the chain with the preset. **Add to chain** keeps what is
+already there and adds the preset's effects to it, in front of the amp model if there is one.
+So you can keep "Comp & GE7" as its own preset and stack a drive preset on top:
+
+1. Choose **Comp & GE7 for Electric** and press **Load**.
+2. Add the **Amp model** if you want it.
+3. Choose a drive preset (for example **Blues Drive + Klon Boost**) and press **Add to chain**.
+   The drives land after the compressor and EQ and in front of the amp.
+
+A chain holds at most 8 effects.
+
 ### Trying them (about 15 minutes)
 
 Use the same leads and set-up as the second batch (the A/B with the amp model).
@@ -334,6 +347,53 @@ Use the same leads and set-up as the second batch (the A/B with the amp model).
 Press **Copy effects results** and paste it, with how the compressor feels against your Ego
 76 or the Purified Audio 1176 (attack, how it lets go, any pumping or grit), and whether the
 EQ does what you need. Save any settings you like as a preset and attach the file.
+
+## The effects, fourth batch: delays, reverb, tremolo and modulation
+
+New in this build, each its own effect that can go anywhere in any chain:
+
+| Effect | What it is | Its knobs |
+|---|---|---|
+| **Analog delay** | Short, warm slapback, each repeat darker and a little dirty (DM-2 / Carbon Copy). Not synced. Your acoustic delay. | Time, Repeats, Mix, Tone, Mod |
+| **Digital delay** | Clean echo with a touch of chorus on the repeats. Follows the tempo in note values, or its own Time. | Follow tempo, Note value, Time, Repeats, Mix, Tone, Mod depth, Mod speed |
+| **Tape delay** | Tape echo (Space Echo / Echoplex): the tape wobbles, repeats get darker and saturate. Made for vocals, fine on guitar. | Follow tempo, Note value, Time, Repeats, Mix, Wow, Flutter, Age |
+| **Spring reverb** | Two-spring tank like a Deluxe Reverb's, with the drip. Put it after the amp. | Reverb, Decay, Tone, Dwell |
+| **Tremolo** | The amp's pulsing volume (the Dream's "vibrato"). Put it after the amp. | Speed, Intensity, Shape (smooth to choppy) |
+| **Vibrato** | True pitch wobble (VB-2 style). | Speed, Depth |
+| **Chorus** | Analog-style chorus (CE-2). | Speed, Depth, Mix |
+
+**Tempo for the synced delays.** With **Follow tempo** ticked, a delay plays the chosen note
+value (1/4, dotted 1/8 ...) at the song's tempo:
+- Once you record a loop, the loop's tempo is used.
+- With no loop, tap the beat on **Tap tempo** (next to Capture), at least twice. You can also
+  put tap tempo on a switch: under **RC-600 switches for the effects**, pick CTL3 or CTL4 and
+  **Tap tempo (for synced delays)**.
+- With no loop and no taps, or with Follow tempo unticked, the delay uses its **Time** knob.
+
+The line beside the Tap button, and the effects report, say which tempo is in use and where it
+came from.
+
+When a delay or the reverb is switched off, its tail stops at once for now. Letting the tail
+ring out after switching off comes later.
+
+### Trying them (as long as you like)
+
+Same leads and set-up as before (Chain 2 into the amp model, listening on **Effects**).
+
+1. Load **Comp & GE7 for Electric**, add the **Amp model**, then **Add to chain** a drive preset.
+2. After the amp, add **Spring reverb** and **Tremolo** (pick them and press **Add**; new
+   effects go at the end). Set your go-to amount of each, then **Save as** a preset, for example
+   "Electric standard".
+3. Try the delays one at a time before the amp: **Analog delay** for slapback, **Digital delay**
+   with Follow tempo ticked while you tap a tempo, and the **Tape delay**.
+4. For the vocal tape delay, a chain on the vocal socket (socket 6) works the same way.
+
+A chain holds 8 effects at most.
+
+### What to send Claude
+
+Press **Copy effects results** and paste it, with what you'd change about each one (the
+spring's drip, how the tape wobbles, the analog delay's darkness). Attach any presets you save.
 
 ## The Device check tab
 

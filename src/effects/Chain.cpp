@@ -64,6 +64,27 @@ std::string ChainModel::toText() const
     return s.str();
 }
 
+int ChainModel::addFrom (const ChainModel& other, int maxSlots)
+{
+    auto at = slots.size();
+    for (size_t k = 0; k < slots.size(); ++k)
+        if (slots[k].type == "amp")
+        {
+            at = k;
+            break;
+        }
+
+    int added = 0;
+    for (const auto& s : other.slots)
+    {
+        if ((int) slots.size() >= maxSlots)
+            break;
+        slots.insert (slots.begin() + (std::ptrdiff_t) (at + (size_t) added), s);
+        ++added;
+    }
+    return added;
+}
+
 ChainModel ChainModel::fromText (const std::string& text, std::vector<std::string>* skipped)
 {
     ChainModel m;
@@ -281,6 +302,7 @@ void Chain::runBuilt (Built& b, float* buffer, int n) noexcept
     for (auto& sp : b.slots)
     {
         auto& s = *sp;
+        s.fx->setTempo (tempo);
         const float target = s.on.load (std::memory_order_relaxed) ? 1.0f : 0.0f;
 
         // An effect that is off keeps running unheard, so switching it on never starts it from

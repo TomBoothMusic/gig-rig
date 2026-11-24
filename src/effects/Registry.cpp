@@ -1,6 +1,13 @@
 #include "Registry.h"
 
 #include "amp/NamAmp.h"
+#include "analogdelay/AnalogDelay.h"
+#include "chorus/Chorus.h"
+#include "digitaldelay/DigitalDelay.h"
+#include "spring/SpringReverb.h"
+#include "tapedelay/TapeDelay.h"
+#include "tremolo/Tremolo.h"
+#include "vibrato/Vibrato.h"
 #include "bass9/Bass9.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
@@ -23,6 +30,10 @@ void ampChecks (const Check&);
 void gateChecks (const Check&);
 void compChecks (const Check&);
 void eqChecks (const Check&);
+void delayChecks (const std::string& id, const Check&);
+void tremoloChecks (const Check&);
+void springChecks (const Check&);
+void modulationChecks (const std::string& id, const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -48,6 +59,20 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<NoiseGate>(); }, gateChecks },
         { "amp",      "Amp model (NAM)",     "Amp",   "An amp and its cab from a capture: Tom's Dream '65 settings, or any .nam model in Documents\\GigRig\\Amp models.",
           [] { return std::make_unique<NamAmp>(); }, ampChecks },
+        { "analogdelay",  "Analog delay",          "Time", "Short, warm bucket-brigade echo for slapback: each repeat darker and a little dirty. Not synced (DM-2 / Carbon Copy).",
+          [] { return std::make_unique<AnalogDelay>(); }, [] (const Check& c) { delayChecks ("analogdelay", c); } },
+        { "digitaldelay", "Digital delay",         "Time", "Clean echo with a touch of chorus on the repeats; follows the song's tempo in note values, or its own time.",
+          [] { return std::make_unique<DigitalDelay>(); }, [] (const Check& c) { delayChecks ("digitaldelay", c); } },
+        { "tapedelay",    "Tape delay",            "Time", "Tape echo (Space Echo / Echoplex): wow, flutter and darkening, saturating repeats. Lovely on vocals.",
+          [] { return std::make_unique<TapeDelay>(); }, [] (const Check& c) { delayChecks ("tapedelay", c); } },
+        { "spring",       "Spring reverb",         "Time", "Two-spring tank like a Fender Deluxe Reverb's, with the drip. Put it after the amp.",
+          [] { return std::make_unique<SpringReverb>(); }, springChecks },
+        { "tremolo",      "Tremolo",               "Modulation", "The amp's pulsing volume (the Dream calls it vibrato): speed, intensity and a smooth-to-choppy shape. After the amp.",
+          [] { return std::make_unique<Tremolo>(); }, tremoloChecks },
+        { "vibrato",      "Vibrato",               "Modulation", "True pitch vibrato (VB-2 style): only the wobbled sound comes out.",
+          [] { return std::make_unique<Vibrato>(); }, [] (const Check& c) { modulationChecks ("vibrato", c); } },
+        { "chorus",       "Chorus",                "Modulation", "Analog-style chorus (CE-2): two swept, slightly dark copies with the dry guitar.",
+          [] { return std::make_unique<Chorus>(); }, [] (const Check& c) { modulationChecks ("chorus", c); } },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
     };

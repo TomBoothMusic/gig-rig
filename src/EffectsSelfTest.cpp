@@ -104,6 +104,22 @@ void runEffectsSelfTest (const Check& check)
 
         rack.setEnabled (true);
         check (rack.routing (1).reference == 7, "effects: a new chain compares with socket 8 (where the board and the Dream come back)");
+
+        // Tap tempo: four taps half a second apart give 120 bpm; a loop's tempo wins over taps.
+        for (double ms : { 10000.0, 10500.0, 11000.0, 11500.0 })
+            rack.tap (ms);
+        rack.setTempo (0.0);
+        check (std::abs (rack.effectsTempo() - 120.0) < 0.01 && rack.tempoText().contains ("tapped"),
+               "effects: tapping every half second sets 120 bpm for synced delays (" + rack.tempoText() + ")");
+        rack.tap (11520.0);     // a switch bounce is ignored
+        rack.setTempo (0.0);
+        check (std::abs (rack.effectsTempo() - 120.0) < 0.01, "effects: a bounce 20 ms after a tap is ignored");
+        rack.setTempo (96.0);
+        check (std::abs (rack.effectsTempo() - 96.0) < 0.01 && rack.tempoText().contains ("looper"),
+               "effects: once a loop sets the tempo, the delays follow the loop (" + rack.tempoText() + ")");
+        rack.tap (20000.0); rack.tap (20750.0);      // after a long gap: two fresh taps, 80 bpm
+        rack.setTempo (0.0);
+        check (std::abs (rack.effectsTempo() - 80.0) < 0.01, "effects: after a pause, two fresh taps start a new tempo (" + rack.tempoText() + ")");
         rack.chain (0).setModel (boostOnly (6.0f));
         auto r = rack.routing (0);
         r.on = true;

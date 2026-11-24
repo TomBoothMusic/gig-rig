@@ -39,6 +39,7 @@ private:
     void refreshPresets();
     void savePreset();
     void loadPreset (const juce::File&);
+    void addPreset (const juce::File&);
     void levelMatch();
     void fillPedalBoxes();
     void pushPedal (int i);
@@ -53,7 +54,8 @@ private:
     juce::Label inLabel, outLabel, looperLabel, listenLabel, levelLabel, slotsLabel, presetLabel, pedalLabel, statusLabel, descriptionLabel;
     juce::ComboBox inBox, outBox, looperBox, refBox;
     juce::TextButton listenEffects { "Effects" }, listenDry { "Dry" }, listenRef { "Reference" };
-    juce::TextButton matchButton { "Level match" }, captureButton { "Capture" }, copyButton { "Copy effects results" };
+    juce::TextButton matchButton { "Level match" }, captureButton { "Capture" }, copyButton { "Copy effects results" }, tapButton { "Tap tempo" };
+    juce::Label tempoLabel;
     juce::Slider levelSlider;
 
     // The row of slots.
@@ -81,7 +83,7 @@ private:
     // Presets.
     juce::ComboBox presetBox;
     juce::TextEditor presetName;
-    juce::TextButton loadButton { "Load" }, saveButton { "Save as" }, folderButton { "Open folder" };
+    juce::TextButton loadButton { "Load" }, addPresetButton { "Add to chain" }, saveButton { "Save as" }, folderButton { "Open folder" };
     juce::Array<juce::File> presetFiles;
 
     // Pedal switches.
