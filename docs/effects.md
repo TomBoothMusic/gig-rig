@@ -1,6 +1,7 @@
 # The effects: how they are built, and how to add one
 
-Written 23 November 2026 with the first batch (drives, the Bass9 copy, the amp capture).
+Written 23 November 2026 with the first batch (drives, the Bass9 copy, the amp capture);
+the compressor and graphic EQ came on 24 November 2026.
 For a future Claude session: read this, then `CLAUDE.md` "Adding an effect", then the code.
 
 ## Where things are
@@ -84,6 +85,19 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
 6. Open a PR. CI must be green. Tom tries it on the laptop or on the rig with
    `linux/install.sh --version <build>` between gigs; `linux/rollback.sh` goes back.
 7. Keep the design doc's effects list in step.
+
+## Meters, and moving filters without clicks
+
+- An effect with a meter (the gate's and compressor's gain reduction) returns true from
+  `hasMeter()` and calls `setMeter()` from the audio thread; the Effects tab shows it as
+  "Turning down by:". Gain reduction is negative dB.
+- Changing a resonant filter's coefficients quickly can click (the graphic EQ's first version
+  failed the "jumping a slider" check at 200 Hz). The EQ (`src/effects/eq/`) avoids it by
+  keeping each band a fixed band-pass filter and only changing how much of it is added or
+  taken away, as the GE-7's own circuit does. Use the same idea for any EQ-like effect.
+- The compressor (`src/effects/comp/`) has no look-ahead, so its latency is 0. Ids: `comp`
+  (`input`, `output`, `attack`, `release`, `ratio`, `mix`) and `eq` (`b100` ... `b6k4`, `level`).
+
 
 ## Presets and the rack's memory
 

@@ -103,6 +103,7 @@ void runEffectsSelfTest (const Check& check)
         check (rack.looperInputs (b.inPtrs.data(), 16)[9] == b.inPtrs[9], "effects: switched off, the looper hears the socket itself");
 
         rack.setEnabled (true);
+        check (rack.routing (1).reference == 7, "effects: a new chain compares with socket 8 (where the board and the Dream come back)");
         rack.chain (0).setModel (boostOnly (6.0f));
         auto r = rack.routing (0);
         r.on = true;

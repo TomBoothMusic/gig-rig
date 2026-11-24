@@ -461,6 +461,106 @@ void gateChecks (const Check& check)
     }
 }
 
+void compChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    const size_t from = (size_t) (0.5 * rate);
+
+    const auto levelDb = [&] (Effect& fx, double inDb)
+    {
+        fx.reset();
+        const auto x = sine (196.0, 1.0, std::pow (10.0, inDb / 20.0), rate);
+        return 20.0 * std::log10 (std::max (rms (run (fx, x), from), 1.0e-12)) - 20.0 * std::log10 (rms (x, from));
+    };
+
+    auto fx = makeEffect ("comp");
+    fx->prepare (rate, 64);
+
+    // Well under the threshold: passes at the same level.
+    const double quiet = levelDb (*fx, -50.0);
+    check (std::abs (quiet) < 0.5 && fx->meterValue() > -0.5f, "comp: a quiet note passes at its own level (" + num (quiet, 2) + " dB)");
+
+    // Ratio 4: a note 10 dB louder comes out only about 2.5 dB louder.
+    const double a = levelDb (*fx, -10.0), b = levelDb (*fx, 0.0);
+    const double growth = 10.0 + b - a;                 // how much louder the output got
+    check (growth > 1.5 && growth < 4.5 && fx->meterValue() < -10.0f,
+           "comp: at ratio 4, 10 dB more in gives about 2.5 dB more out (" + num (growth, 1) + " dB, meter " + num (fx->meterValue()) + " dB)");
+
+    // A higher ratio squeezes harder.
+    fx->setParam ("ratio", 3.0f);
+    const double a20 = levelDb (*fx, -10.0), b20 = levelDb (*fx, 0.0);
+    const double growth20 = 10.0 + b20 - a20;
+    check (growth20 < growth - 1.0, "comp: ratio 20 squeezes harder than ratio 4 (" + num (growth20, 1) + " dB more out for 10 dB more in)");
+    fx->setParam ("ratio", 0.0f);
+
+    // Mix at 0% is the dry guitar.
+    fx->setParam ("mix", 0.0f);
+    const double dry = levelDb (*fx, 0.0);
+    check (std::abs (dry) < 0.2, "comp: Mix at 0% gives the dry guitar (" + num (dry, 2) + " dB)");
+    fx->setParam ("mix", 100.0f);
+
+    // Attack 7 grabs a sudden loud note much sooner than attack 1.
+    const auto grabbedAfter = [&] (float attack)
+    {
+        fx->setParam ("attack", attack);
+        fx->reset();
+        run (*fx, std::vector<float> ((size_t) (0.2 * rate), 0.0f));
+        auto x = sine (1000.0, 0.0005, 0.9, rate);       // half a millisecond of a loud note
+        run (*fx, x);
+        return fx->meterValue();
+    };
+    const float fast = grabbedAfter (7.0f), slow = grabbedAfter (1.0f);
+    check (fast < slow - 3.0f, "comp: attack 7 grabs a loud note sooner than attack 1 (after 0.5 ms: " + num (fast) + " dB against " + num (slow) + " dB)");
+    fx->setParam ("attack", 3.0f);
+
+    // Release 7 lets go much sooner than release 1.
+    const auto heldAfter = [&] (float release)
+    {
+        fx->setParam ("release", release);
+        fx->reset();
+        run (*fx, sine (196.0, 0.5, 0.9, rate));
+        run (*fx, std::vector<float> ((size_t) (0.15 * rate), 0.0f));
+        return fx->meterValue();
+    };
+    const float quick = heldAfter (7.0f), long_ = heldAfter (1.0f);
+    check (quick > long_ + 3.0f, "comp: release 7 lets go sooner than release 1 (150 ms after: " + num (quick) + " dB against " + num (long_) + " dB)");
+}
+
+void eqChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    const size_t from = (size_t) (0.3 * rate);
+
+    const auto gainAt = [&] (Effect& fx, double hz)
+    {
+        fx.reset();
+        const auto x = sine (hz, 0.6, 0.1, rate);
+        return 20.0 * std::log10 (rms (run (fx, x), from) / rms (x, from));
+    };
+
+    auto fx = makeEffect ("eq");
+    fx->prepare (rate, 64);
+
+    double worst = 0.0;
+    for (double hz : { 60.0, 150.0, 500.0, 1000.0, 3000.0, 8000.0 })
+        worst = std::max (worst, std::abs (gainAt (*fx, hz)));
+    check (worst < 0.05, "eq: all sliders at 0 dB leaves the guitar unchanged (within " + num (worst, 3) + " dB)");
+
+    fx->setParam ("b100", -15.0f);
+    const double low = gainAt (*fx, 100.0), mid = gainAt (*fx, 1000.0);
+    check (low < -13.0 && std::abs (mid) < 0.5, "eq: 100 Hz down 15 dB cuts the lows (" + num (low) + " dB at 100 Hz, " + num (mid, 2) + " dB at 1 kHz)");
+    fx->setParam ("b100", 0.0f);
+
+    fx->setParam ("b6k4", 15.0f);
+    const double top = gainAt (*fx, 6400.0);
+    check (top > 13.0 && top < 16.0, "eq: 6.4 kHz up 15 dB lifts the top (" + num (top) + " dB)");
+    fx->setParam ("b6k4", 0.0f);
+
+    fx->setParam ("level", -6.0f);
+    const double lv = gainAt (*fx, 1000.0);
+    check (std::abs (lv + 6.0) < 0.2, "eq: Level -6 dB turns it down 6 dB (" + num (lv, 2) + " dB)");
+}
+
 void ampChecks (const Check& check)
 {
     constexpr double rate = 96000.0;

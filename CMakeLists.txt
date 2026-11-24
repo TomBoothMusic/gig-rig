@@ -117,6 +117,8 @@ target_sources(GigRig PRIVATE
     src/effects/fuzz/Fuzz.cpp
     src/effects/boost/CleanBoost.cpp
     src/effects/gate/NoiseGate.cpp
+    src/effects/comp/Comp1176.cpp
+    src/effects/eq/GraphicEq.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp
