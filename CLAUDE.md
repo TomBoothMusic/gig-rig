@@ -66,7 +66,7 @@ Tom's Dream '65 captures, a noise gate) the same night, the third (1176-style co
 GE-7-style graphic EQ) and the fourth (delays, spring reverb, tremolo, vibrato, chorus, tap
 tempo) on 24 Nov, a Whammy-style pitch pedal on 25 Nov, and the fifth (plate and room reverbs,
 flanger, Uni-Vibe, channel EQ, acoustic body, response files, a first vocal harmony, the test
-take) on 25 Nov; **`docs/effects.md` has
+take) and a Cry Baby style wah on 25 Nov; **`docs/effects.md` has
 the exact steps, file names and rules. Keep it true.** In short:
 
 1. One effect = one folder `src/effects/<id>/` (plain C++, no JUCE) following

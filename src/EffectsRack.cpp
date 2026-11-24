@@ -192,6 +192,13 @@ bool EffectsRack::takePedal (int sw, bool isDown)
                 if (onPedalAction != nullptr)
                     onPedalAction();
             });
+        else if (a.action == 6)
+            juce::MessageManager::callAsync ([this, a, isDown]
+            {
+                sweepWah (a.chain, isDown);
+                if (onPedalAction != nullptr)
+                    onPedalAction();
+            });
         else if (a.action == 5)
             juce::MessageManager::callAsync ([this, a, isDown]
             {
@@ -208,13 +215,13 @@ bool EffectsRack::takePedal (int sw, bool isDown)
     return false;
 }
 
-bool EffectsRack::bendWhammy (int c, bool toeDown)
+bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
 {
     auto& ch = chain (juce::jlimit (0, numChains - 1, c));
 
     for (int k = 0; k < (int) ch.model().slots.size(); ++k)
     {
-        if (ch.model().slots[(size_t) k].type != "whammy")
+        if (ch.model().slots[(size_t) k].type != type)
             continue;
 
         if (auto* fx = ch.effect (k))
@@ -227,6 +234,9 @@ bool EffectsRack::bendWhammy (int c, bool toeDown)
 
     return false;
 }
+
+bool EffectsRack::bendWhammy (int c, bool toeDown)    { return rockPedal (c, "whammy", toeDown); }
+bool EffectsRack::sweepWah (int c, bool toeDown)      { return rockPedal (c, "wah", toeDown); }
 
 bool EffectsRack::holdThrow (int c, bool held)
 {
@@ -289,7 +299,7 @@ juce::String EffectsRack::pedalText() const
         const auto& m = chains[(size_t) a.chain].chain.model();
         juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
                           : a.action == 4 ? "test take: record, then play round and round, then stop"
-                          : a.action == 5 ? "delay throw while held" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))

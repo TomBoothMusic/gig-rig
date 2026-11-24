@@ -1284,6 +1284,100 @@ void bodyChecks (const Check& check)
     check (half > box * 0.35 && half < box * 0.65, "body: Body at 5 is about half of that (" + num (half) + " dB at 110 Hz)");
 }
 
+void wahChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect ("wah");
+    fx->prepare (rate, 64);
+
+    // Where the peak sits: the loudest of a row of test tones a 24th of an octave apart.
+    const auto peakAt = [&] (double expected)
+    {
+        double bestHz = 0.0, bestDb = -200.0;
+        for (int k = -14; k <= 14; ++k)
+        {
+            const double hz = expected * std::pow (2.0, k / 24.0);
+            const double db = toneGainDb (*fx, hz, 0.05, rate);
+            if (db > bestDb) { bestDb = db; bestHz = hz; }
+        }
+        return bestHz;
+    };
+    const auto near = [] (double got, double want) { return std::abs (got / want - 1.0) < 0.04; };
+
+    fx->setParam ("pedal", 0.0f);
+    const double heel = peakAt (400.0);
+    fx->setParam ("pedal", 100.0f);
+    const double toe = peakAt (2200.0);
+    fx->setParam ("pedal", 50.0f);
+    const double middle = peakAt (std::sqrt (400.0 * 2200.0));
+    check (near (heel, 400.0) && near (toe, 2200.0) && near (middle, std::sqrt (400.0 * 2200.0)),
+           "wah: the peak sits at " + num (heel, 0) + " Hz at the heel, " + num (middle, 0) + " Hz half way and " + num (toe, 0) + " Hz at the toe (400, 938, 2200)");
+
+    fx->setParam ("heel", 250.0f);
+    fx->setParam ("toe", 3200.0f);
+    fx->setParam ("pedal", 0.0f);
+    const double heel2 = peakAt (250.0);
+    fx->setParam ("pedal", 100.0f);
+    const double toe2 = peakAt (3200.0);
+    check (near (heel2, 250.0) && near (toe2, 3200.0),
+           "wah: Heel frequency and Toe frequency set where the sweep starts and ends (" + num (heel2, 0) + " and " + num (toe2, 0) + " Hz for 250 and 3200)");
+    fx->setParam ("heel", 400.0f);
+    fx->setParam ("toe", 2200.0f);
+
+    // Peak depth: how far the peak stands above the guitar's body below it.
+    fx->setParam ("pedal", 50.0f);
+    const double mid = std::sqrt (400.0 * 2200.0);
+    const auto standsOut = [&] (float depth)
+    {
+        fx->setParam ("depth", depth);
+        return toneGainDb (*fx, mid, 0.05, rate) - toneGainDb (*fx, mid / 8.0, 0.05, rate);
+    };
+    const double shallow = standsOut (8.0f), deep = standsOut (20.0f);
+    check (std::abs (shallow - 8.0) < 1.5 && std::abs (deep - 20.0) < 1.5,
+           "wah: Peak depth sets how far the peak stands above the rest (" + num (shallow) + " dB at 8, " + num (deep) + " dB at 20)");
+
+    // Q: how narrow the peak is. Five percent above the peak, a Q of 10 is 3 dB down; a Q of 3 has barely fallen.
+    fx->setParam ("depth", 24.0f);
+    const auto fallsBy = [&] (float q)
+    {
+        fx->setParam ("q", q);
+        return toneGainDb (*fx, mid, 0.05, rate) - toneGainDb (*fx, mid * 1.05125, 0.05, rate);
+    };
+    const double narrow = fallsBy (10.0f), wide = fallsBy (3.0f);
+    check (std::abs (narrow - 3.0) < 0.7 && wide < 1.0,
+           "wah: Q sets how narrow the peak is (5% above the peak it has fallen " + num (narrow) + " dB at Q 10 and " + num (wide) + " dB at Q 3)");
+    fx->setParam ("q", 6.0f);
+    fx->setParam ("depth", 16.0f);
+
+    const double flat = toneGainDb (*fx, mid, 0.05, rate);
+    fx->setParam ("level", 6.0f);
+    const double louder = toneGainDb (*fx, mid, 0.05, rate);
+    check (std::abs (louder - flat - 6.0) < 0.2, "wah: Level +6 dB is 6 dB louder (" + num (louder - flat, 2) + " dB)");
+    fx->setParam ("level", 0.0f);
+
+    // A held switch: the pedal travels from heel to toe in the Sweep time, not at once.
+    {
+        fx->setParam ("glide", 400.0f);
+        fx->setParam ("pedal", 0.0f);
+        fx->reset();
+        run (*fx, std::vector<float> ((size_t) (0.1 * rate), 0.0f));
+        fx->setParam ("pedal", 100.0f);
+        const auto y = run (*fx, sine (2200.0, 0.8, 0.05, rate));
+        const auto levelDb = [&] (double from, double to)
+        {
+            double sum = 0.0;
+            const auto a = (size_t) (from * rate), b = (size_t) (to * rate);
+            for (size_t i = a; i < b; ++i) sum += (double) y[i] * y[i];
+            return 10.0 * std::log10 (std::max (sum / (double) (b - a), 1.0e-20));
+        };
+        const double start = levelDb (0.0, 0.04), halfWay = levelDb (0.18, 0.22), there = levelDb (0.45, 0.5), end = levelDb (0.6, 0.8);
+        check (end - start > 20.0 && end - halfWay > 10.0 && std::abs (end - there) < 1.0,
+               "wah: with Sweep time at 400 ms the pedal takes that long from heel to toe (a note at the toe's frequency is "
+               + num (end - start) + " dB quieter at the start, " + num (end - halfWay) + " dB half way, and there by 450 ms)");
+        fx->setParam ("glide", 30.0f);
+    }
+}
+
 void runEffectChecks (const Check& check)
 {
     oversamplerChecks (check);

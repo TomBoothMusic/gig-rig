@@ -8,6 +8,7 @@
 #include "tapedelay/TapeDelay.h"
 #include "tremolo/Tremolo.h"
 #include "vibrato/Vibrato.h"
+#include "wah/Wah.h"
 #include "whammy/Whammy.h"
 #include "bass9/Bass9.h"
 #include "body/AcousticBody.h"
@@ -50,6 +51,7 @@ void bodyChecks (const Check&);
 void responseChecks (const Check&);
 void harmonyChecks (const Check&);
 void whammyChecks (const Check&);
+void wahChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -107,6 +109,8 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Harmony>(); }, harmonyChecks },
         { "whammy",       "Whammy style pedal", "Pitch", "Bends the guitar up or down as far as two octaves (or a dive bomb) with the Pedal slider or a held switch; harmony and detune modes too.",
           [] { return std::make_unique<Whammy>(); }, whammyChecks },
+        { "wah",          "Wah pedal",             "Filter", "A Cry Baby style wah. Rock it with the Pedal slider or a held switch; set where the sweep starts and ends, how narrow the peak is (Q) and how deep.",
+          [] { return std::make_unique<Wah>(); }, wahChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
     };
