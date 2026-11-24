@@ -73,6 +73,8 @@ public:
     // ---- audio thread ----
     void process (float* buffer, int numSamples) noexcept;
     void reset() noexcept;
+    /** The song's tempo for effects that follow it (0 = not known). Audio thread. */
+    void setTempo (double bpm) noexcept             { tempo = bpm; }
 
 private:
     struct Slot
@@ -103,6 +105,7 @@ private:
     Built* live = nullptr;          // audio thread
     Built* fading = nullptr;        // audio thread: the old set during a change-over
     int fadePos = 0, fadeLength = 480;
+    double tempo = 0.0;             // audio thread
 
     std::vector<float> wet, old;
 };

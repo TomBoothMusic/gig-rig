@@ -99,6 +99,22 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   (`input`, `output`, `attack`, `release`, `ratio`, `mix`) and `eq` (`b100` ... `b6k4`, `level`).
 
 
+## Time effects and the song's tempo
+
+- `src/effects/DelayLine.h`: the delay line (cubic interpolation, `read(0)` is the sample just
+  written), a sine LFO, and the note values a synced delay offers (`sync::names`, `sync::seconds`).
+- An effect reads the song's tempo with `tempo()` (0 = unknown). The engine sets it every block:
+  the looper's tempo once a loop has set it, else the last tap tempo (`EffectsRack::tap`, also a
+  pedal action), else 0. A synced delay with no tempo uses its own Time knob.
+- Delay time changes: the digital delay crossfades between the old and new tap in 40 ms (no
+  pitch bend); the analog and tape delays glide the read point at most 25% off real time (a
+  musical pitch bend, and it keeps the "no clicks" check happy). Their `time` setting has
+  `smoothingMs` 0 because they handle it themselves.
+- Ids: `analogdelay`, `digitaldelay`, `tapedelay`, `spring`, `tremolo`, `vibrato`, `chorus`.
+  Vibrato reports its shortest delay (0.5 ms) and only ever wobbles later than that.
+- Switching a slot off fades it out in 10 ms, so delay and reverb tails stop. Spill-over (tails
+  ringing on) would need the chain to keep feeding the effect silence while blending its output.
+
 ## Presets and the rack's memory
 
 - A chain preset is a small text file in `Documents/GigRig/Effect presets/<name>.txt`:

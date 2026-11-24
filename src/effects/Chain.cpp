@@ -302,6 +302,7 @@ void Chain::runBuilt (Built& b, float* buffer, int n) noexcept
     for (auto& sp : b.slots)
     {
         auto& s = *sp;
+        s.fx->setTempo (tempo);
         const float target = s.on.load (std::memory_order_relaxed) ? 1.0f : 0.0f;
 
         // An effect that is off keeps running unheard, so switching it on never starts it from

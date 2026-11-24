@@ -63,7 +63,8 @@ Tom wants to keep adding effects for years, mostly after his heavy-use
 subscription ends, without ever risking a gig. The first batch (four drives, a fuzz, a
 clean boost, the Bass9 copy) was built on 23 Nov 2026, the second (amp models from
 Tom's Dream '65 captures, a noise gate) the same night, the third (1176-style compressor,
-GE-7-style graphic EQ) on 24 Nov; **`docs/effects.md` has
+GE-7-style graphic EQ) and the fourth (delays, spring reverb, tremolo, vibrato, chorus, tap
+tempo) on 24 Nov; **`docs/effects.md` has
 the exact steps, file names and rules. Keep it true.** In short:
 
 1. One effect = one folder `src/effects/<id>/` (plain C++, no JUCE) following

@@ -245,6 +245,8 @@ public:
     void process (const float* const* inputs, int numInputs, float* const* outputs, int numSamples) noexcept;
 
     LooperSnapshot snapshot() const;
+    /** The tempo now, for the effects (0 = no loop has set it yet). Audio thread only. */
+    double tempoNow() const noexcept    { return bar > 0 && rate > 0.0 ? activeSong.beatsPerBar * 60.0 * rate / (double) bar : 0.0; }
 
     /** Log entries since the last call. */
     int takeLog (LoopLogEntry* entries, int maxEntries);

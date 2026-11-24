@@ -119,6 +119,13 @@ target_sources(GigRig PRIVATE
     src/effects/gate/NoiseGate.cpp
     src/effects/comp/Comp1176.cpp
     src/effects/eq/GraphicEq.cpp
+    src/effects/analogdelay/AnalogDelay.cpp
+    src/effects/digitaldelay/DigitalDelay.cpp
+    src/effects/tapedelay/TapeDelay.cpp
+    src/effects/spring/SpringReverb.cpp
+    src/effects/tremolo/Tremolo.cpp
+    src/effects/vibrato/Vibrato.cpp
+    src/effects/chorus/Chorus.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp

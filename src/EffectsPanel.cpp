@@ -156,6 +156,13 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     matchButton.setTooltip ("Play for 8 seconds: sets the chain level so the effects are as loud as the reference (or the dry sound)");
     matchButton.onClick = [this] { levelMatch(); };
     captureButton.setTooltip ("Records the dry input, the reference and the effects into one WAV file for Claude");
+    tapButton.setTooltip ("Tap the beat (two taps or more) to set the tempo for delays set to follow it, when no loop is playing");
+    tapButton.onClick = [this] { rack.tap (juce::Time::getMillisecondCounterHiRes()); };
+    addAndMakeVisible (tapButton);
+    tempoLabel.setFont (juce::FontOptions (13.0f));
+    tempoLabel.setColour (juce::Label::textColourId, style::textDim);
+    addAndMakeVisible (tempoLabel);
+
     captureButton.onClick = [this]
     {
         if (rack.isCapturing())
@@ -631,6 +638,8 @@ void EffectsPanel::fillPedalBoxes()
         for (int sw = 0; sw < 11; ++sw)
             sb.addItem (switchName (sw), 10 + sw);
 
+        ab.addItem ("Tap tempo (for synced delays)", 3);
+
         for (int c = 0; c < EffectsRack::numChains; ++c)
         {
             const auto r = rack.routing (c);
@@ -645,7 +654,7 @@ void EffectsPanel::fillPedalBoxes()
 
         const auto a = rack.pedalAssign (i);
         sb.setSelectedId (a.sw < 0 ? 1 : 10 + a.sw, juce::dontSendNotification);
-        ab.setSelectedId (a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : 11 + a.action - 10), juce::dontSendNotification);
+        ab.setSelectedId (a.action == 2 ? 3 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : 11 + a.action - 10), juce::dontSendNotification);
     }
 }
 
@@ -657,7 +666,7 @@ void EffectsPanel::pushPedal (int i)
     a.sw = sid >= 10 ? sid - 10 : -1;
     a.chain = aid / 100;
     const auto code = aid % 100;
-    a.action = code == 1 ? 0 : code == 2 ? 1 : 10 + code - 11;
+    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : 10 + code - 11;
     rack.setPedalAssign (i, a);
 }
 
@@ -674,6 +683,11 @@ void EffectsPanel::timerCallback()
     repaint (meterArea);
 
     loadShown = juce::jmax (loadShown * 0.97, rack.takeLoad());
+
+    {
+        const double bpm = rack.effectsTempo();
+        tempoLabel.setText (bpm > 0.0 ? "Tempo " + rack.tempoText() : "Tempo: none yet", juce::dontSendNotification);
+    }
 
     if (copiedTicks > 0 && --copiedTicks == 0)
         copyButton.setButtonText ("Copy effects results");
@@ -820,6 +834,9 @@ void EffectsPanel::resized()
         levelSlider.setBounds (row.removeFromLeft (300).reduced (0, 2));
         matchButton.setBounds (row.removeFromLeft (110).reduced (4, 2));
         captureButton.setBounds (row.removeFromLeft (170).reduced (4, 2));
+        row.removeFromLeft (8);
+        tapButton.setBounds (row.removeFromLeft (90).reduced (2, 2));
+        tempoLabel.setBounds (row);
     }
 
     area.removeFromTop (6);

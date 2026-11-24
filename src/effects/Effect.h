@@ -94,7 +94,14 @@ public:
 
     double sampleRate() const noexcept                      { return rate; }
 
+    /** The song's tempo in beats per minute (0 = not known yet), for effects that follow it,
+        such as a delay set in note values. The chain passes it in before each block (from the
+        looper once a loop has set the tempo). Audio thread. */
+    void setTempo (double bpm) noexcept                     { tempoBpm.store (bpm, std::memory_order_relaxed); }
+
 protected:
+    double tempo() const noexcept                           { return tempoBpm.load (std::memory_order_relaxed); }
+
     /** Call from the constructor, once per setting, in the order they show on screen. */
     int addParam (ParamInfo info);
     int addParam (std::string id, std::string label, std::string unit, float min, float max, float def, float smoothingMs = 80.0f);
@@ -124,6 +131,7 @@ private:
     };
 
     std::atomic<float> meter { 0.0f };
+    std::atomic<double> tempoBpm { 0.0 };
     std::vector<ParamInfo> infos;
     std::unique_ptr<std::atomic<float>[]> targets;
     std::vector<Smooth> smooth;

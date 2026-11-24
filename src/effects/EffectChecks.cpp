@@ -580,6 +580,179 @@ void eqChecks (const Check& check)
     check (std::abs (lv + 6.0) < 0.2, "eq: Level -6 dB turns it down 6 dB (" + num (lv, 2) + " dB)");
 }
 
+namespace
+{
+    /** Where the loudest moment is between two times (seconds), and how loud. */
+    std::pair<double, float> loudestBetween (const std::vector<float>& y, double from, double to, double rate)
+    {
+        size_t at = (size_t) (from * rate);
+        float top = 0.0f;
+        for (size_t i = (size_t) (from * rate); i < std::min (y.size(), (size_t) (to * rate)); ++i)
+            if (std::abs (y[i]) > top) { top = std::abs (y[i]); at = i; }
+        return { (double) at / rate, top };
+    }
+
+    std::vector<float> pluck (double rate, double seconds)
+    {
+        std::vector<float> x ((size_t) (seconds * rate), 0.0f);
+        for (size_t i = 0; i < (size_t) (0.002 * rate); ++i)
+            x[i] = (float) (0.3 * std::sin (twoPi * 1000.0 * (double) i / rate));
+        return x;
+    }
+}
+
+void delayChecks (const std::string& id, const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect (id);
+    fx->prepare (rate, 64);
+    fx->setParam ("mix", 100.0f);
+    if (fx->paramIndex ("wow") >= 0) { fx->setParam ("wow", 0.0f); fx->setParam ("flutter", 0.0f); }
+    if (fx->paramIndex ("mod") >= 0) fx->setParam ("mod", 0.0f);
+    if (fx->paramIndex ("follow") >= 0) fx->setParam ("follow", 0.0f);
+    fx->setParam ("time", 250.0f);
+    fx->setParam ("feedback", 40.0f);
+    fx->reset();
+
+    const auto y = run (*fx, pluck (rate, 1.0));
+    const auto first = loudestBetween (y, 0.1, 0.4, rate);
+    const auto second = loudestBetween (y, 0.4, 0.65, rate);
+    check (std::abs (first.first - 0.250) < 0.004 && first.second > 0.05f,
+           id + ": with Time at 250 ms the echo comes back after " + num (first.first * 1000.0, 1) + " ms");
+    check (std::abs (second.first - 0.500) < 0.008 && second.second < first.second && second.second > first.second * 0.15f,
+           id + ": the second repeat comes 250 ms later and quieter (" + num (gainToDb (second.second / first.second)) + " dB)");
+
+    if (fx->paramIndex ("follow") >= 0)
+    {
+        fx->setParam ("follow", 1.0f);
+        fx->setParam ("division", 0.0f);     // 1/4
+        fx->setTempo (120.0);
+        fx->reset();
+        const auto z = run (*fx, pluck (rate, 0.8));
+        const auto e = loudestBetween (z, 0.1, 0.7, rate);
+        check (std::abs (e.first - 0.500) < 0.006, id + ": following a 120 bpm tempo, a 1/4 note echo comes back after " + num (e.first * 1000.0, 1) + " ms (500)");
+
+        fx->setParam ("division", 1.0f);     // dotted 1/8
+        fx->reset();
+        const auto d = run (*fx, pluck (rate, 0.8));
+        const auto e2 = loudestBetween (d, 0.1, 0.7, rate);
+        check (std::abs (e2.first - 0.375) < 0.006, id + ": a dotted 1/8 at 120 bpm comes back after " + num (e2.first * 1000.0, 1) + " ms (375)");
+
+        fx->setTempo (0.0);
+        fx->setParam ("division", 0.0f);
+        fx->reset();
+        const auto u = run (*fx, pluck (rate, 0.8));
+        const auto e3 = loudestBetween (u, 0.1, 0.7, rate);
+        check (std::abs (e3.first - 0.250) < 0.006, id + ": with no tempo known yet it uses its own Time (" + num (e3.first * 1000.0, 1) + " ms)");
+    }
+
+    // Repeats at the top setting die away on their own rather than running away.
+    fx->setParam ("feedback", 95.0f);
+    if (fx->paramIndex ("follow") >= 0) fx->setParam ("follow", 0.0f);
+    fx->reset();
+    auto loud = sine (220.0, 0.5, 0.9, rate);
+    loud.resize ((size_t) (8.0 * rate), 0.0f);
+    const auto r = run (*fx, loud);
+    check (allFinite (r) && peak (r) < 4.0f, id + ": Repeats at full with a loud note stays under control (peak " + num (gainToDb (peak (r))) + " dB)");
+}
+
+void springChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect ("spring");
+    fx->prepare (rate, 64);
+    fx->setParam ("reverb", 10.0f);
+    fx->reset();
+    const auto y = run (*fx, pluck (rate, 6.0));
+    const double early = rms (std::vector<float> (y.begin() + (long) (0.1 * rate), y.begin() + (long) (0.6 * rate)));
+    const double late = rms (std::vector<float> (y.begin() + (long) (4.5 * rate), y.begin() + (long) (5.5 * rate)));
+    check (early > 1.0e-3 && late < early * 0.05, "spring: a pluck rings on in the springs, then dies away (" + num (gainToDb ((float) early)) + " dB early, "
+                                                  + num (gainToDb ((float) std::max (late, 1.0e-9))) + " dB after 4.5 s)");
+
+    fx->setParam ("decay", 10.0f);
+    fx->reset();
+    const auto longer = run (*fx, pluck (rate, 3.0));
+    const double lateLong = rms (std::vector<float> (longer.begin() + (long) (2.0 * rate), longer.end()));
+    fx->setParam ("decay", 0.0f);
+    fx->reset();
+    const auto shorter = run (*fx, pluck (rate, 3.0));
+    const double lateShort = rms (std::vector<float> (shorter.begin() + (long) (2.0 * rate), shorter.end()));
+    check (lateLong > lateShort * 4.0, "spring: Decay at 10 rings much longer than at 0 (" + num (gainToDb ((float) (lateLong / std::max (lateShort, 1.0e-12)))) + " dB more after 2 s)");
+
+    fx->setParam ("reverb", 0.0f);
+    fx->reset();
+    const auto x = sine (196.0, 0.6, 0.1, rate);
+    const auto dry = run (*fx, x);
+    double diff = 0.0;
+    for (size_t i = 0; i < x.size(); ++i) diff = std::max (diff, (double) std::abs (dry[i] - x[i]));
+    check (diff < 1.0e-6, "spring: Reverb at 0 leaves the guitar as it was");
+}
+
+void tremoloChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect ("tremolo");
+    fx->prepare (rate, 64);
+    fx->setParam ("speed", 4.0f);
+    fx->setParam ("intensity", 50.0f);
+    fx->reset();
+    const auto y = run (*fx, sine (440.0, 2.0, 0.1, rate));
+
+    // Level in 5 ms windows: the quietest should be about half the loudest, and it should
+    // pulse 4 times a second.
+    std::vector<double> env;
+    const size_t w = (size_t) (0.005 * rate);
+    for (size_t i = (size_t) (0.5 * rate); i + w <= y.size(); i += w)
+        env.push_back (rms (std::vector<float> (y.begin() + (long) i, y.begin() + (long) (i + w))));
+    const double top = *std::max_element (env.begin(), env.end()), bottom = *std::min_element (env.begin(), env.end());
+    // Count the times the level falls through the middle.
+    int dips = 0;
+    const double middle = (top + bottom) * 0.5;
+    for (size_t k = 1; k < env.size(); ++k)
+        if (env[k - 1] >= middle && env[k] < middle)
+            ++dips;
+    check (bottom / top > 0.4 && bottom / top < 0.6 && dips >= 5 && dips <= 7,
+           "tremolo: at 50% the level dips to " + num (bottom / top * 100.0, 0) + "% and pulses " + std::to_string (dips) + " times in 1.5 s at 4 Hz");
+}
+
+void modulationChecks (const std::string& id, const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect (id);
+    fx->prepare (rate, 64);
+    const auto x = sine (330.0, 1.0, 0.1, rate);
+
+    if (id == "chorus")
+    {
+        fx->setParam ("mix", 0.0f);
+        fx->reset();
+        const auto y = run (*fx, x);
+        double diff = 0.0;
+        for (size_t i = 0; i < x.size(); ++i) diff = std::max (diff, (double) std::abs (y[i] - x[i]));
+        check (diff < 1.0e-6, "chorus: Mix at 0 leaves the guitar as it was");
+    }
+    else
+    {
+        fx->setParam ("depth", 0.0f);
+        fx->reset();
+        const auto y = run (*fx, x);
+        const int lag = fx->latencySamples();
+        double diff = 0.0;
+        for (size_t i = (size_t) (0.3 * rate); i < x.size(); ++i) diff = std::max (diff, (double) std::abs (y[i] - x[i - (size_t) lag]));
+        check (diff < 1.0e-3, "vibrato: at depth 0 it is the guitar itself, " + std::to_string (lag) + " samples late (as it says)");
+    }
+
+    // With depth up, the sound really moves: compare against the plain copy.
+    fx->setParam (id == "chorus" ? "mix" : "depth", 100.0f);
+    if (id == "chorus") fx->setParam ("depth", 100.0f);
+    fx->reset();
+    const auto moved = run (*fx, x);
+    const int lag = fx->latencySamples();
+    double diff = 0.0;
+    for (size_t i = (size_t) (0.3 * rate); i < x.size(); ++i) diff = std::max (diff, (double) std::abs (moved[i] - x[i - (size_t) lag]));
+    check (diff > 0.01, id + ": with depth up the sound moves (differs by up to " + num (diff, 3) + ")");
+}
+
 void ampChecks (const Check& check)
 {
     constexpr double rate = 96000.0;

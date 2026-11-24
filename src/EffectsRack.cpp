@@ -183,7 +183,9 @@ bool EffectsRack::takePedal (int sw, bool isDown)
         if (a.sw != sw)
             continue;
 
-        if (isDown)
+        if (isDown && a.action == 2)
+            tap (juce::Time::getMillisecondCounterHiRes());     // at once, so the press time is exact
+        else if (isDown)
             juce::MessageManager::callAsync ([this, a] { doPedalAction (a); });
 
         return true;
@@ -196,7 +198,9 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
 {
     const int c = juce::jlimit (0, numChains - 1, a.chain);
 
-    if (a.action == 0)
+    if (a.action == 2)
+        tap (juce::Time::getMillisecondCounterHiRes());
+    else if (a.action == 0)
         toggleListen (c);
     else if (a.action == 1)
     {
@@ -231,11 +235,11 @@ juce::String EffectsRack::pedalText() const
             continue;
 
         const auto& m = chains[(size_t) a.chain].chain.model();
-        juce::String what = a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+        juce::String what = a.action == 2 ? "tap tempo" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
-          << ": chain " << (a.chain + 1) << " " << what << " (the looper no longer hears this switch)\n";
+          << ": " << (a.action == 2 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
     }
 
     return t;
@@ -881,11 +885,46 @@ void EffectsRack::process (const float* const* inputs, int numIns, int n) noexce
 }
 
 //==============================================================================
+void EffectsRack::tap (double ms)
+{
+    const juce::SpinLock::ScopedLockType sl (tapLock);
+    const double gap = ms - lastTapMs;
+
+    if (gap < 200.0)                        // a switch bounce: not a tap
+        return;
+
+    lastTapMs = ms;
+
+    if (gap > 2000.0)                       // a fresh start
+    {
+        tapGaps.clear();
+        return;
+    }
+
+    tapGaps.push_back (gap);
+    if (tapGaps.size() > 3)
+        tapGaps.erase (tapGaps.begin());
+
+    double sum = 0.0;
+    for (auto g : tapGaps)
+        sum += g;
+    tappedBpm.store (60000.0 / (sum / (double) tapGaps.size()));
+}
+
+juce::String EffectsRack::tempoText() const
+{
+    const double bpm = tempoNow.load();
+    if (bpm <= 0.0)
+        return "not known yet (no loop and no taps), so synced delays use their own Time";
+    return juce::String (bpm, 1) + " bpm, " + (tempoFromLoop.load() ? "from the looper" : "tapped");
+}
+
 juce::String EffectsRack::reportText() const
 {
     juce::String t;
     t << "--- Effects ---\n";
     t << "Effects tab: " << (enabled.load() ? "ON" : "off") << "\n";
+    t << "Tempo for synced delays: " << tempoText() << "\n";
 
     for (int c = 0; c < numChains; ++c)
     {
