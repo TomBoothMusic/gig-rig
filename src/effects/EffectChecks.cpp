@@ -322,6 +322,25 @@ namespace
                && odd.slots[0].param ("gain", -1) == -1.0f && skipped.size() == 1,
                "chain: a preset with an unknown effect, bad numbers and Windows line ends still loads the rest");
 
+        // Adding a preset to what is already there (presets stacked, not replaced).
+        {
+            ChainModel row;
+            row.slots.push_back ({ "comp", true, {}, {} });
+            row.slots.push_back ({ "amp", true, {}, {} });
+            ChainModel drives;
+            drives.slots.push_back ({ "klon", true, {}, {} });
+            drives.slots.push_back ({ "bd", true, { { "gain", 5.2f } }, {} });
+            const int added = row.addFrom (drives, Chain::maxSlots);
+            check (added == 2 && row.slots.size() == 4 && row.slots[0].type == "comp" && row.slots[1].type == "klon"
+                   && row.slots[2].type == "bd" && row.slots[2].param ("gain", 0) == 5.2f && row.slots[3].type == "amp",
+                   "chain: adding a preset keeps what is there and puts the new effects in front of the amp");
+
+            ChainModel full;
+            for (int k = 0; k < Chain::maxSlots - 1; ++k) full.slots.push_back ({ "boost", true, {}, {} });
+            check (full.addFrom (drives, Chain::maxSlots) == 1 && (int) full.slots.size() == Chain::maxSlots,
+                   "chain: adding a preset stops when the chain is full");
+        }
+
         // Changing the row while sound plays: no clicks, settings carried across.
         constexpr double rate = 96000.0;
         Chain chain;

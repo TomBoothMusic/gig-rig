@@ -64,6 +64,27 @@ std::string ChainModel::toText() const
     return s.str();
 }
 
+int ChainModel::addFrom (const ChainModel& other, int maxSlots)
+{
+    auto at = slots.size();
+    for (size_t k = 0; k < slots.size(); ++k)
+        if (slots[k].type == "amp")
+        {
+            at = k;
+            break;
+        }
+
+    int added = 0;
+    for (const auto& s : other.slots)
+    {
+        if ((int) slots.size() >= maxSlots)
+            break;
+        slots.insert (slots.begin() + (std::ptrdiff_t) (at + (size_t) added), s);
+        ++added;
+    }
+    return added;
+}
+
 ChainModel ChainModel::fromText (const std::string& text, std::vector<std::string>* skipped)
 {
     ChainModel m;

@@ -315,6 +315,19 @@ New in this build:
 - A new chain now starts with its **Reference** set to **Socket 8**, where the board and the
   Dream come back.
 
+### Stacking presets
+
+**Load** replaces everything in the chain with the preset. **Add to chain** keeps what is
+already there and adds the preset's effects to it, in front of the amp model if there is one.
+So you can keep "Comp & GE7" as its own preset and stack a drive preset on top:
+
+1. Choose **Comp & GE7 for Electric** and press **Load**.
+2. Add the **Amp model** if you want it.
+3. Choose a drive preset (for example **Blues Drive + Klon Boost**) and press **Add to chain**.
+   The drives land after the compressor and EQ and in front of the amp.
+
+A chain holds at most 8 effects.
+
 ### Trying them (about 15 minutes)
 
 Use the same leads and set-up as the second batch (the A/B with the amp model).

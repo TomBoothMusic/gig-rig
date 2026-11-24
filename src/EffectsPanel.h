@@ -39,6 +39,7 @@ private:
     void refreshPresets();
     void savePreset();
     void loadPreset (const juce::File&);
+    void addPreset (const juce::File&);
     void levelMatch();
     void fillPedalBoxes();
     void pushPedal (int i);
@@ -81,7 +82,7 @@ private:
     // Presets.
     juce::ComboBox presetBox;
     juce::TextEditor presetName;
-    juce::TextButton loadButton { "Load" }, saveButton { "Save as" }, folderButton { "Open folder" };
+    juce::TextButton loadButton { "Load" }, addPresetButton { "Add to chain" }, saveButton { "Save as" }, folderButton { "Open folder" };
     juce::Array<juce::File> presetFiles;
 
     // Pedal switches.

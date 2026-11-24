@@ -176,7 +176,7 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
         copiedTicks = 2 * timerHz;
     };
 
-    for (auto* b : { &matchButton, &captureButton, &copyButton, &addButton, &leftButton, &rightButton, &removeButton, &loadButton, &saveButton, &folderButton })
+    for (auto* b : { &matchButton, &captureButton, &copyButton, &addButton, &leftButton, &rightButton, &removeButton, &loadButton, &addPresetButton, &saveButton, &folderButton })
         addAndMakeVisible (b);
 
     for (const auto& t : fx::effectTypes())
@@ -264,6 +264,13 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
         const auto i = presetBox.getSelectedId() - 1;
         if (i >= 0 && i < presetFiles.size())
             loadPreset (presetFiles[i]);
+    };
+    addPresetButton.setTooltip ("Adds the preset's effects to this chain, keeping the ones already in it (in front of the amp model, if there is one)");
+    addPresetButton.onClick = [this]
+    {
+        const auto i = presetBox.getSelectedId() - 1;
+        if (i >= 0 && i < presetFiles.size())
+            addPreset (presetFiles[i]);
     };
     saveButton.onClick = [this] { savePreset(); };
     folderButton.onClick = [] { presetFolder().createDirectory(); presetFolder().startAsProcess(); };
@@ -586,6 +593,21 @@ void EffectsPanel::loadPreset (const juce::File& file)
     refresh();
 }
 
+void EffectsPanel::addPreset (const juce::File& file)
+{
+    std::vector<std::string> skipped;
+    const auto extra = fx::ChainModel::fromText (file.loadFileAsString().toStdString(), &skipped);
+    auto m = rack.chain (chainIndex).model();
+    const int added = m.addFrom (extra, fx::Chain::maxSlots);
+    rack.chain (chainIndex).setModel (m);
+    rack.markChanged();
+    const int left = (int) extra.slots.size() - added;
+    captureNote = "Added \"" + file.getFileNameWithoutExtension() + "\" to the chain"
+                + (left > 0 ? ", but the chain is full: " + juce::String (left) + " effect(s) left out." : juce::String ("."))
+                + (skipped.empty() ? juce::String() : juce::String (" Effects this build does not have were left out."));
+    refresh();
+}
+
 void EffectsPanel::levelMatch()
 {
     rack.takeLevels (chainIndex);     // start counting from now
@@ -871,8 +893,9 @@ void EffectsPanel::resized()
         auto left = block.removeFromLeft (block.getWidth() / 2).reduced (0, 0);
         presetLabel.setBounds (left.removeFromTop (20));
         auto row = left.removeFromTop (28);
-        presetBox.setBounds (row.removeFromLeft (200).reduced (0, 2));
+        presetBox.setBounds (row.removeFromLeft (170).reduced (0, 2));
         loadButton.setBounds (row.removeFromLeft (60).reduced (2, 2));
+        addPresetButton.setBounds (row.removeFromLeft (100).reduced (2, 2));
         folderButton.setBounds (row.removeFromLeft (100).reduced (2, 2));
         row = left.removeFromTop (28);
         presetName.setBounds (row.removeFromLeft (200).reduced (0, 2));

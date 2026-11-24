@@ -34,6 +34,11 @@ struct ChainModel
     std::string toText() const;
     /** Unknown effect types are left out (listed in skipped); unknown settings are ignored. */
     static ChainModel fromText (const std::string& text, std::vector<std::string>* skipped = nullptr);
+
+    /** Adds another preset's effects to this row, keeping what is already there: in front of
+        the amp model if there is one (so drives land before the amp), otherwise at the end.
+        Stops at the most slots a chain holds. Returns how many were added. */
+    int addFrom (const ChainModel& other, int maxSlots);
 };
 
 /** A row of effects, one after another, running on the audio thread.
