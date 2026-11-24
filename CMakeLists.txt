@@ -126,6 +126,7 @@ target_sources(GigRig PRIVATE
     src/effects/tremolo/Tremolo.cpp
     src/effects/vibrato/Vibrato.cpp
     src/effects/chorus/Chorus.cpp
+    src/effects/whammy/Whammy.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp

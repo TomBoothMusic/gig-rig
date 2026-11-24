@@ -71,7 +71,8 @@ public:
 
     // ---- pedal switches (an RC-600 switch taken from the looper) ----
     /** action: 0 = A/B (effects against dry or the reference), 1 = the whole chain on/off,
-        2 = tap tempo (for synced delays, any chain), 10 + k = slot k on/off. */
+        2 = tap tempo (for synced delays, any chain), 3 = bend the chain's whammy while the
+        switch is held (toe down on the press, heel on the release), 10 + k = slot k on/off. */
     struct PedalAssign
     {
         int sw = -1;        // pedal switch (0..8 = switches 1 to 9, 9 = CTL3, 10 = CTL4), -1 = none
@@ -86,6 +87,9 @@ public:
     bool takePedal (int sw, bool isDown);
     /** Message thread: what a pedal press does. */
     void doPedalAction (const PedalAssign& a);
+    /** Message thread: moves the Pedal of the first whammy in a chain to the toe (down) or the
+        heel. The whammy's Bend time sets how fast it gets there. False if the chain has none. */
+    bool bendWhammy (int chain, bool toeDown);
     /** Called on the message thread after a pedal press changed something (so the screen can follow). */
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */

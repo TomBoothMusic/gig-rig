@@ -395,6 +395,28 @@ A chain holds 12 effects at most.
 Press **Copy effects results** and paste it, with what you'd change about each one (the
 spring's drip, how the tape wobbles, the analog delay's darkness). Attach any presets you save.
 
+## The whammy (just for fun)
+
+A pitch-bending pedal in the style of the DigiTech Whammy. In the **Effects** tab pick
+**Whammy style pedal** and press **Add**. Put it early in the chain, before any drive
+and the amp, as you would the real pedal.
+
+| Knob | What it does |
+|---|---|
+| **Mode** | What the pedal does. **Whammy** modes bend the whole guitar: 1 or 2 octaves up, a 5th or 4th up, a 2nd, 4th, 5th, 1 or 2 octaves down, and a dive bomb. **Harmony** modes keep your guitar and add a second voice that the pedal moves between two notes (for example an octave below to an octave above). **Detune** modes bring in a slightly sharp copy for a thick, chorus-like sound. |
+| **Pedal (heel to toe)** | The pedal itself. Drag it with the mouse while a note rings: 0 is heel down (no bend), 100 is toe down (the full bend). |
+| **Bend time** | How long the bend takes to travel the whole way. Leave it short for the mouse. Make it longer (300 to 800 ms) for the switch below. |
+| **Bent sound** | How much of the bent sound you hear. 100 is how the real pedal behaves. |
+
+**Hands-free, with an RC-600 switch.** With no expression pedal yet, a switch can do the bend:
+under **RC-600 switches for the effects**, pick CTL3 or CTL4 and **Chain 2: whammy bend while
+held** (use the chain your whammy is in). Hold the switch and the pedal travels to the toe at
+the **Bend time** speed; let go and it comes back. Try 2 octaves up with a Bend time of 500 ms.
+
+**What to expect.** Single notes bend cleanly. Chords warble a little, as they do on the real
+pedal. With the pedal at the heel in a Whammy mode your guitar passes through untouched, so it
+can stay switched on. While it is bending, the sound runs a few hundredths of a second behind.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.

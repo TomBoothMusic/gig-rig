@@ -115,6 +115,21 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
 - Switching a slot off fades it out in 10 ms, so delay and reverb tails stop. Spill-over (tails
   ringing on) would need the chain to keep feeding the effect silence while blending its output.
 
+## The whammy (pitch bending)
+
+- `src/effects/whammy/`, id `whammy`: settings `mode` (a choice; **only ever add modes to the
+  end**, presets save the number), `pedal` (0 heel to 100 toe), `glide` (ms for a full sweep;
+  the effect moves the pedal itself, per sample, so both have `smoothingMs` 0) and `mix`.
+- Method: the guitar is written to a ring buffer and read back at the pitch ratio. A read
+  point that runs out hops by 11 to 28 ms; `findHop` picks the hop that best lines the waves
+  up (a quick search on a copy thinned to about 8 kHz, then to the sample on the real buffer)
+  and the two read points are faded across. That is why single notes are clean and chords warble.
+- At true pitch (heel in a Whammy mode) it fades to a read with no delay, so its latency is 0
+  and the output is the input to the sample. While bending the delay is 2 to about 45 ms.
+- The first expression-pedal effect. Until there is a real pedal, `EffectsRack::bendWhammy`
+  (pedal action 3, "whammy bend while held") moves `pedal` to 100 on a press and 0 on release.
+  A real expression pedal should set `pedal` the same way; a wah should copy this pattern.
+
 ## Presets and the rack's memory
 
 - A chain preset is a small text file in `Documents/GigRig/Effect presets/<name>.txt`:
