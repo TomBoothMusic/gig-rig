@@ -50,7 +50,7 @@ struct ChainModel
 class Chain
 {
 public:
-    static constexpr int maxSlots = 8;
+    static constexpr int maxSlots = 12;
 
     Chain();
     ~Chain();
