@@ -64,7 +64,8 @@ subscription ends, without ever risking a gig. The first batch (four drives, a f
 clean boost, the Bass9 copy) was built on 23 Nov 2026, the second (amp models from
 Tom's Dream '65 captures, a noise gate) the same night, the third (1176-style compressor,
 GE-7-style graphic EQ) and the fourth (delays, spring reverb, tremolo, vibrato, chorus, tap
-tempo) on 24 Nov; **`docs/effects.md` has
+tempo) on 24 Nov, and the fifth (plate and room reverbs, flanger, Uni-Vibe, channel EQ,
+acoustic body, response files, a first vocal harmony, the test take) on 25 Nov; **`docs/effects.md` has
 the exact steps, file names and rules. Keep it true.** In short:
 
 1. One effect = one folder `src/effects/<id>/` (plain C++, no JUCE) following

@@ -68,11 +68,16 @@ else()
 endif()
 
 # The amp models trained from Tom's captures, built into the app. On start the app
-# copies any that are missing into Documents/GigRig/Amp models.
+# copies any that are missing into Documents/GigRig/Amp models. The starter presets go to
+# Documents/GigRig/Effect presets the same way, but only if no file of that name is there
+# (so Tom's own changes to one are never overwritten).
 juce_add_binary_data(GigRigData SOURCES
     resources/amp-models/dream65-breakup.nam
     resources/amp-models/dream65-clean.nam
-    resources/amp-models/dream65-driven.nam)
+    resources/amp-models/dream65-driven.nam
+    resources/presets/starter-acoustic.txt
+    resources/presets/starter-vocal.txt
+    resources/presets/starter-bass.txt)
 
 # ---------------------------------------------------------------------------
 # The app. Stage 0 was a device check; stage 1 adds the audio engine with
@@ -93,6 +98,7 @@ target_sources(GigRig PRIVATE
     src/DeviceReport.cpp
     src/EffectsPanel.cpp
     src/EffectsRack.cpp
+    src/Responses.cpp
     src/EffectsSelfTest.cpp
     src/GlitchWatch.cpp
     src/LatencyProbe.cpp

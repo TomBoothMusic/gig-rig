@@ -1,0 +1,54 @@
+# GigRig effect preset "Starter - Acoustic": a place to start the acoustic chain from.
+# Tom's acoustic today: body resonance and a short analog delay always on, chorus on a switch,
+# tremolo and vibrato in a few songs, a Uni-Vibe wanted for one, a boost and EQ for finger style.
+# The room reverb at the end stands in for the mixer's reverb until the mixer stage is built.
+# GigRig effect chain. One effect per 'slot=' line, its settings below it.
+slot=ir
+on=0
+mix=100
+level=0
+slot=body
+on=1
+body=5
+phase=0
+level=0
+slot=peq
+on=0
+lowcut=80
+low=1.5
+hmf=3000
+hmg=2
+level=4
+slot=analogdelay
+on=1
+tone=6.15
+feedback=13.4
+mod=2.95
+mix=9.9
+slot=chorus
+on=0
+speed=0.8
+depth=45
+mix=40
+slot=tremolo
+on=0
+speed=3.8
+shape=1.5
+intensity=27
+slot=vibrato
+on=0
+speed=0.8
+depth=13
+slot=univibe
+on=0
+speed=2.2
+intensity=7
+mode=0
+level=0
+slot=room
+on=0
+reverb=2.5
+size=1
+decay=5
+tone=5
+lowcut=120

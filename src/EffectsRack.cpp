@@ -200,6 +200,8 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
 
     if (a.action == 2)
         tap (juce::Time::getMillisecondCounterHiRes());
+    else if (a.action == 3)
+        takeNote = takeStep();
     else if (a.action == 0)
         toggleListen (c);
     else if (a.action == 1)
@@ -235,11 +237,11 @@ juce::String EffectsRack::pedalText() const
             continue;
 
         const auto& m = chains[(size_t) a.chain].chain.model();
-        juce::String what = a.action == 2 ? "tap tempo" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+        juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "test take: record, then play round and round, then stop" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
-          << ": " << (a.action == 2 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
+          << ": " << (a.action == 2 || a.action == 3 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
     }
 
     return t;
@@ -269,6 +271,18 @@ void EffectsRack::tick()
 
     if (ampDone.load() && ampPlaying.load())
         stopAmpCapture();
+
+    for (auto& s : chains)
+    {
+        s.loadRing[(size_t) s.loadRingAt] = s.loadPeak.exchange (0.0f);
+        s.loadRingAt = (s.loadRingAt + 1) % (int) s.loadRing.size();
+        if (! s.on.load() || ! enabled.load())
+            s.loadAverage.store (0.0f);
+    }
+
+    // A take that ran to its full length ended itself on the audio thread: tidy it up here.
+    if (take != nullptr && takeMode.load() == 0 && take->length == 0 && takeRecorded.load() > 0)
+        stopTake();
 
     // Save a second after the last change, not on every slider movement.
     if (dirty)
@@ -434,6 +448,278 @@ void EffectsRack::stopCapture()
     }
 
     old.reset();    // writes out the rest and closes the file
+}
+
+//==============================================================================
+juce::File EffectsRack::takeFolder()
+{
+    return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("GigRig").getChildFile ("Test takes");
+}
+
+EffectsRack::ChainLoad EffectsRack::chainLoad (int c) const noexcept
+{
+    const auto& s = chains[(size_t) c];
+    ChainLoad l;
+    l.average = s.loadAverage.load();
+    l.busiest = juce::jmax (s.loadPeak.load(), *std::max_element (s.loadRing.begin(), s.loadRing.end()));
+    return l;
+}
+
+EffectsRack::TakeState EffectsRack::takeState() const noexcept
+{
+    const int mode = takeMode.load();
+    if (mode == 1) return TakeState::recording;
+    if (mode == 2) return TakeState::playing;
+    return take != nullptr && take->length > 0 ? TakeState::ready : TakeState::none;
+}
+
+double EffectsRack::takeSeconds() const noexcept
+{
+    if (takeMode.load() == 1)
+        return (double) takeRecorded.load() / rate;
+
+    return take != nullptr ? (double) take->length / rate : 0.0;
+}
+
+bool EffectsRack::takeHolds (int c) const noexcept
+{
+    return take != nullptr && take->has[(size_t) c];
+}
+
+juce::String EffectsRack::startTake()
+{
+    if (! enabled.load())
+        return "Tick 'Effects on' first.";
+
+    auto fresh = std::make_unique<Take>();
+    fresh->rate = rate;
+    int count = 0;
+
+    for (int c = 0; c < numChains; ++c)
+        if (chains[(size_t) c].route.on)
+        {
+            fresh->has[(size_t) c] = true;
+            ++count;
+        }
+
+    if (count == 0)
+        return "Switch on the chain (or chains) to record first: a take records what goes into every chain that is on.";
+
+    // Every chain gets the room (so the audio thread never has to check which), but only the
+    // ones that are on are filled. A minute at 96 kHz is 23 MB a chain.
+    const auto room = (size_t) (maxTakeSeconds * rate);
+    for (int c = 0; c < numChains; ++c)
+        fresh->data[(size_t) c].assign (fresh->has[(size_t) c] ? room : (size_t) 1, 0.0f);
+    // The audio thread reads data[0].size() for the room left.
+    if (! fresh->has[0])
+        fresh->data[0].assign (room, 0.0f);
+
+    takeMode.store (0);
+
+    {
+        const juce::SpinLock::ScopedLockType hold (takeLock);
+        take.swap (fresh);
+        takeRecorded.store (0);
+        takePos.store (0);
+    }
+
+    takeLabel = "Take " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S");
+    takeMode.store (1);
+    return {};
+}
+
+void EffectsRack::stopTake()
+{
+    const bool wasRecording = takeMode.exchange (0) == 1 || (take != nullptr && take->length == 0 && takeRecorded.load() > 0);
+
+    if (! wasRecording || take == nullptr)
+        return;
+
+    // Wait out the block the audio thread may be in the middle of, then nobody else touches the take.
+    { const juce::SpinLock::ScopedLockType hold (takeLock); }
+
+    // Trim the silence before the first note and after the last (keeping a breath at each end).
+    const juce::int64 recorded = takeRecorded.load();
+    juce::int64 first = recorded, last = -1;
+
+    for (int c = 0; c < numChains; ++c)
+        if (take->has[(size_t) c])
+        {
+            const auto& d = take->data[(size_t) c];
+            juce::int64 a = 0, b = recorded - 1;
+            while (a < recorded && std::abs (d[(size_t) a]) < (float) playingLevel) ++a;
+            while (b > a && std::abs (d[(size_t) b]) < (float) playingLevel) --b;
+            if (a < recorded) { first = juce::jmin (first, a); last = juce::jmax (last, b); }
+        }
+
+    juce::int64 start = 0, length = 0;
+
+    if (last >= first)
+    {
+        start = juce::jmax ((juce::int64) 0, first - (juce::int64) (0.1 * rate));
+        length = juce::jmin (recorded, last + (juce::int64) (0.6 * rate)) - start;
+    }
+
+    const juce::SpinLock::ScopedLockType hold (takeLock);
+
+    if (length < (juce::int64) (0.5 * rate))
+    {
+        take.reset();           // nothing was played
+        takeLabel = {};
+        takeRecorded.store (0);
+    }
+    else
+    {
+        take->start = start;
+        take->length = length;
+    }
+}
+
+juce::String EffectsRack::playTake()
+{
+    if (takeMode.load() == 1)
+        stopTake();
+
+    if (take == nullptr || take->length <= 0)
+        return "There is no take yet: press Record a take, play, and press it again.";
+
+    if (! enabled.load())
+        return "Tick 'Effects on' first.";
+
+    takePos.store (0);
+    takeMode.store (2);
+    return {};
+}
+
+juce::String EffectsRack::finishTake()
+{
+    stopTake();
+
+    if (take == nullptr)
+        return "Nothing was heard, so no take was kept. Check the chain's Input socket and its In meter.";
+
+    const auto file = takeFolder().getNonexistentChildFile (takeLabel, ".wav", false);
+    const auto error = saveTake (file);
+    return error.isEmpty() ? "Take kept (" + juce::String (takeSeconds(), 1) + " s) and saved as " + file.getFileName() + "." : "Take kept, but not saved: " + error;
+}
+
+juce::String EffectsRack::takeStep()
+{
+    switch (takeState())
+    {
+        case TakeState::recording:
+        {
+            auto note = finishTake();
+            if (take != nullptr)
+                playTake();
+            return note;
+        }
+        case TakeState::playing:
+            stopTake();
+            return "Take stopped. The chains hear their sockets again.";
+        case TakeState::none:
+        case TakeState::ready:
+            break;
+    }
+
+    const auto error = startTake();
+    return error.isEmpty() ? juce::String ("Recording a take: play (and sing), then press again.") : error;
+}
+
+juce::String EffectsRack::saveTake (const juce::File& file)
+{
+    if (take == nullptr || take->length <= 0 || takeMode.load() == 1)
+        return "There is no take to save.";
+
+    if (! file.getParentDirectory().createDirectory())
+        return "Could not make the folder " + file.getParentDirectory().getFullPathName();
+
+    file.deleteFile();
+    juce::String error;
+    auto made = wavWriter (file, take->rate, numChains, error);
+
+    if (made == nullptr)
+        return error;
+
+    // Nothing writes to a take once it has been recorded, so it can be read here without the lock.
+    juce::AudioBuffer<float> block (numChains, 8192);
+
+    for (juce::int64 at = 0; at < take->length; at += block.getNumSamples())
+    {
+        const int count = (int) juce::jmin ((juce::int64) block.getNumSamples(), take->length - at);
+        block.clear();
+        for (int c = 0; c < numChains; ++c)
+            if (take->has[(size_t) c])
+                block.copyFrom (c, 0, take->data[(size_t) c].data() + take->start + at, count);
+
+        if (! made->writeFromAudioSampleBuffer (block, 0, count))
+            return "Could not write all of " + file.getFullPathName();
+    }
+
+    takeLabel = file.getFileNameWithoutExtension();
+    return {};
+}
+
+juce::String EffectsRack::loadTake (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+
+    if (reader == nullptr || reader->lengthInSamples <= 0)
+        return "Could not read " + file.getFileName();
+
+    if (std::abs (reader->sampleRate - rate) > 0.5)
+        return file.getFileName() + " was recorded at " + juce::String (reader->sampleRate / 1000.0, 1) + " kHz and the app is running at "
+               + juce::String (rate / 1000.0, 1) + " kHz, so it cannot be played now.";
+
+    const auto length = (int) juce::jmin (reader->lengthInSamples, (juce::int64) (maxTakeSeconds * rate));
+    juce::AudioBuffer<float> b ((int) juce::jmax ((unsigned int) numChains, reader->numChannels), length);
+    b.clear();
+    reader->read (&b, 0, length, 0, true, true);
+
+    auto fresh = std::make_unique<Take>();
+    fresh->rate = rate;
+    fresh->length = length;
+
+    for (int c = 0; c < numChains; ++c)
+    {
+        // A file with fewer channels than chains (a recording made elsewhere) feeds the first chains.
+        const bool there = c < (int) reader->numChannels && b.getMagnitude (c, 0, length) > 0.0f;
+        fresh->has[(size_t) c] = there;
+        if (there)
+            fresh->data[(size_t) c].assign (b.getReadPointer (c), b.getReadPointer (c) + length);
+        else
+            fresh->data[(size_t) c].assign ((size_t) (c == 0 ? length : 1), 0.0f);
+    }
+
+    takeMode.store (0);
+
+    {
+        const juce::SpinLock::ScopedLockType hold (takeLock);
+        take.swap (fresh);
+        takeRecorded.store (length);
+        takePos.store (0);
+    }
+
+    takeLabel = file.getFileNameWithoutExtension();
+    return {};
+}
+
+juce::String EffectsRack::takeText() const
+{
+    const auto state = takeState();
+
+    if (state == TakeState::none)
+        return "Test take: none";
+
+    juce::StringArray held;
+    for (int c = 0; c < numChains; ++c)
+        if (takeHolds (c))
+            held.add (juce::String (c + 1));
+
+    return "Test take \"" + takeLabel + "\": " + juce::String (takeSeconds(), 1) + " s of chain" + (held.size() == 1 ? " " : "s ") + held.joinIntoString (" and ")
+           + (state == TakeState::recording ? ", recording now" : state == TakeState::playing ? ", playing round and round in place of the sockets" : ", not playing");
 }
 
 //==============================================================================
@@ -668,9 +954,18 @@ void EffectsRack::prepare (double sampleRate, int maxBlock, int numIns)
         s.chain.prepare (rate, blockCapacity);
         s.wet.assign ((size_t) blockCapacity, 0.0f);
         s.heard.assign ((size_t) blockCapacity, 0.0f);
+        s.takeDry.assign ((size_t) blockCapacity, 0.0f);
         s.trimNow = s.trim.load();
         s.hot = 0;
         s.wasOn = false;
+    }
+
+    // A take made at another rate would play at the wrong speed: it is dropped (audio is stopped here).
+    takeMode.store (0);
+    if (take != nullptr && std::abs (take->rate - rate) > 0.5)
+    {
+        take.reset();
+        takeLabel = {};
     }
 }
 
@@ -765,6 +1060,16 @@ void EffectsRack::process (const float* const* inputs, int numIns, int n) noexce
     {
         const float fadeStep = 1.0f / (float) juce::jmax (1.0, 0.010 * rate);
 
+        // The test take. The lock is only held by the message thread for a moment while it
+        // swaps takes; if it is busy this block carries on live.
+        const juce::SpinLock::ScopedTryLockType takeHold (takeLock);
+        Take* const tk = takeHold.isLocked() ? take.get() : nullptr;
+        const int takeNow = tk != nullptr ? takeMode.load() : 0;
+        const juce::int64 takeFade = (juce::int64) (0.005 * rate);
+        const bool takeRec = takeNow == 1, takePlay = takeNow == 2 && tk->length > takeFade * 4;
+        const juce::int64 recAt = takeRecorded.load(), playAt = takePos.load();
+        const juce::int64 recRoom = takeRec ? (juce::int64) tk->data[0].size() - recAt : 0;
+
         for (int c = 0; c < numChains; ++c)
         {
             auto& s = chains[(size_t) c];
@@ -777,6 +1082,26 @@ void EffectsRack::process (const float* const* inputs, int numIns, int n) noexce
 
             const float* dry = pick (s.source.load());
             const float* ref = pick (s.reference.load());
+            const auto chainStart = juce::Time::getHighResolutionTicks();
+
+            if (takeRec && tk->has[(size_t) c] && recRoom > 0)
+            {
+                std::copy (dry, dry + juce::jmin ((juce::int64) n, recRoom), tk->data[(size_t) c].begin() + recAt);
+            }
+            else if (takePlay && tk->has[(size_t) c])
+            {
+                // This chain's part of the take in place of its socket, eased in and out at the ends of the loop.
+                const float* from = tk->data[(size_t) c].data() + tk->start;
+                juce::int64 p = playAt;
+                for (int i = 0; i < n; ++i)
+                {
+                    const juce::int64 edge = juce::jmin (p, tk->length - 1 - p);
+                    s.takeDry[(size_t) i] = from[p] * (edge >= takeFade ? 1.0f : (float) edge / (float) takeFade);
+                    if (++p >= tk->length) p = 0;
+                }
+                dry = s.takeDry.data();
+            }
+
             raise (s.inPeak, peakOf (dry, n));
             raise (s.refPeak, peakOf (ref, n));
 
@@ -873,6 +1198,22 @@ void EffectsRack::process (const float* const* inputs, int numIns, int n) noexce
                         capturedSamples.fetch_add (n);
                 }
             }
+
+            // How much of the block this chain took (its effects and the little around them).
+            const auto chainLoadNow = (float) (juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - chainStart) * rate / (double) n);
+            s.loadAverage.store (s.loadAverage.load (std::memory_order_relaxed) * 0.999f + chainLoadNow * 0.001f, std::memory_order_relaxed);
+            raise (s.loadPeak, chainLoadNow);
+        }
+
+        if (takeRec)
+        {
+            takeRecorded.store (recAt + juce::jmin ((juce::int64) n, recRoom));
+            if (recRoom <= n)
+                takeMode.store (0);     // full: the message thread finishes it off on its next tick
+        }
+        else if (takePlay)
+        {
+            takePos.store ((playAt + n) % tk->length);
         }
     }
 
@@ -942,6 +1283,13 @@ juce::String EffectsRack::reportText() const
           << ", delay " << juce::String (s.chain.latencySamples() * 1000.0 / rate, 2) << " ms"
           << (s.guard.load() ? ", FEEDBACK GUARD switched it off" : "") << "\n";
 
+        if (r.on && enabled.load())
+        {
+            const auto load = chainLoad (c);
+            t << "  Processor: this chain uses " << juce::String (load.average * 100.0, 1) << "% of each block on average, "
+              << juce::String (load.busiest * 100.0, 1) << "% at its busiest in the last 10 seconds\n";
+        }
+
         const auto& m = s.chain.model();
 
         for (size_t i = 0; i < m.slots.size(); ++i)
@@ -964,6 +1312,7 @@ juce::String EffectsRack::reportText() const
     }
 
     t << pedalText();
+    t << takeText() << "\n";
 
     if (lastCapture != juce::File())
         t << "Last capture: " << lastCapture.getFullPathName() << "\n";

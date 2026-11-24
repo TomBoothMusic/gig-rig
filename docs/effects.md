@@ -1,7 +1,9 @@
 # The effects: how they are built, and how to add one
 
 Written 23 November 2026 with the first batch (drives, the Bass9 copy, the amp capture);
-the compressor and graphic EQ came on 24 November 2026.
+the compressor and graphic EQ came on 24 November 2026, the time effects that night, and the
+acoustic, vocal and bass batch (reverbs, flanger, Uni-Vibe, channel EQ, acoustic body, response
+files, the vocal harmony, the test take) on 25 November 2026.
 For a future Claude session: read this, then `CLAUDE.md` "Adding an effect", then the code.
 
 ## Where things are
@@ -14,9 +16,14 @@ For a future Claude session: read this, then `CLAUDE.md` "Adding an effect", the
 | Checks every effect must pass (self-test) | `src/effects/EffectChecks.cpp` |
 | Oversampling for clipping stages | `src/effects/Oversampler.h` |
 | Clipping curves shared by the drives | `src/effects/Shapers.h` |
+| Delay lines, an LFO, note values | `src/effects/DelayLine.h` |
+| Running part of an effect at half the rate (48 kHz inside 96 kHz) | `src/effects/HalfRate.h` |
+| Response files: WAV in and out, resampling, making one from a capture | `src/effects/ir/IrTools.*` |
 | One folder per effect | `src/effects/<id>/` |
-| The engine side: chains on sockets, returns, A/B, level match, Capture, amp capture | `src/EffectsRack.*` |
+| The engine side: chains on sockets, returns, A/B, level match, Capture, amp capture, the test take | `src/EffectsRack.*` |
 | The Effects and Amp capture tabs | `src/EffectsPanel.*` |
+| The responses folder, the response maker's wording, the starter presets | `src/Responses.*` |
+| Starter presets built into the app | `resources/presets/` |
 | Checks of the rack inside the engine | `src/EffectsSelfTest.cpp` |
 
 The effect code in `src/effects/` is plain C++ (no JUCE), so it can be built and tested on
@@ -115,6 +122,65 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
 - Switching a slot off fades it out in 10 ms, so delay and reverb tails stop. Spill-over (tails
   ringing on) would need the chain to keep feeding the effect silence while blending its output.
 
+## The acoustic, vocal and bass batch (25 November 2026)
+
+Ids: `plate`, `room`, `flanger`, `univibe`, `peq`, `body`, `ir`, `harmony`. Each folder's header
+says how its effect works; the points a future session needs:
+
+- **Where they belong.** Tom decided (25 Nov 2026) that vocal delays and reverbs live in the
+  mixer stage after the looper, and the harmony before the looper. `plate` and `room` (and the
+  delays) are ordinary effects here so he can hear them now; the mixer stage reuses the same
+  classes on its sends. Keep them free of anything chain-specific.
+- **`plate`** is Dattorro's plate (lengths scaled from 29761 Hz), `room` an 8-line feedback
+  delay network with a Householder mix. Both add the wet to the untouched dry, so Reverb at 0
+  is exactly the input. Their checks measure the ring time (5 to 35 dB down, times two).
+- **`peq`** uses state-variable filters (Simper's), which stay stable while their settings
+  glide. Low cut at 20 Hz and High cut at 20 kHz move right out of the audible range ("off").
+- **`body`** is Claude's own voicing of a BodyRez-style effect: fixed band-passes blended in
+  and out (GE-7 style, so the knob never clicks) and a squeeze of the 2 kHz region on hard
+  playing. It is not a measured copy. The measured copy is a response file:
+- **`ir`** plays a response file ("impulse response"): up to 4096 points at 48 kHz (85 ms),
+  a plain sum of products run through `HalfRate` at 96 kHz. Text setting `file` = a name in
+  `Documents/GigRig/Responses` (set with `ResponsePlayer::setFolder`, done in
+  `responses::setUp`) or a full path. Files at other rates are converted on load with
+  `ir::resampleResponse` (a response's points scale with the rate; plain audio does not).
+- **Making a response file.** The Amp capture tab's tick box "This is a tone-only pedal" (or
+  the button beside it, or `GigRig --make-response <capture.wav> <response.wav>`) runs
+  `ir::makeResponse` on a capture: it finds the delay by cross-correlation, averages the
+  response over the whole recording (Welch's method, H1), fades out where the test sound had
+  nothing, and writes a level-neutral 48 kHz file plus a .txt saying what it found. "Match" is
+  how much of what came back a file can explain; a pedal that compresses scores lower.
+- **`harmony`** (first version): a pitch tracker (McLeod's normalised difference on a
+  decimated, low-passed copy) and PSOLA grains two periods long, so formants stay put. `Key`
+  is a major key (shown with its relative minor), `Voice` a number of scale steps, and
+  `Harmony::interval()` turns the sung note into semitones. The lead passes untouched with no
+  delay; the harmony sings about 24 ms behind (two periods of 85 Hz). It is checked on a
+  synthetic vowel only: **Tom's voice is the real test**, and his findings should drive the
+  next version (tracking on real consonants and breath, guitar spill, grain artefacts).
+  Planned control (design doc): hold the harmony switch and turn the song encoder to change
+  key, the key shown on the switch's screen.
+- **`HalfRate`** has a few samples of delay at 96 kHz (measured at prepare and reported). Its
+  half-band filters are not linear-phase, so "the dry sound, late" is only true of level, not
+  sample for sample.
+
+## The test take
+
+`EffectsRack::startTake / stopTake / playTake` (buttons on the Effects tab, or one pedal switch
+through `takeStep`): records the dry input of every chain that is on, for up to a minute, and
+plays it back round and round in place of those chains' sockets, all in step. A chain that
+was off while recording stays live. Silence at either end is trimmed and the loop's ends are
+eased over 5 ms. Takes are saved as WAVs with one channel per chain (silent = not held) in
+`Documents/GigRig/Test takes`. The audio thread reaches the take under a try-lock, like the
+amp capture: the message thread only holds the lock for the moment it swaps takes.
+
+This is the tool for listening to a whole set-up hands-free, and for a fair A/B against a real
+pedal: an empty chain sends its part of the take out to the pedal, and the pedal's return is
+another chain's Reference.
+
+Each chain's share of the processor (`EffectsRack::chainLoad`: a running average and the
+busiest block in the last 10 seconds) is on the status line and in the report. An effect that
+is switched off still runs (so it can fade back in), so a full chain costs the same on or off.
+
 ## Presets and the rack's memory
 
 - A chain preset is a small text file in `Documents/GigRig/Effect presets/<name>.txt`:
@@ -124,6 +190,9 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   (`%APPDATA%\GigRig` on Windows, `~/.config/GigRig` on Linux). Deleting it starts afresh.
 - Captures (dry, reference, effects: 3-channel 24-bit WAV + a .txt of the settings) go to
   `Documents/GigRig/Effect captures`.
+- Starter presets (`resources/presets/*.txt`, listed in `src/Responses.cpp`) are copied into the
+  presets folder at start only if no preset of that name exists, so Tom's edits are safe. The
+  self-test loads each one and fails on an effect or setting that does not exist.
 
 ## The amp capture (for NAM models)
 
@@ -172,7 +241,7 @@ The 23 November 2026 captures (Break Up, Clean, Driven) are in the project files
 
 The amp checks expect a model: call `gigrig::fx::NamAmp::setModelFolder` and
 `setDefaultModel` first (with `resources/amp-models` copied under the names in
-`src/AmpModels.cpp`), and link the NAM core and Eigen.
+`src/AmpModels.cpp`), and link the NAM core and Eigen. The whole set takes about half a minute.
 
 ```cpp
 #include "EffectChecks.h"

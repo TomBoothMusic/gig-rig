@@ -76,7 +76,7 @@ MainComponent::MainComponent()
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 
-    setSize (980, 740);
+    setSize (980, 790);
     devicePanel.requestScan();
 }
 

@@ -1,8 +1,11 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <iostream>
+
 #include "AmpModels.h"
 #include "DeviceReport.h"
 #include "MainComponent.h"
+#include "Responses.h"
 #include "SelfTest.h"
 
 namespace gigrig
@@ -38,6 +41,19 @@ public:
             return;
         }
 
+        //   GigRig --make-response <capture.wav> <response.wav>   a response file from a capture of a tone-only pedal
+        if (args.contains ("--make-response"))
+        {
+            const int at = args.indexOf ("--make-response");
+            const auto made = at + 2 < args.size() ? responses::makeFromCapture (juce::File::getCurrentWorkingDirectory().getChildFile (args[at + 1].unquoted()),
+                                                                                juce::File::getCurrentWorkingDirectory().getChildFile (args[at + 2].unquoted()))
+                                                   : responses::Made { false, "Use: GigRig --make-response <capture.wav> <response.wav>", {} };
+            std::cout << made.text << std::endl;
+            setApplicationReturnValue (made.ok ? 0 : 1);
+            quit();
+            return;
+        }
+
         if (args.contains ("--report"))
         {
             const auto wrote = fileAfter ("--report").replaceWithText (scanDevices().toText());
@@ -49,6 +65,8 @@ public:
         // The amp models built into the app go to Documents/GigRig/Amp models before anything
         // can load an amp (the self-test uses its own copy).
         ampmodels::setUp (ampmodels::folder());
+        responses::setUp();
+        starterpresets::setUp (EffectsPanel::presetFolder());
 
         // Only one window at a time. Two copies would both hear the pedal and both loop, each with
         // its own timing, which sounds like loops drifting apart (it happened on 23 Nov 2026).

@@ -73,12 +73,20 @@ private:
     juce::OwnedArray<juce::ToggleButton> paramToggles;
     juce::OwnedArray<juce::TextButton> paramResets;
 
-    // For an effect that loads a file (the amp model): which one, and its folder.
+    // For an effect that loads a file (the amp's model, a response file): which one, and its folder.
     bool showModel = false;
+    std::string fileKey;        // "model" or "file": the effect's text setting the box sets
     juce::Label modelLabel;
     juce::ComboBox modelBox;
     juce::TextButton modelFolderButton { "Open folder" };
     juce::StringArray modelNames;
+
+    // The test take.
+    juce::Label takeHeading, takeLabel;
+    juce::TextButton takeRecordButton { "Record a take" }, takePlayButton { "Play the take" };
+    juce::ComboBox takeBox;
+    juce::Array<juce::File> takeFiles;
+    void refreshTakes();
 
     // Presets.
     juce::ComboBox presetBox;
@@ -124,7 +132,13 @@ private:
     juce::ComboBox outBox, inBox, guitarBox;
     juce::Slider levelSlider;
     juce::TextButton fromPlayingButton { "Set from my playing (play for 10 s)" }, startButton { "Start capture" },
-                     fileButton { "Use a test sound file..." }, folderButton { "Open captures folder" };
+                     fileButton { "Use a test sound file..." }, folderButton { "Open captures folder" },
+                     responseButton { "Make a response file from a capture..." };
+    juce::ToggleButton toneOnlyBox { "This is a tone-only pedal (BodyRez, an EQ): make a response file when the capture finishes" };
+    /** Makes a response file from a capture on a background thread, then shows what happened. */
+    void makeResponse (const juce::File& capture);
+    bool makingResponse = false;
+    juce::String responseNote;
     juce::File soundFile;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Rectangle<int> meterArea;

@@ -395,6 +395,156 @@ A chain holds 12 effects at most.
 Press **Copy effects results** and paste it, with what you'd change about each one (the
 spring's drip, how the tape wobbles, the analog delay's darkness). Attach any presets you save.
 
+## The effects, fifth batch: acoustic, vocal and bass chains
+
+This build has every effect the acoustic, vocal and bass chains need, so that all three chains
+(with the electric one) exist before effects are tied to songs. Nothing here changes the looper
+or the effects you have already set up.
+
+New effects, each its own box that can go anywhere in any chain:
+
+| Effect | What it is | Its knobs |
+|---|---|---|
+| **Acoustic body** | Makes a pickup sound more like the guitar's wooden body and less like a quack, in the spirit of the BodyRez. This is Claude's own voicing, not a measured copy of your pedal. | Body, Flip phase (for feedback), Level |
+| **Response file** | The measured copy: plays back the tone of a tone-only pedal captured on the Amp capture tab (your BodyRez at your setting). A straight wire until you choose a file. | Response file, Mix, Level |
+| **Channel EQ** | Mixer-style EQ: low cut, high cut, low and high shelves, two sweepable mids. For the finger-style boost and EQ, and for the voice. | Low cut, High cut, Low, High, Low-mid at, Low-mid, High-mid at, High-mid, Mid width, Level |
+| **Uni-Vibe** | The swirling, throbbing sound for Lightning Crashes. | Speed, Intensity, Mode (Chorus or Vibrato), Level |
+| **Flanger** | Jet-plane sweep (BF-2 style), for the vocal in Come As You Are. | Speed, Depth, Manual, Resonance, Mix |
+| **Vocal harmony** | Sings a second voice with yours, in the song's key. Your own voice passes through untouched. First version: see Part D. | Key, Voice, Harmony level |
+| **Plate reverb** | Bright, smooth studio plate for the voice. | Reverb, Decay, Pre-delay, Tone, Low cut |
+| **Room reverb** | A small room, a room or a hall. | Reverb, Size, Decay, Tone, Low cut |
+
+The acoustic chain uses the **Analog delay** and **Chorus** you already have, as you suggested.
+
+**Where the vocal delays and reverbs will live.** As decided on 25 November, vocal delay and
+reverb belong in the mixer stage, after the looper. The plate, the room and the delays are in
+the vocal chain here only so you can hear them now; the same effects move to the mixer's sends
+when that stage is built. The harmony stays in the chain, before the looper.
+
+Also new:
+
+- **Test take.** Play (and sing) once, then listen to it go round and round through the chains
+  while you turn knobs with both hands free. See Part A.
+- **Three starter presets** appear in the Presets list: **Starter - Acoustic**,
+  **Starter - Vocal** and **Starter - Bass (Bass9 copy)**. They are starting points. If you
+  change one and save it under the same name, the app never overwrites yours.
+- **Processor figures for each chain** on the status line and in the report, so we can see
+  what four full chains cost on your laptop.
+- A line that says what the chosen effect is doing (for the harmony: "hears A3, sings C4").
+
+### Setting up (about 10 minutes)
+
+The app needs your acoustic and your microphone **raw**, before the RC-600 and your pedals
+touch them, because the app is now doing that job.
+
+1. Plug the **acoustic** straight into a spare CQ socket (socket 10 is the one used for the
+   drive test). Plug the **microphone** straight into another spare socket (socket 6, say).
+   Set each gain so the meter is healthy and clear of red.
+2. On the CQ, turn those two channels **right down in the main mix and every aux**. You listen
+   to what comes back from the app, not to the channel itself. (Both at once would sound
+   hollow, because the app's copy arrives 9 ms later.)
+3. In the app, on the **Effects** tab, tick **Effects on**. Then:
+   - Click a spare chain, tick **This chain on**, name it **Acoustic**, Input = the acoustic's
+     socket, **Out to = Returns 5+6 (the USB stereo channel)**, which already goes to your
+     speakers for the looper. Choose **Starter - Acoustic** under Presets and press **Load**.
+   - Click another chain, tick **This chain on**, name it **Vocal**, Input = the microphone's
+     socket, Out to = Returns 5+6. Load **Starter - Vocal**.
+4. Play and sing. You should hear both through the speakers with their effects. Keep the
+   speakers well away from the microphone while reverb is on: a ringing tail means feedback.
+
+### Part A: the test take
+
+1. With the Acoustic and Vocal chains on, press **Record a take**. Play and sing a verse and a
+   chorus (up to a minute). Press the button again (it says **Stop recording**).
+2. Press **Play the take**. Your performance now goes round and round into both chains in
+   place of the sockets. Put the guitar down and turn knobs.
+3. **Stop the take** gives the chains their sockets back.
+
+Good to know:
+
+- A take records every chain that is **on**. A chain that was off stays live, so you can record
+  a take of the guitar alone and then sing over it with the Vocal chain.
+- Takes are saved in Documents\GigRig\Test takes and listed in the box beside the buttons, so a
+  good one can be used again another day without picking up the guitar.
+- Hands full? Under **RC-600 switches for the effects**, choose CTL3 or CTL4 and
+  **Test take: record, then play it round, then stop**. One press records, the next keeps it
+  and plays it, the next stops.
+- Level match and Capture work on a take the same as on live playing.
+
+### Part B: the acoustic chain (20 minutes)
+
+1. Play a take through **Starter - Acoustic**. Click **Acoustic body** and move **Body** between
+   0 (nothing) and 10. Say what you would change: more low end, less top, more or less of the
+   squeeze on hard strums (the line "Turning down by" shows it working).
+2. Tick the others on one at a time: **Channel EQ** (set up as a finger-style boost: change it
+   to taste), **Chorus**, **Tremolo**, **Vibrato**, **Uni-Vibe**, and **Room reverb** as a
+   stand-in for the mixer's reverb. The **Analog delay** is on with your electric settings.
+3. Save what you like as your own preset.
+
+### Part C: a measured copy of your BodyRez (15 minutes, optional but worth doing)
+
+The app can measure your BodyRez and play its exact tone back.
+
+1. Set the BodyRez knob where you always have it. Patch a free CQ aux output into the
+   **BodyRez's input** and the **BodyRez's output** into a CQ socket (socket 8 is fine), the
+   same way you patched the Dream for its captures. Aux output level **well down** to start.
+2. Open the **Amp capture** tab. Name it **BodyRez**. Choose the return and the socket.
+   Press **Set from my playing** and play the acoustic (on its own socket) for ten seconds.
+3. Tick **This is a tone-only pedal (BodyRez, an EQ)...** and press **Start capture**. It takes
+   about three minutes.
+4. When it finishes, the app makes the file by itself and says what it found: how late and how
+   loud the pedal was, and **how much of what the pedal did a file can explain**. Near 100%
+   means the file is a close copy. Much lower means the pedal also squashes the sound, which a
+   file cannot hold; the Acoustic body effect has a squeeze for that.
+5. Back on the Effects tab, click **Response file** in the Acoustic chain, choose
+   **BodyRez.wav** in its **Response file** box and tick it **On**. Untick Acoustic body, or
+   keep a little of both.
+
+To compare with the real pedal on the very same playing: make an empty chain called
+**To BodyRez** with the acoustic's socket as its Input and **Out to** the return that feeds the
+BodyRez. Set the Acoustic chain's Reference to the socket the BodyRez comes back on. Record a
+take with both chains on, play it, and flip **Effects / Reference**.
+
+### Part D: the vocal chain and the harmony (20 minutes)
+
+1. Record a take of singing (or sing live) through **Starter - Vocal**. The **Channel EQ** has
+   a 100 Hz low cut. **Plate reverb** is on as a stand-in for the mixer's.
+2. Tick **Vocal harmony** on. Set **Key** to the song's key (each key is shown with its minor,
+   which uses the same notes: for a song in A minor choose **C / Am**). Set **Voice**: a 3rd
+   above is the classic one; also 3rd below, 5th, 6th, octave, or **Unison (double)**.
+   **Harmony level** sets how loud the second voice is.
+3. Watch the status line: it says which note it hears and which it sings. Try Cocaine in F and
+   Lucky in A against what the RC-600's Harmonist does.
+4. Tick **Flanger** on for Come As You Are. Try the **Tape delay** and **Digital delay**.
+
+This is a first version of the harmony, tested here only on a made-up voice, so your ears are
+the real test. Things to listen for and tell Claude: wrong notes or warbling (and on which
+notes or words), a robotic or grainy sound, the harmony arriving late (it sings about 24 ms
+behind you), how it copes with the guitar spilling into the microphone, and whether changing
+Key mid-song is clean. Holding the harmony switch and turning the song encoder to change key
+comes with the real board; for now Key is the box on screen.
+
+### Part E: the bass chain (10 minutes)
+
+1. Click a spare chain, tick **This chain on**, name it **Bass**. Set its **Input to the same
+   socket as the Acoustic chain**: two chains can share a socket. Load
+   **Starter - Bass (Bass9 copy)**.
+2. Set **Looper hears it as** to socket 9 (where your real Bass9 is plugged in), so bass loops
+   land on the track they always have. Out to = Returns 5+6.
+3. To compare with the real Bass9: set Reference to the Bass9's socket and flip
+   **Effects / Reference**. A take makes this easy: both hear the same notes.
+
+In the finished rig the bass chain only sounds while its switch is held or latched. For now
+it is simply on or off with **This chain on** (or put **Chain on/off** on a pedal switch).
+
+### What to send Claude
+
+Press **Copy effects results** with all four chains switched on and a take playing, and paste
+it: it now lists what each chain costs the processor. Say what you would change about each new
+effect, attach any presets you save, and for the BodyRez paste the line the Amp capture tab
+showed when it made the file. A **Capture** of the vocal chain with the harmony on (it holds
+your dry voice and the result) tells Claude more about the harmony than any description.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.
