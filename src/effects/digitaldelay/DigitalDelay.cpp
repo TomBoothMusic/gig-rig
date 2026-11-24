@@ -13,6 +13,8 @@ DigitalDelay::DigitalDelay()
     pTone     = addParam ("tone",      "Tone",     "",   0.0f, 10.0f, 8.0f);
     pMod      = addParam ("mod",       "Mod depth", "",  0.0f, 10.0f, 2.0f);
     pModRate  = addParam ("modrate",   "Mod speed", "Hz", 0.1f, 5.0f, 0.6f);
+    // New settings go at the end. The order of these three is saved in presets: never change it.
+    pThrow    = addChoice ("throw",    "Throw", { "Off: the delay is always on", "Ready: clean until the switch is held", "Catching: the switch is held" }, 0);
 }
 
 double DigitalDelay::targetSamples() const noexcept
@@ -37,6 +39,7 @@ void DigitalDelay::onReset() noexcept
     lfo.phase = 0.0;
     tapA = tapB = targetSamples();
     fadeLeft = 0;
+    send = (int) std::lround (value (pThrow)) == 1 ? 0.0f : 1.0f;
 }
 
 void DigitalDelay::processChunk (float* const* ch, int numCh, int n) noexcept
@@ -62,6 +65,11 @@ void DigitalDelay::processChunk (float* const* ch, int numCh, int n) noexcept
     const double modSamples = value (pMod) * 0.1 * 0.0012 * rate;     // up to 1.2 ms on the repeats
     const double modHz = value (pModRate);
 
+    // The throw: the way into the delay is shut while it waits for the switch. It opens in
+    // 5 ms and shuts in 15, so the first word is caught whole and the last one is not chopped.
+    const float sendTarget = (int) std::lround (value (pThrow)) == 1 ? 0.0f : 1.0f;
+    const float sendUp = (float) (1.0 / (0.005 * rate)), sendDown = (float) (1.0 / (0.015 * rate));
+
     for (int i = 0; i < n; ++i)
     {
         const double m = modSamples * (1.0 + lfo.next (modHz, rate));
@@ -78,7 +86,8 @@ void DigitalDelay::processChunk (float* const* ch, int numCh, int n) noexcept
 
         const float x = ch[0][i];
         const float repeat = fbHigh.run (fbLow.run (back, 0), 0);
-        float in = x + (float) (fb * repeat);
+        send = sendTarget > send ? std::min (sendTarget, send + sendUp) : std::max (sendTarget, send - sendDown);
+        float in = send * x + (float) (fb * repeat);
         if (std::abs (in) > 1.5f) in = 1.5f * std::tanh (in / 1.5f);   // only a safety, never heard at sane levels
         if (std::abs (in) < 1.0e-20f) in = 0.0f;
         line.write (in);

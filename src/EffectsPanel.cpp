@@ -1,5 +1,6 @@
 #include "EffectsPanel.h"
 #include "AmpModels.h"
+#include "Responses.h"
 #include "effects/Registry.h"
 
 namespace gigrig
@@ -105,7 +106,12 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     style::body (listenLabel, "Listen to");
     style::body (modelLabel, "Model");
     style::combo (modelBox);
-    modelFolderButton.onClick = [] { ampmodels::folder().createDirectory(); ampmodels::folder().startAsProcess(); };
+    modelFolderButton.onClick = [this]
+    {
+        const auto folder = fileKey == "file" ? responses::folder() : ampmodels::folder();
+        folder.createDirectory();
+        folder.startAsProcess();
+    };
     for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
         addChildComponent (c);
     style::body (levelLabel, "Chain level");
@@ -162,6 +168,63 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     tempoLabel.setFont (juce::FontOptions (13.0f));
     tempoLabel.setColour (juce::Label::textColourId, style::textDim);
     addAndMakeVisible (tempoLabel);
+
+    // The test take: play once, then listen hands-free while turning knobs.
+    style::body (takeHeading, "Test take");
+    takeLabel.setFont (juce::FontOptions (13.0f));
+    takeLabel.setColour (juce::Label::textColourId, style::textDim);
+    addAndMakeVisible (takeHeading);
+    addAndMakeVisible (takeLabel);
+    style::combo (takeBox);
+    takeBox.setTooltip ("Takes saved earlier (in Documents\\GigRig\\Test takes). Choosing one loads it.");
+    addAndMakeVisible (takeBox);
+    takeRecordButton.setTooltip ("Records what goes into every chain that is switched on (before the effects), for up to a minute. Press again when you have finished playing.");
+    takePlayButton.setTooltip ("Plays the take round and round into the chains in place of their sockets, so you can turn knobs and listen with your hands free");
+    takeRecordButton.onClick = [this]
+    {
+        if (rack.takeState() == EffectsRack::TakeState::recording)
+        {
+            rack.takeNote = rack.finishTake();
+            refreshTakes();
+        }
+        else
+        {
+            const auto error = rack.startTake();
+            rack.takeNote = error.isEmpty() ? juce::String ("Recording a take: play (and sing), then press Stop recording.") : error;
+        }
+    };
+    takePlayButton.onClick = [this]
+    {
+        if (rack.takeState() == EffectsRack::TakeState::playing)
+        {
+            rack.stopTake();
+            rack.takeNote = "Take stopped. The chains hear their sockets again.";
+        }
+        else
+        {
+            const bool wasRecording = rack.takeState() == EffectsRack::TakeState::recording;
+            if (wasRecording)
+            {
+                rack.takeNote = rack.finishTake();
+                refreshTakes();
+            }
+            const auto error = rack.playTake();
+            if (error.isNotEmpty())
+                rack.takeNote = error;
+            else if (! wasRecording)
+                rack.takeNote = {};
+        }
+    };
+    takeBox.onChange = [this]
+    {
+        const auto i = takeBox.getSelectedId() - 1;
+        if (i < 0 || i >= takeFiles.size())
+            return;
+        const auto error = rack.loadTake (takeFiles[i]);
+        rack.takeNote = error.isEmpty() ? "Loaded the take \"" + takeFiles[i].getFileNameWithoutExtension() + "\". Press Play the take." : error;
+    };
+    addAndMakeVisible (takeRecordButton);
+    addAndMakeVisible (takePlayButton);
 
     captureButton.onClick = [this]
     {
@@ -294,12 +357,13 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
         pedalSwitchBoxes[(size_t) i].setTooltip ("The chosen switch stops working for the looper while the effects are on");
     }
 
-    rack.onPedalAction = [this] { refresh(); };
+    rack.onPedalAction = [this] { refresh(); refreshTakes(); };
 
     // What the app remembered from last time.
     rack.loadStateText (EffectsRack::stateFile().loadFileAsString());
     refresh();
     refreshPresets();
+    refreshTakes();
     startTimerHz (timerHz);
 }
 
@@ -308,6 +372,10 @@ EffectsPanel::~EffectsPanel()
     stopTimer();
     rack.onPedalAction = nullptr;
     rack.stopCapture();
+    if (rack.takeState() == EffectsRack::TakeState::recording)
+        rack.finishTake();
+    else
+        rack.stopTake();
     rack.saveState();
 }
 
@@ -519,42 +587,76 @@ void EffectsPanel::rebuildEditor()
         }
     }
 
-    // A file to load (the amp's model): a list of what is in the models folder.
+    // A file to load (the amp's model, a response file): a list of what is in its folder.
     const auto keys = fx->textKeys();
-    if (std::find (keys.begin(), keys.end(), "model") != keys.end())
+    fileKey = std::find (keys.begin(), keys.end(), "model") != keys.end() ? "model"
+            : std::find (keys.begin(), keys.end(), "file") != keys.end() ? "file" : "";
+
+    if (! fileKey.empty())
     {
         showModel = true;
-        modelNames = ampmodels::names (ampmodels::folder());
-        const auto now = juce::String (fx->getText ("model"));
+        const bool response = fileKey == "file";
+        modelLabel.setText (response ? "Response file" : "Model", juce::dontSendNotification);
+        modelNames.clear();
+
+        if (response)
+        {
+            // Listed with ".wav", which is how the effect looks them up; the first line is "none".
+            modelNames.add ("(none: a straight wire)");
+            auto files = responses::folder().findChildFiles (juce::File::findFiles, false, "*.wav");
+            files.sort();
+            for (const auto& f : files)
+                modelNames.add (f.getFileName());
+        }
+        else
+        {
+            modelNames = ampmodels::names (ampmodels::folder());
+        }
+
+        const auto now = juce::String (fx->getText (fileKey));
         if (now.isNotEmpty() && ! modelNames.contains (now))
             modelNames.add (now);
 
         modelBox.clear (juce::dontSendNotification);
         for (int i = 0; i < modelNames.size(); ++i)
             modelBox.addItem (modelNames[i], i + 1);
-        modelBox.setSelectedId (modelNames.indexOf (now) + 1, juce::dontSendNotification);
+        modelBox.setSelectedId (now.isEmpty() && response ? 1 : modelNames.indexOf (now) + 1, juce::dontSendNotification);
 
         const int s = slotIndex;
-        modelBox.onChange = [this, s]
+        modelBox.onChange = [this, s, response]
         {
-            const auto name = modelNames[modelBox.getSelectedId() - 1];
-            if (name.isEmpty())
+            const int id = modelBox.getSelectedId();
+            const auto name = response && id == 1 ? juce::String() : modelNames[id - 1];
+            if (id <= 0 || (name.isEmpty() && ! response))
                 return;
-            rack.chain (chainIndex).setText (s, "model", name.toStdString());
+            rack.chain (chainIndex).setText (s, fileKey, name.toStdString());
             rack.markChanged();
-            if (auto* f = rack.chain (chainIndex).effect (s))
-                captureNote = "Amp: " + juce::String (f->status());
         };
 
         for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
             c->setVisible (true);
-        captureNote = "Amp: " + juce::String (fx->status());
     }
 
     resized();
 }
 
 //==============================================================================
+void EffectsPanel::refreshTakes()
+{
+    takeFiles = EffectsRack::takeFolder().findChildFiles (juce::File::findFiles, false, "*.wav");
+    takeFiles.sort();
+    takeBox.clear (juce::dontSendNotification);
+
+    for (int i = 0; i < takeFiles.size(); ++i)
+    {
+        takeBox.addItem (takeFiles[i].getFileNameWithoutExtension(), i + 1);
+        if (takeFiles[i].getFileNameWithoutExtension() == rack.takeName())
+            takeBox.setSelectedId (i + 1, juce::dontSendNotification);
+    }
+
+    takeBox.setTextWhenNothingSelected (takeFiles.isEmpty() ? "No saved takes yet" : "Saved takes");
+}
+
 void EffectsPanel::refreshPresets()
 {
     presetFiles = presetFolder().findChildFiles (juce::File::findFiles, false, "*.txt");
@@ -639,6 +741,7 @@ void EffectsPanel::fillPedalBoxes()
             sb.addItem (switchName (sw), 10 + sw);
 
         ab.addItem ("Tap tempo (for synced delays)", 3);
+        ab.addItem ("Test take: record, then play it round, then stop", 5);
 
         for (int c = 0; c < EffectsRack::numChains; ++c)
         {
@@ -646,6 +749,7 @@ void EffectsPanel::fillPedalBoxes()
             ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): A/B", c * 100 + 1);
             ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): on/off", c * 100 + 2);
             ab.addItem ("Chain " + juce::String (c + 1) + ": whammy bend while held", c * 100 + 4);
+            ab.addItem ("Chain " + juce::String (c + 1) + ": delay throw while held", c * 100 + 6);
 
             const auto& m = rack.chain (c).model();
             for (int k = 0; k < (int) m.slots.size(); ++k)
@@ -655,7 +759,7 @@ void EffectsPanel::fillPedalBoxes()
 
         const auto a = rack.pedalAssign (i);
         sb.setSelectedId (a.sw < 0 ? 1 : 10 + a.sw, juce::dontSendNotification);
-        ab.setSelectedId (a.action == 2 ? 3 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : a.action == 3 ? 4 : 11 + a.action - 10), juce::dontSendNotification);
+        ab.setSelectedId (a.action == 2 ? 3 : a.action == 4 ? 5 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : a.action == 3 ? 4 : a.action == 5 ? 6 : 11 + a.action - 10), juce::dontSendNotification);
     }
 }
 
@@ -667,7 +771,7 @@ void EffectsPanel::pushPedal (int i)
     a.sw = sid >= 10 ? sid - 10 : -1;
     a.chain = aid / 100;
     const auto code = aid % 100;
-    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : code == 4 ? 3 : 10 + code - 11;
+    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : code == 4 ? 3 : code == 5 ? 4 : code == 6 ? 5 : 10 + code - 11;
     rack.setPedalAssign (i, a);
 }
 
@@ -723,6 +827,26 @@ void EffectsPanel::timerCallback()
         }
     }
 
+    {
+        const auto state = rack.takeState();
+        takeRecordButton.setButtonText (state == EffectsRack::TakeState::recording ? "Stop recording (" + juce::String (rack.takeSeconds(), 0) + " s)" : juce::String ("Record a take"));
+        takePlayButton.setButtonText (state == EffectsRack::TakeState::playing ? "Stop the take" : "Play the take");
+        takePlayButton.setEnabled (state != EffectsRack::TakeState::none);
+        takeRecordButton.setColour (juce::TextButton::buttonColourId, state == EffectsRack::TakeState::recording ? style::red.darker (0.3f) : style::panel);
+        takePlayButton.setColour (juce::TextButton::buttonColourId, state == EffectsRack::TakeState::playing ? style::green.darker (0.3f) : style::panel);
+        takeLabel.setText (state == EffectsRack::TakeState::none ? juce::String ("None yet. It records every chain that is on, then plays it back into them.")
+                                                                 : rack.takeText().fromFirstOccurrenceOf (": ", false, false),
+                           juce::dontSendNotification);
+
+        // A take that filled its minute has ended by itself: keep it like any other.
+        if ((bool) takeRecordButton.getProperties()["recording"] && state != EffectsRack::TakeState::recording && rack.takeNote.startsWith ("Recording"))
+        {
+            rack.takeNote = rack.finishTake() + " (It stopped at the one minute a take can hold.)";
+            refreshTakes();
+        }
+        takeRecordButton.getProperties().set ("recording", state == EffectsRack::TakeState::recording);
+    }
+
     if (rack.isCapturing())
     {
         captureButton.setButtonText ("Stop capture (" + juce::String (rack.captureSeconds(), 0) + " s)");
@@ -749,11 +873,19 @@ void EffectsPanel::timerCallback()
         if (rack.guardTripped (chainIndex))
             s << "FEEDBACK GUARD: this chain's output was stuck at full level, so it was switched off. Check the mixer is not sending the return back into the input socket, then tick 'This chain on'.\n";
 
+        const auto load = rack.chainLoad (chainIndex);
         s << "Delay through this chain: " << juce::String (rack.chain (chainIndex).latencySamples() * 1000.0 / rack.sampleRate(), 2)
-          << " ms.   Busiest block: the effects used " << juce::String (loadShown * 100.0, 1) << "% of the time available.\n";
+          << " ms.   Processor: this chain " << juce::String (load.average * 100.0, 1) << "% on average, " << juce::String (load.busiest * 100.0, 1)
+          << "% at its busiest; all chains together " << juce::String (loadShown * 100.0, 1) << "% at their busiest.\n";
 
         if (levelNote.isNotEmpty()) s << levelNote << "\n";
         if (captureNote.isNotEmpty()) s << captureNote << "\n";
+
+        if (rack.takeNote.isNotEmpty()) s << rack.takeNote << "\n";
+
+        // The chosen effect's own line (the amp: which model; the harmony: the note it hears and the one it sings).
+        if (auto* f = rack.chain (chainIndex).effect (slotIndex); f != nullptr && ! f->status().empty())
+            s << "This effect: " << juce::String (f->status()) << "\n";
 
         // The chosen effect's own meter (the gate: how far it is turning down now).
         if (auto* f = rack.chain (chainIndex).effect (slotIndex); f != nullptr && f->hasMeter())
@@ -838,6 +970,14 @@ void EffectsPanel::resized()
         row.removeFromLeft (8);
         tapButton.setBounds (row.removeFromLeft (90).reduced (2, 2));
         tempoLabel.setBounds (row);
+
+        area.removeFromTop (2);
+        row = area.removeFromTop (30);
+        takeHeading.setBounds (row.removeFromLeft (80));
+        takeRecordButton.setBounds (row.removeFromLeft (170).reduced (0, 2));
+        takePlayButton.setBounds (row.removeFromLeft (130).reduced (4, 2));
+        takeBox.setBounds (row.removeFromLeft (200).reduced (0, 2));
+        takeLabel.setBounds (row.reduced (6, 0));
     }
 
     area.removeFromTop (6);
@@ -951,7 +1091,8 @@ AmpCapturePanel::AmpCapturePanel (AudioEngine& e)
     : engine (e)
 {
     style::body (stepsLabel,
-        "Records your amp pedal (the Dream '65) so Claude can make a copy of it. One capture per amp setting you use.\n"
+        "Records your amp pedal (the Dream '65) so Claude can make a copy of it. One capture per amp setting you use. "
+        "A tone-only pedal (the BodyRez) is captured the same way, with the tick box below: the app makes its copy by itself.\n"
         "1. Patch a free CQ aux output into the Dream's input, and the Dream's output straight into a CQ input socket (socket 8 in place of the pedalboard's lead is fine).\n"
         "2. On the CQ, send the return chosen below to that output only (not to the main speakers), output level well down.\n"
         "3. Set the Dream as you play it, but with its reverb and vibrato/tremolo depth OFF (the model cannot learn effects that move; the app adds them back later). Leave its speaker emulation on. Type a name for the setting, for example \"Dream A edge of breakup\".\n"
@@ -1040,7 +1181,23 @@ AmpCapturePanel::AmpCapturePanel (AudioEngine& e)
 
     folderButton.onClick = [] { captureFolder().createDirectory(); captureFolder().startAsProcess(); };
 
-    for (auto* b : { &fromPlayingButton, &startButton, &fileButton, &folderButton })
+    // A tone-only pedal needs no training: its capture becomes a response file here and now.
+    toneOnlyBox.setColour (juce::ToggleButton::textColourId, style::textMain);
+    toneOnlyBox.setColour (juce::ToggleButton::tickColourId, style::green);
+    toneOnlyBox.setTooltip ("For a pedal that only changes the tone, such as the TC BodyRez or an EQ. Not for an amp or a drive: those need a model, which Claude trains from the capture.");
+    addAndMakeVisible (toneOnlyBox);
+    responseButton.setTooltip ("Pick a capture made earlier (a WAV in Documents\\GigRig\\Amp captures) and make a response file from it");
+    responseButton.onClick = [this]
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Choose a capture of a tone-only pedal (WAV)", captureFolder(), "*.wav");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+        {
+            if (fc.getResult().existsAsFile())
+                makeResponse (fc.getResult());
+        });
+    };
+
+    for (auto* b : { &fromPlayingButton, &startButton, &fileButton, &folderButton, &responseButton })
         addAndMakeVisible (b);
 
     startTimerHz (20);
@@ -1072,12 +1229,41 @@ void AmpCapturePanel::start()
     note = error.isEmpty() ? "Capturing \"" + setup.name + "\"..." : error;
 }
 
+void AmpCapturePanel::makeResponse (const juce::File& capture)
+{
+    if (makingResponse)
+        return;
+
+    makingResponse = true;
+    responseNote = "Working out a response file from " + capture.getFileName() + " (a few seconds)...";
+    // The name of the capture without its date and time, so "BodyRez 10 oclock 2026-11-25 14-03-10.wav" makes "BodyRez 10 oclock.wav".
+    auto name = capture.getFileNameWithoutExtension();
+    if (name.length() > 20 && name.substring (name.length() - 19).containsOnly ("0123456789- "))
+        name = name.dropLastCharacters (20).trim();
+    const auto target = responses::folder().getChildFile (juce::File::createLegalFileName (name.isEmpty() ? capture.getFileNameWithoutExtension() : name) + ".wav");
+
+    juce::Thread::launch ([capture, target, safe = juce::Component::SafePointer<AmpCapturePanel> (this)]
+    {
+        const auto made = responses::makeFromCapture (capture, target);
+        juce::MessageManager::callAsync ([safe, made]
+        {
+            if (safe != nullptr)
+            {
+                safe->responseNote = made.text;
+                safe->makingResponse = false;
+            }
+        });
+    });
+}
+
 juce::String AmpCapturePanel::reportText() const
 {
     const auto& rack = engine.effects();
     juce::String t = "--- Amp capture ---\n";
     t << (rack.isAmpCapturing() ? "Capturing now, " + juce::String (rack.ampCaptureProgress() * 100.0, 0) + "% done\n" : juce::String());
     t << (rack.lastAmpCaptureFile() != juce::File() ? "Last capture: " + rack.lastAmpCaptureFile().getFullPathName() + "\n" : "No capture made yet\n");
+    if (responseNote.isNotEmpty())
+        t << "Response file: " << responseNote << "\n";
     return t;
 }
 
@@ -1120,7 +1306,15 @@ void AmpCapturePanel::timerCallback()
             {
                 startButton.setButtonText ("Start capture");
                 if (rack.lastAmpCaptureFile().existsAsFile() && note.startsWith ("Capturing"))
-                    note = "Done: saved " + rack.lastAmpCaptureFile().getFileName() + ". Send that WAV file (and the .txt beside it) to Claude.";
+                {
+                    if (toneOnlyBox.getToggleState())
+                    {
+                        note = "Done: saved " + rack.lastAmpCaptureFile().getFileName() + ".";
+                        makeResponse (rack.lastAmpCaptureFile());
+                    }
+                    else
+                        note = "Done: saved " + rack.lastAmpCaptureFile().getFileName() + ". Send that WAV file (and the .txt beside it) to Claude.";
+                }
             }
         }
     }
@@ -1128,6 +1322,9 @@ void AmpCapturePanel::timerCallback()
         startButton.setButtonText ("Stop (" + juce::String (progress * 100.0, 0) + "%, " + juce::String (rack.ampCaptureSeconds(), 0) + " s)");
 
     juce::String s = note;
+
+    if (responseNote.isNotEmpty())
+        s << "\n" << responseNote;
 
     if (rack.isAmpCapturing() && returnDb < -60.0f && rack.ampCaptureSeconds() > 4.0)
         s << "\nNothing is coming back on " << inBox.getText() << ": check the cables and the CQ send to the Dream.";
@@ -1168,7 +1365,7 @@ void AmpCapturePanel::paint (juce::Graphics& g)
 void AmpCapturePanel::resized()
 {
     auto area = getLocalBounds().reduced (12, 8);
-    stepsLabel.setBounds (area.removeFromTop (150));
+    stepsLabel.setBounds (area.removeFromTop (168));
     area.removeFromTop (6);
 
     const auto row = [&area] (juce::Label& label, juce::Component& c, int w)
@@ -1191,6 +1388,11 @@ void AmpCapturePanel::resized()
     startButton.setBounds (buttons.removeFromLeft (200).reduced (0, 2));
     fileButton.setBounds (buttons.removeFromLeft (300).reduced (6, 2));
     folderButton.setBounds (buttons.removeFromLeft (180).reduced (6, 2));
+
+    area.removeFromTop (4);
+    auto tone = area.removeFromTop (30);
+    responseButton.setBounds (tone.removeFromRight (290).reduced (6, 2));
+    toneOnlyBox.setBounds (tone);
 
     area.removeFromTop (8);
     meterArea = area.removeFromTop (48).withWidth (juce::jmin (600, area.getWidth()));

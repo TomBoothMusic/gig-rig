@@ -10,6 +10,14 @@
 #include "vibrato/Vibrato.h"
 #include "whammy/Whammy.h"
 #include "bass9/Bass9.h"
+#include "body/AcousticBody.h"
+#include "flanger/Flanger.h"
+#include "harmony/Harmony.h"
+#include "ir/ResponsePlayer.h"
+#include "peq/ChannelEq.h"
+#include "plate/PlateReverb.h"
+#include "room/RoomReverb.h"
+#include "univibe/UniVibe.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
 #include "comp/Comp1176.h"
@@ -35,6 +43,12 @@ void delayChecks (const std::string& id, const Check&);
 void tremoloChecks (const Check&);
 void springChecks (const Check&);
 void modulationChecks (const std::string& id, const Check&);
+void reverbChecks (const std::string& id, const Check&);
+void sweepChecks (const std::string& id, const Check&);
+void channelEqChecks (const Check&);
+void bodyChecks (const Check&);
+void responseChecks (const Check&);
+void harmonyChecks (const Check&);
 void whammyChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
@@ -75,6 +89,22 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Vibrato>(); }, [] (const Check& c) { modulationChecks ("vibrato", c); } },
         { "chorus",       "Chorus",                "Modulation", "Analog-style chorus (CE-2): two swept, slightly dark copies with the dry guitar.",
           [] { return std::make_unique<Chorus>(); }, [] (const Check& c) { modulationChecks ("chorus", c); } },
+        { "flanger",      "Flanger",               "Modulation", "Jet-plane sweep (BF-2 style): a very short swept copy fed back on itself. For the vocal in Come As You Are, or a guitar.",
+          [] { return std::make_unique<Flanger>(); }, [] (const Check& c) { sweepChecks ("flanger", c); } },
+        { "univibe",      "Uni-Vibe",              "Modulation", "The swirling, throbbing phase sound of a Uni-Vibe (rotary-speaker style), with its lopsided lamp pulse. Chorus or Vibrato.",
+          [] { return std::make_unique<UniVibe>(); }, [] (const Check& c) { sweepChecks ("univibe", c); } },
+        { "plate",        "Plate reverb",          "Time", "Bright, smooth studio plate for the voice. A simple one to try now; its home will be the mixer.",
+          [] { return std::make_unique<PlateReverb>(); }, [] (const Check& c) { reverbChecks ("plate", c); } },
+        { "room",         "Room reverb",           "Time", "Small room, room or hall around an acoustic guitar or a voice. A simple one to try now; its home will be the mixer.",
+          [] { return std::make_unique<RoomReverb>(); }, [] (const Check& c) { reverbChecks ("room", c); } },
+        { "peq",          "Channel EQ",            "Utility", "Mixer-style EQ: low cut, high cut, low and high shelves and two sweepable mid bands. For the acoustic's boost-and-EQ sounds and the voice.",
+          [] { return std::make_unique<ChannelEq>(); }, channelEqChecks },
+        { "body",         "Acoustic body",         "Acoustic", "Makes a pickup sound more like the guitar's wooden body and less like a quack (BodyRez style): one Body knob and a phase flip for feedback.",
+          [] { return std::make_unique<AcousticBody>(); }, bodyChecks },
+        { "ir",           "Response file",         "Acoustic", "Plays back the tone of a tone-only pedal measured on the Amp capture tab (the BodyRez at your setting), or any short response WAV in Documents\\GigRig\\Responses.",
+          [] { return std::make_unique<ResponsePlayer>(); }, responseChecks },
+        { "harmony",      "Vocal harmony",         "Vocal", "Sings a second voice with yours, in the song's key: a third above, a fifth, an octave and more. Your own voice passes through untouched.",
+          [] { return std::make_unique<Harmony>(); }, harmonyChecks },
         { "whammy",       "Whammy style pedal", "Pitch", "Bends the guitar up or down as far as two octaves (or a dive bomb) with the Pedal slider or a held switch; harmony and detune modes too.",
           [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",

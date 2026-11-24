@@ -72,7 +72,9 @@ public:
     // ---- pedal switches (an RC-600 switch taken from the looper) ----
     /** action: 0 = A/B (effects against dry or the reference), 1 = the whole chain on/off,
         2 = tap tempo (for synced delays, any chain), 3 = bend the chain's whammy while the
-        switch is held (toe down on the press, heel on the release), 10 + k = slot k on/off. */
+        switch is held (toe down on the press, heel on the release), 4 = the test take (record,
+        then play, then stop; any chain), 5 = a delay throw while the switch is held (the chain's
+        delay catches what is played or sung; let go and the repeats ring out), 10 + k = slot k on/off. */
     struct PedalAssign
     {
         int sw = -1;        // pedal switch (0..8 = switches 1 to 9, 9 = CTL3, 10 = CTL4), -1 = none
@@ -90,6 +92,9 @@ public:
     /** Message thread: moves the Pedal of the first whammy in a chain to the toe (down) or the
         heel. The whammy's Bend time sets how fast it gets there. False if the chain has none. */
     bool bendWhammy (int chain, bool toeDown);
+    /** Message thread: the delay throw. Sets the "throw" setting of the first effect in the chain
+        that has one to Catching (held) or Ready (let go). False if the chain has none. */
+    bool holdThrow (int chain, bool held);
     /** Called on the message thread after a pedal press changed something (so the screen can follow). */
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
@@ -153,6 +158,42 @@ public:
     float takeAmpReturnPeak() noexcept                  { return ampReturnPeak.exchange (0.0f); }
     /** True once the test sound has finished by itself (it then stops recording on the next tick). */
     bool ampCaptureFinished() const noexcept            { return ampDone.load(); }
+
+    // ---- Test take: play once, then hear it round and round through the chains while turning knobs ----
+    // Records the dry input of every chain that is on (before its effects). Played back, each
+    // of those chains hears its part of the take in place of its socket, all in step, so a
+    // whole performance (guitar and voice together, say) can be listened to hands-free. A
+    // chain that was off while recording stays live, to play or sing along with the take.
+    enum class TakeState { none, recording, ready, playing };
+    static constexpr double maxTakeSeconds = 60.0;
+    /** Starts recording. Returns an error, or an empty string. */
+    juce::String startTake();
+    /** Ends recording (the take is kept, with silence at either end trimmed off) or stops playback. */
+    void stopTake();
+    /** Plays the take round and round. Returns an error, or an empty string. */
+    juce::String playTake();
+    /** Ends recording, keeps the take and saves it in the takes folder. Returns a line for the screen. */
+    juce::String finishTake();
+    /** One press at a time: record, then (next press) keep it and play it round and round, then stop.
+        What a pedal switch does. Returns a line for the screen. */
+    juce::String takeStep();
+    /** The last thing takeStep() or a pedal press did, for the screen. */
+    juce::String takeNote;
+    TakeState takeState() const noexcept;
+    /** How long the take is (or how much has been recorded so far). */
+    double takeSeconds() const noexcept;
+    bool takeHolds (int c) const noexcept;
+    juce::String takeName() const                       { return takeLabel; }
+    /** A WAV with one channel per chain (silent for a chain the take does not hold). */
+    juce::String saveTake (const juce::File& file);
+    juce::String loadTake (const juce::File& file);
+    static juce::File takeFolder();
+    /** "Take 'x': 12.4 s of chains 1 and 2, playing" for the screen and the report. */
+    juce::String takeText() const;
+
+    /** How much of each audio block a chain's effects use, 0..1: on average lately, and at its busiest in the last 10 seconds. */
+    struct ChainLoad { double average = 0.0, busiest = 0.0; };
+    ChainLoad chainLoad (int c) const noexcept;
 
     /** The app's own test sound at a rate: blips to line up, sweeps, noise and plucked chords at many levels. */
     static std::vector<float> makeTestSound (double rate);
@@ -224,11 +265,14 @@ private:
         std::atomic<float> trim { 1.0f };
         std::atomic<float> inPeak { 0.0f }, outPeak { 0.0f }, refPeak { 0.0f };
         std::atomic<bool> guard { false };
+        std::atomic<float> loadAverage { 0.0f }, loadPeak { 0.0f };
+        std::array<float, 100> loadRing {};             // message thread: the busiest block in each of the last 100 ticks
+        int loadRingAt = 0;
         std::atomic<double> effSum { 0.0 }, cmpSum { 0.0 };
         std::atomic<juce::int64> played { 0 };
 
         // audio thread
-        std::vector<float> wet, heard;
+        std::vector<float> wet, heard, takeDry;
         float trimNow = 1.0f;
         float mixEffects = 1.0f, mixDry = 0.0f, mixRef = 0.0f;
         double env = 0.0;
@@ -261,6 +305,20 @@ private:
     std::atomic<int> captureChain { 0 };
     std::atomic<juce::int64> capturedSamples { 0 };
     juce::File lastCapture;
+
+    // ---- test take ----
+    struct Take
+    {
+        std::array<std::vector<float>, numChains> data;     // all the same size
+        std::array<bool, numChains> has {};
+        juce::int64 start = 0, length = 0;                  // the part that is played, once trimmed
+        double rate = 0.0;
+    };
+    std::unique_ptr<Take> take;                 // only swapped under takeLock; the audio thread uses it under a try-lock
+    juce::SpinLock takeLock;
+    std::atomic<int> takeMode { 0 };            // 0 = idle, 1 = recording, 2 = playing
+    std::atomic<juce::int64> takeRecorded { 0 }, takePos { 0 };
+    juce::String takeLabel;
 
     // ---- amp capture ----
     std::vector<float> testSound;               // only swapped while not playing

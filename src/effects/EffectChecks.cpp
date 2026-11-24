@@ -654,6 +654,42 @@ void delayChecks (const std::string& id, const Check& check)
     loud.resize ((size_t) (8.0 * rate), 0.0f);
     const auto r = run (*fx, loud);
     check (allFinite (r) && peak (r) < 4.0f, id + ": Repeats at full with a loud note stays under control (peak " + num (gainToDb (peak (r))) + " dB)");
+
+    // The throw: clean while it waits, catches while the switch is held, and what it caught
+    // rings out after the switch is let go while nothing new goes in.
+    if (fx->paramIndex ("throw") >= 0)
+    {
+        fx->setParam ("feedback", 50.0f);
+        fx->setParam ("time", 250.0f);
+        fx->setParam ("throw", 1.0f);
+        fx->reset();
+        const auto word = pluck (rate, 1.0);
+        const auto clean = run (*fx, word);
+        float changed = 0.0f;
+        for (size_t i = 0; i < word.size(); ++i) changed = std::max (changed, std::abs (clean[i] - word[i]));
+        check (changed < 1.0e-6f, id + ": throw: while it waits for the switch the sound is clean, with no echo at all");
+
+        fx->reset();
+        fx->setParam ("throw", 2.0f);                         // the switch goes down on the first word
+        auto y = run (*fx, pluck (rate, 0.06));
+        fx->setParam ("throw", 1.0f);                         // and is let go
+        const auto quiet = run (*fx, std::vector<float> ((size_t) (0.56 * rate), 0.0f));
+        const auto later = run (*fx, pluck (rate, 0.6));      // a second word at 0.62 s, switch up
+        y.insert (y.end(), quiet.begin(), quiet.end());
+        y.insert (y.end(), later.begin(), later.end());
+
+        const auto caught = loudestBetween (y, 0.2, 0.3, rate);
+        const auto rings = loudestBetween (y, 0.7, 0.8, rate);
+        const auto stray = loudestBetween (y, 0.84, 0.96, rate);     // the second word's echo would land at 0.87 s
+        check (std::abs (caught.first - 0.250) < 0.004 && caught.second > 0.05f,
+               id + ": throw: a word sung while the switch is held comes back as an echo (" + num (caught.first * 1000.0, 1) + " ms later)");
+        check (std::abs (rings.first - 0.750) < 0.006 && rings.second > 0.01f,
+               id + ": throw: after the switch is let go the repeats ring out on their own (third repeat " + num (gainToDb (rings.second)) + " dB)");
+        check (stray.second < 0.003f,
+               id + ": throw: a word sung after the switch is let go is not caught (" + num (gainToDb (std::max (stray.second, 1.0e-9f))) + " dB where its echo would be)");
+
+        fx->setParam ("throw", 0.0f);
+    }
 }
 
 void springChecks (const Check& check)
@@ -1001,6 +1037,251 @@ void tubeScreamerChecks (const Check& check)
         const auto spanDb = 20.0 * std::log10 (at (10.0f) / at (0.0f));
         check (spanDb > 10.0, "ts: the tone knob changes 4 kHz by " + num (spanDb) + " dB end to end");
     }
+}
+
+namespace
+{
+    std::vector<float> hiss (double seconds, double level, double rate, unsigned seed = 1)
+    {
+        std::mt19937 gen (seed);
+        std::uniform_real_distribution<float> dist (-1.0f, 1.0f);
+        std::vector<float> x ((size_t) (seconds * rate));
+        for (auto& v : x) v = (float) level * dist (gen);
+        return x;
+    }
+
+    /** How long a tail takes to fall 60 dB, from its slope between 5 and 35 dB down (the way rooms are measured). */
+    double ringSeconds (const std::vector<float>& tail, double rate)
+    {
+        std::vector<double> left (tail.size() + 1, 0.0);
+        for (size_t i = tail.size(); i-- > 0;)
+            left[i] = left[i + 1] + (double) tail[i] * tail[i];
+
+        double at5 = -1.0;
+        for (size_t i = 0; i < tail.size() && left[0] > 0.0; ++i)
+        {
+            const double down = 10.0 * std::log10 (std::max (left[i] / left[0], 1.0e-30));
+            if (at5 < 0.0 && down <= -5.0)  at5 = (double) i / rate;
+            if (down <= -35.0)              return 2.0 * ((double) i / rate - at5);
+        }
+        return -1.0;
+    }
+
+    double biggestDifference (const std::vector<float>& a, const std::vector<float>& b)
+    {
+        double diff = 0.0;
+        for (size_t i = 0; i < std::min (a.size(), b.size()); ++i) diff = std::max (diff, (double) std::abs (a[i] - b[i]));
+        return diff;
+    }
+
+    double toneGainDb (Effect& fx, double hz, double level, double rate)
+    {
+        fx.reset();
+        const auto y = run (fx, sine (hz, 0.8, level, rate));
+        return 20.0 * std::log10 (std::max (strength (y, (size_t) (0.4 * rate), hz, rate), 1.0e-12) / level);
+    }
+}
+
+void reverbChecks (const std::string& id, const Check& check)
+{
+    constexpr double rate = 96000.0;
+    const bool room = id == "room";
+    auto fx = makeEffect (id);
+    fx->prepare (rate, 64);
+
+    // A burst of hiss, then silence: how long does the tail ring?
+    const auto ring = [&] (float decay, int size)
+    {
+        fx->setParam ("reverb", 10.0f);
+        fx->setParam ("decay", decay);
+        if (room) fx->setParam ("size", (float) size);
+        fx->reset();
+        auto x = hiss (0.3, 0.1, rate);
+        x.resize ((size_t) (5.0 * rate), 0.0f);
+        const auto y = run (*fx, x);
+        return ringSeconds (std::vector<float> (y.begin() + (long) (0.33 * rate), y.end()), rate);
+    };
+
+    const double middle = ring (5.0f, 1), shortest = ring (0.0f, 1);
+    const double wanted = room ? 0.81 : 1.79;
+    check (middle > wanted * 0.7 && middle < wanted * 1.3,
+           id + ": with Decay at 5 the tail takes " + num (middle, 2) + " s to die away (meant to be about " + num (wanted, 1) + ")");
+    check (shortest > 0.05 && shortest < middle * 0.6, id + ": Decay at 0 is much shorter (" + num (shortest, 2) + " s)");
+
+    if (room)
+    {
+        const double small = ring (5.0f, 0), hall = ring (5.0f, 2);
+        check (small < middle * 0.7 && hall > middle * 1.6, "room: Small room rings shorter and Hall longer at the same Decay ("
+                                                            + num (small, 2) + ", " + num (middle, 2) + " and " + num (hall, 2) + " s)");
+        fx->setParam ("size", 1.0f);
+    }
+
+    // At its starting settings the reverb sits well under the voice, and Reverb at 10 is about level with it.
+    const auto wetDb = [&] (float reverb)
+    {
+        fx->setParam ("reverb", reverb);
+        fx->setParam ("decay", 5.0f);
+        fx->reset();
+        const auto x = hiss (4.0, 0.1, rate, 3);
+        auto y = run (*fx, x);
+        for (size_t i = 0; i < x.size(); ++i) y[i] -= x[i];
+        return 20.0 * std::log10 (std::max (rms (y, (size_t) (3.0 * rate)), 1.0e-12) / rms (x, (size_t) (3.0 * rate)));
+    };
+
+    const double start = wetDb (room ? 2.5f : 3.0f), full = wetDb (10.0f);
+    check (start > -20.0 && start < -9.0 && full > -7.0 && full < 2.0,
+           id + ": the reverb is " + num (start) + " dB under the sound at its starting setting and " + num (full) + " dB at Reverb 10");
+
+    fx->setParam ("reverb", 0.0f);
+    fx->reset();
+    const auto x = sine (196.0, 0.6, 0.1, rate);
+    check (biggestDifference (run (*fx, x), x) < 1.0e-6, id + ": Reverb at 0 leaves the sound as it was");
+
+    fx->setParam ("reverb", 10.0f);
+    fx->setParam ("decay", 10.0f);
+    if (room) fx->setParam ("size", 2.0f);
+    fx->reset();
+    auto loud = sine (220.0, 3.0, 0.9, rate);
+    loud.resize ((size_t) (4.0 * rate), 0.0f);
+    const auto r = run (*fx, loud);
+    check (allFinite (r) && peak (r) < 4.0f, id + ": everything at full with a loud held note stays under control (peak " + num (gainToDb (peak (r))) + " dB)");
+}
+
+void sweepChecks (const std::string& id, const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect (id);
+    fx->prepare (rate, 64);
+
+    // A steady note through a sweeping notch gets louder and quieter as the notch passes it.
+    const auto x = sine (1000.0, 6.0, 0.1, rate);
+    const auto y = run (*fx, x);
+    double top = 0.0, bottom = 1.0e9;
+    const size_t w = (size_t) (0.02 * rate);
+    for (size_t i = (size_t) rate; i + w <= y.size(); i += w)
+    {
+        const double level = rms (std::vector<float> (y.begin() + (long) i, y.begin() + (long) (i + w)));
+        top = std::max (top, level);
+        bottom = std::min (bottom, level);
+    }
+    const double swing = 20.0 * std::log10 (top / std::max (bottom, 1.0e-9));
+    check (swing > 6.0 && top < 0.25, id + ": a steady note swells and dips by " + num (swing) + " dB as the sweep passes it");
+
+    if (id == "flanger")
+    {
+        fx->setParam ("mix", 0.0f);
+        fx->reset();
+        check (biggestDifference (run (*fx, x), x) < 1.0e-6, "flanger: Mix at 0 leaves the sound as it was");
+
+        fx->setParam ("mix", 50.0f);
+        fx->setParam ("resonance", 10.0f);
+        fx->setParam ("depth", 10.0f);
+        fx->reset();
+        const auto r = run (*fx, sine (220.0, 4.0, 0.9, rate));
+        check (allFinite (r) && peak (r) < 4.0f, "flanger: Resonance at full with a loud note stays under control (peak " + num (gainToDb (peak (r))) + " dB)");
+    }
+    else
+    {
+        // Vibrato mode is the swept sound alone: the level holds steady and only the pitch moves.
+        fx->setParam ("mode", 1.0f);
+        fx->reset();
+        const auto v = run (*fx, x);
+        double vTop = 0.0, vBottom = 1.0e9;
+        for (size_t i = (size_t) rate; i + w <= v.size(); i += w)
+        {
+            const double level = rms (std::vector<float> (v.begin() + (long) i, v.begin() + (long) (i + w)));
+            vTop = std::max (vTop, level);
+            vBottom = std::min (vBottom, level);
+        }
+        check (20.0 * std::log10 (vTop / vBottom) < 1.0 && biggestDifference (v, x) > 0.01,
+               "univibe: in Vibrato mode the level holds steady (within " + num (20.0 * std::log10 (vTop / vBottom), 2) + " dB) while the pitch moves");
+    }
+}
+
+void channelEqChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect ("peq");
+    fx->prepare (rate, 64);
+
+    double worst = 0.0;
+    for (double hz : { 40.0, 100.0, 500.0, 1000.0, 3000.0, 8000.0, 15000.0 })
+        worst = std::max (worst, std::abs (toneGainDb (*fx, hz, 0.1, rate)));
+    check (worst < 0.05, "peq: everything at its starting place leaves the sound unchanged (within " + num (worst, 3) + " dB from 40 Hz to 15 kHz)");
+
+    fx->setParam ("lowcut", 160.0f);
+    const double corner = toneGainDb (*fx, 160.0, 0.1, rate), deep = toneGainDb (*fx, 40.0, 0.1, rate), clear = toneGainDb (*fx, 1000.0, 0.1, rate);
+    check (std::abs (corner + 3.0) < 0.5 && deep < -20.0 && std::abs (clear) < 0.1,
+           "peq: Low cut at 160 Hz is 3 dB down there (" + num (corner) + "), " + num (deep) + " dB at 40 Hz, and leaves 1 kHz alone");
+    fx->setParam ("lowcut", 20.0f);
+
+    fx->setParam ("highcut", 5000.0f);
+    const double hc = toneGainDb (*fx, 5000.0, 0.1, rate), hcFar = toneGainDb (*fx, 15000.0, 0.1, rate);
+    check (std::abs (hc + 3.0) < 0.5 && hcFar < -15.0, "peq: High cut at 5 kHz is 3 dB down there (" + num (hc) + ") and " + num (hcFar) + " dB at 15 kHz");
+    fx->setParam ("highcut", 20000.0f);
+
+    fx->setParam ("low", 10.0f);
+    fx->setParam ("high", -10.0f);
+    const double lowShelf = toneGainDb (*fx, 40.0, 0.1, rate), highShelf = toneGainDb (*fx, 15000.0, 0.1, rate), between = toneGainDb (*fx, 900.0, 0.1, rate);
+    check (lowShelf > 8.5 && lowShelf < 10.5 && highShelf < -8.5 && highShelf > -10.5 && std::abs (between) < 0.5,
+           "peq: Low up 10 lifts the bottom " + num (lowShelf) + " dB, High down 10 drops the top " + num (highShelf) + " dB, and the middle stays (" + num (between, 2) + " dB)");
+    fx->setParam ("low", 0.0f);
+    fx->setParam ("high", 0.0f);
+
+    fx->setParam ("hmf", 2500.0f);
+    fx->setParam ("hmg", -12.0f);
+    fx->setParam ("width", 0.0f);
+    const double narrowAt = toneGainDb (*fx, 2500.0, 0.1, rate), narrowBeside = toneGainDb (*fx, 1250.0, 0.1, rate);
+    fx->setParam ("width", 10.0f);
+    const double wideBeside = toneGainDb (*fx, 1250.0, 0.1, rate);
+    check (std::abs (narrowAt + 12.0) < 0.5 && narrowBeside > -1.0 && wideBeside < -4.0,
+           "peq: High-mid down 12 at 2.5 kHz cuts " + num (narrowAt) + " dB there; an octave below it is " + num (narrowBeside) + " dB with Mid width at 0 and "
+           + num (wideBeside) + " dB at 10");
+    fx->setParam ("hmg", 0.0f);
+
+    fx->setParam ("lmf", 250.0f);
+    fx->setParam ("lmg", 9.0f);
+    fx->setParam ("width", 5.0f);
+    const double lm = toneGainDb (*fx, 250.0, 0.1, rate);
+    check (std::abs (lm - 9.0) < 0.5, "peq: Low-mid up 9 at 250 Hz lifts " + num (lm) + " dB there");
+}
+
+void bodyChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    auto fx = makeEffect ("body");
+    fx->prepare (rate, 64);
+
+    fx->setParam ("body", 0.0f);
+    fx->reset();
+    const auto x = sine (196.0, 0.6, 0.3, rate);
+    check (biggestDifference (run (*fx, x), x) < 1.0e-6, "body: Body at 0 leaves the guitar as it was");
+
+    fx->setParam ("phase", 1.0f);
+    fx->reset();
+    auto flipped = run (*fx, x);
+    for (auto& v : flipped) v = -v;
+    check (biggestDifference (flipped, x) < 1.0e-6, "body: Flip phase turns the sound upside down and changes nothing else");
+    fx->setParam ("phase", 0.0f);
+
+    // Played softly, Body 10 is its fixed curve: the box lifted, the quack eased, a little air.
+    fx->setParam ("body", 10.0f);
+    const double box = toneGainDb (*fx, 110.0, 0.003, rate), top = toneGainDb (*fx, 220.0, 0.003, rate), quack = toneGainDb (*fx, 2000.0, 0.003, rate),
+                 air = toneGainDb (*fx, 9500.0, 0.003, rate), middle = toneGainDb (*fx, 500.0, 0.003, rate);
+    check (box > 4.0 && box < 7.0 && top > 3.5 && top < 6.5 && quack < -3.0 && quack > -6.0 && air > 0.5 && air < 3.0 && std::abs (middle) < 2.5,
+           "body: at Body 10, played softly: " + num (box) + " dB at 110 Hz, " + num (top) + " at 220 Hz, " + num (middle) + " at 500 Hz, " + num (quack)
+           + " at 2 kHz, " + num (air) + " at 9.5 kHz");
+
+    // Dug in, the 2 kHz region alone is squeezed further, and the meter shows it.
+    const double hard = toneGainDb (*fx, 2000.0, 0.3, rate);
+    const float meter = fx->meterValue();
+    const double hardLow = toneGainDb (*fx, 110.0, 0.3, rate);
+    check (hard < quack - 3.0 && hard > quack - 8.0 && meter < -3.0f && std::abs (hardLow - box) < 0.3,
+           "body: played hard, 2 kHz is turned down a further " + num (quack - hard) + " dB (meter " + num (meter) + " dB) and the low end is not touched");
+
+    fx->setParam ("body", 5.0f);
+    const double half = toneGainDb (*fx, 110.0, 0.003, rate);
+    check (half > box * 0.35 && half < box * 0.65, "body: Body at 5 is about half of that (" + num (half) + " dB at 110 Hz)");
 }
 
 void runEffectChecks (const Check& check)

@@ -1,0 +1,16 @@
+# GigRig effect preset "Starter - Bass (Bass9 copy)": the acoustic guitar played as a bass.
+# Give this chain the SAME Input socket as the acoustic chain, and set "Looper hears it as" to
+# the socket the real Bass9 is plugged into (socket 9), so the bass loops go where they always have.
+# GigRig effect chain. One effect per 'slot=' line, its settings below it.
+slot=bass9
+on=1
+slot=comp
+on=0
+input=4
+output=-2
+attack=3
+release=5
+ratio=0
+mix=100
+slot=peq
+on=0
