@@ -135,7 +135,26 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   and the output is the input to the sample. While bending the delay is 2 to about 45 ms.
 - The first expression-pedal effect. Until there is a real pedal, `EffectsRack::bendWhammy`
   (pedal action 3, "whammy bend while held") moves `pedal` to 100 on a press and 0 on release.
-  A real expression pedal should set `pedal` the same way; a wah should copy this pattern.
+  A real expression pedal should set `pedal` the same way; the wah copies this pattern.
+
+## The wah
+
+- `src/effects/wah/`, id `wah`, group "Filter": settings `pedal` (0 heel to 100 toe), `heel`
+  and `toe` (Hz: where the sweep starts and ends), `q`, `depth` (dB the peak stands above the
+  body), `level` and `glide` ("Sweep time", ms for a full sweep). Like the whammy, the effect
+  moves the pedal itself per sample, so `pedal` and `glide` have `smoothingMs` 0.
+- Method: two state-variable filters at the same frequency, which is
+  `heel * (toe / heel) ^ pedal` (equal musical steps). One is a band-pass fed with the guitar
+  times 1/Q, so its top is always 1 and Q only changes its width; the other is a gentle
+  low-pass for the body under the peak. Output = peak gain x band-pass + body gain x low-pass,
+  with peak above body = `depth`. Feed the 1/Q in, not out: scaling the output makes a swell
+  when Q drops quickly (the no-click check caught it).
+- Voiced from the usual Cry Baby figures (about 400 Hz to 2.2 kHz), not from a measurement of
+  Tom's own GCB95F. If he wants it closer, the Amp capture tab can measure his pedal at a few
+  treadle positions as response files, and the defaults can be set from those.
+- `EffectsRack::sweepWah` (pedal action 6, "wah sweep while held") moves `pedal` to 100 on a
+  press and 0 on release, sharing `rockPedal` with the whammy. A real expression pedal should
+  set `pedal` directly; the toe switch is the slot's on/off.
 
 ## The acoustic, vocal and bass batch (25 November 2026)
 

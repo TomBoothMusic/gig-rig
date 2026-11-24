@@ -213,6 +213,27 @@ void runEffectsSelfTest (const Check& check)
                    "effects: a held switch puts the whammy's pedal at the toe and letting go brings it back to the heel");
         }
 
+        // A held switch rocks the wah: toe on the press, heel on the release.
+        {
+            const auto before = rack.chain (0).model();
+            fx::ChainModel wm;
+            wm.slots.push_back ({ "wah", true, {}, {} });
+            wm.slots.push_back ({ "boost", true, {}, {} });
+            rack.chain (0).setModel (wm);
+            const bool down = rack.sweepWah (0, true);
+            const float toe = rack.chain (0).model().slots[0].param ("pedal", -1.0f);
+            rack.sweepWah (0, false);
+            const float heel = rack.chain (0).model().slots[0].param ("pedal", -1.0f);
+            rack.setPedalAssign (0, { 10, 0, 6 });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false);
+            const bool says = rack.pedalText().contains ("wah sweep while held");
+            rack.setPedalAssign (0, { -1, 0, 0 });
+            const bool notTheWhammy = ! rack.bendWhammy (0, true);
+            rack.chain (0).setModel (before);
+            check (down && toe > 99.9f && std::abs (heel) < 0.1f && taken && says && notTheWhammy && ! rack.sweepWah (0, true),
+                   "effects: a held switch puts the wah's pedal at the toe and letting go brings it back to the heel");
+        }
+
         // A held switch works a delay throw: Catching on the press, Ready on the release.
         {
             const auto before = rack.chain (0).model();

@@ -74,7 +74,8 @@ public:
         2 = tap tempo (for synced delays, any chain), 3 = bend the chain's whammy while the
         switch is held (toe down on the press, heel on the release), 4 = the test take (record,
         then play, then stop; any chain), 5 = a delay throw while the switch is held (the chain's
-        delay catches what is played or sung; let go and the repeats ring out), 10 + k = slot k on/off. */
+        delay catches what is played or sung; let go and the repeats ring out), 6 = rock the chain's
+        wah while the switch is held (toe on the press, heel on the release), 10 + k = slot k on/off. */
     struct PedalAssign
     {
         int sw = -1;        // pedal switch (0..8 = switches 1 to 9, 9 = CTL3, 10 = CTL4), -1 = none
@@ -92,6 +93,8 @@ public:
     /** Message thread: moves the Pedal of the first whammy in a chain to the toe (down) or the
         heel. The whammy's Bend time sets how fast it gets there. False if the chain has none. */
     bool bendWhammy (int chain, bool toeDown);
+    /** Message thread: the same for the first wah in a chain. Its Sweep time sets how fast it travels. */
+    bool sweepWah (int chain, bool toeDown);
     /** Message thread: the delay throw. Sets the "throw" setting of the first effect in the chain
         that has one to Catching (held) or Ready (let go). False if the chain has none. */
     bool holdThrow (int chain, bool held);
@@ -249,6 +252,7 @@ public:
     void bypassBlock (const float* const* inputs, int numIns, int numSamples) noexcept;
 
 private:
+    bool rockPedal (int chain, const char* type, bool toeDown);
     std::atomic<double> tempoNow { 0.0 }, tappedBpm { 0.0 };
     std::atomic<bool> tempoFromLoop { false };
     juce::SpinLock tapLock;

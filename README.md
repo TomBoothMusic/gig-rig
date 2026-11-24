@@ -417,6 +417,36 @@ the **Bend time** speed; let go and it comes back. Try 2 octaves up with a Bend 
 pedal. With the pedal at the heel in a Whammy mode your guitar passes through untouched, so it
 can stay switched on. While it is bending, the sound runs a few hundredths of a second behind.
 
+## The wah
+
+A wah in the style of the Cry Baby, with the things you would otherwise have to mod the pedal
+for brought out as sliders. In the **Effects** tab pick **Wah pedal** and press **Add**. Put it
+first in the electric chain, before the compressor and the drives, where your Cry Baby sits.
+
+| Knob | What it does |
+|---|---|
+| **Pedal (heel to toe)** | The pedal itself. Drag it with the mouse while you play: 0 is heel down (dark), 100 is toe down (bright). |
+| **Heel frequency** | Where the sweep starts, heel down. Lower is darker and growlier. A Cry Baby sits around 400 Hz. |
+| **Toe frequency** | Where the sweep ends, toe down. Higher is brighter and sharper. A Cry Baby sits around 2200 Hz. Together these two are the length of the sweep. |
+| **Q** | How narrow the peak is. Low (2 to 4) is wide and gentle. High (8 and up) is narrow, sharp and vocal. |
+| **Peak depth** | How far the peak stands out above the rest of the guitar. Low is a subtle colour, high is a strong "wah". |
+| **Level** | Louder or quieter overall, to match the guitar with the wah off. |
+| **Sweep time** | How long the pedal takes to travel heel to toe. Leave it short for the mouse. Make it longer (150 to 600 ms) for the switch below. |
+
+**Hands-free, with an RC-600 switch.** Until there is an expression pedal, a switch can rock
+it: under **RC-600 switches for the effects**, pick CTL3 or CTL4 and **Chain 1: wah sweep while
+held** (use the chain your wah is in). Hold the switch and the pedal travels to the toe at the
+**Sweep time** speed; let go and it comes back to the heel. Tapping the switch in time gives a
+passable rocking wah for dialling in the sound.
+
+**A good way to dial it in.** Record a **test take** of some wah-style playing (see the fifth
+batch below), play it round, and rock the Pedal slider with the mouse while you set the other
+sliders. Park the Pedal half way to hear a "cocked wah". Save what you like as a preset.
+
+**What to send Claude.** Your Heel, Toe, Q and Peak depth once it feels like your Cry Baby (the
+**Copy effects results** button lists them), and anything that still feels wrong: the sweep
+bunching up at one end of the pedal, too thin toe down, too boomy heel down.
+
 ## The effects, fifth batch: acoustic, vocal and bass chains
 
 This build has every effect the acoustic, vocal and bass chains need, so that all three chains
