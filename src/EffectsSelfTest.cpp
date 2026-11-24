@@ -194,6 +194,25 @@ void runEffectsSelfTest (const Check& check)
         rack.setEnabled (true);
         rack.setPedalAssign (0, { -1, 0, 0 });
 
+        // A held switch bends the whammy: toe on the press, heel on the release.
+        {
+            const auto before = rack.chain (0).model();
+            fx::ChainModel wm;
+            wm.slots.push_back ({ "boost", true, {}, {} });
+            wm.slots.push_back ({ "whammy", true, {}, {} });
+            rack.chain (0).setModel (wm);
+            const bool down = rack.bendWhammy (0, true);
+            const float toe = rack.chain (0).model().slots[1].param ("pedal", -1.0f);
+            rack.bendWhammy (0, false);
+            const float heel = rack.chain (0).model().slots[1].param ("pedal", -1.0f);
+            rack.setPedalAssign (0, { 10, 0, 3 });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false);
+            rack.setPedalAssign (0, { -1, 0, 0 });
+            rack.chain (0).setModel (before);
+            check (down && toe > 99.9f && std::abs (heel) < 0.1f && taken && ! rack.bendWhammy (0, true),
+                   "effects: a held switch puts the whammy's pedal at the toe and letting go brings it back to the heel");
+        }
+
         // The feedback guard.
         rack.chain (0).setModel (boostOnly (24.0f));
         r = rack.routing (0);
@@ -352,7 +371,7 @@ void runEffectsSelfTest (const Check& check)
                "test take: one pedal switch records, then keeps it and plays it round, then stops (\"" + first + "\" / \"" + second + "\")");
         saved.deleteFile();     // the self-test tidies up after itself
 
-        rack.setPedalAssign (1, { 9, 0, 3 });
+        rack.setPedalAssign (1, { 9, 0, 4 });
         check (rack.pedalText().contains ("test take") && rack.reportText().contains ("Test take \""), "test take: the report says which switch works it and what the take holds");
         folder.deleteRecursively();
     }

@@ -185,10 +185,37 @@ bool EffectsRack::takePedal (int sw, bool isDown)
 
         if (isDown && a.action == 2)
             tap (juce::Time::getMillisecondCounterHiRes());     // at once, so the press time is exact
+        else if (a.action == 3)
+            juce::MessageManager::callAsync ([this, a, isDown]
+            {
+                bendWhammy (a.chain, isDown);
+                if (onPedalAction != nullptr)
+                    onPedalAction();
+            });
         else if (isDown)
             juce::MessageManager::callAsync ([this, a] { doPedalAction (a); });
 
         return true;
+    }
+
+    return false;
+}
+
+bool EffectsRack::bendWhammy (int c, bool toeDown)
+{
+    auto& ch = chain (juce::jlimit (0, numChains - 1, c));
+
+    for (int k = 0; k < (int) ch.model().slots.size(); ++k)
+    {
+        if (ch.model().slots[(size_t) k].type != "whammy")
+            continue;
+
+        if (auto* fx = ch.effect (k))
+        {
+            ch.setParam (k, fx->paramIndex ("pedal"), toeDown ? 100.0f : 0.0f);
+            dirty = true;
+            return true;
+        }
     }
 
     return false;
@@ -200,7 +227,7 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
 
     if (a.action == 2)
         tap (juce::Time::getMillisecondCounterHiRes());
-    else if (a.action == 3)
+    else if (a.action == 4)
         takeNote = takeStep();
     else if (a.action == 0)
         toggleListen (c);
@@ -237,11 +264,12 @@ juce::String EffectsRack::pedalText() const
             continue;
 
         const auto& m = chains[(size_t) a.chain].chain.model();
-        juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "test take: record, then play round and round, then stop" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+        juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
+                          : a.action == 4 ? "test take: record, then play round and round, then stop" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
-          << ": " << (a.action == 2 || a.action == 3 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
+          << ": " << (a.action == 2 || a.action == 4 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
     }
 
     return t;

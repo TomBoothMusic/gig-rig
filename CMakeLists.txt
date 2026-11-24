@@ -143,6 +143,7 @@ target_sources(GigRig PRIVATE
     src/effects/ir/ResponseChecks.cpp
     src/effects/harmony/Harmony.cpp
     src/effects/harmony/HarmonyChecks.cpp
+    src/effects/whammy/Whammy.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp

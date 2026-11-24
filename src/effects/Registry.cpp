@@ -8,6 +8,7 @@
 #include "tapedelay/TapeDelay.h"
 #include "tremolo/Tremolo.h"
 #include "vibrato/Vibrato.h"
+#include "whammy/Whammy.h"
 #include "bass9/Bass9.h"
 #include "body/AcousticBody.h"
 #include "flanger/Flanger.h"
@@ -48,6 +49,7 @@ void channelEqChecks (const Check&);
 void bodyChecks (const Check&);
 void responseChecks (const Check&);
 void harmonyChecks (const Check&);
+void whammyChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -103,6 +105,8 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<ResponsePlayer>(); }, responseChecks },
         { "harmony",      "Vocal harmony",         "Vocal", "Sings a second voice with yours, in the song's key: a third above, a fifth, an octave and more. Your own voice passes through untouched.",
           [] { return std::make_unique<Harmony>(); }, harmonyChecks },
+        { "whammy",       "Whammy style pedal", "Pitch", "Bends the guitar up or down as far as two octaves (or a dive bomb) with the Pedal slider or a held switch; harmony and detune modes too.",
+          [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
     };
