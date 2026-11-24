@@ -4,6 +4,8 @@
 #include "bass9/Bass9.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
+#include "comp/Comp1176.h"
+#include "eq/GraphicEq.h"
 #include "fuzz/Fuzz.h"
 #include "gate/NoiseGate.h"
 #include "klon/Klon.h"
@@ -19,6 +21,8 @@ void bass9Checks (const Check&);
 void fuzzChecks (const Check&);
 void ampChecks (const Check&);
 void gateChecks (const Check&);
+void compChecks (const Check&);
+void eqChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -36,6 +40,10 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Fuzz>(); }, fuzzChecks },
         { "boost",    "Clean boost",         "Drive", "Louder with a little colour, to push a drive or the amp.",
           [] { return std::make_unique<CleanBoost>(); }, {} },
+        { "comp",     "1176 style compressor", "Utility", "Studio FET compressor (1176 Rev E blackface): Input pushes it harder, attack and release 1 to 7 (7 fastest), ratio 4 to All.",
+          [] { return std::make_unique<Comp1176>(); }, compChecks },
+        { "eq",       "Graphic EQ (GE-7 style)", "Utility", "Seven sliders from 100 Hz to 6.4 kHz, up or down 15 dB, and a level: trim the lows or lift the top.",
+          [] { return std::make_unique<GraphicEq>(); }, eqChecks },
         { "gate",     "Noise gate",          "Utility", "Turns the hiss and hum down when you stop playing; opens in a couple of milliseconds when you play.",
           [] { return std::make_unique<NoiseGate>(); }, gateChecks },
         { "amp",      "Amp model (NAM)",     "Amp",   "An amp and its cab from a capture: Tom's Dream '65 settings, or any .nam model in Documents\\GigRig\\Amp models.",

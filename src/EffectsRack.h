@@ -46,7 +46,7 @@ public:
         Output out;
         int looperHears = -2;   // socket the looper hears it as: -2 = its own socket, -1 = not at all, else 0-based socket
         Listen listen = Listen::effects;
-        int reference = 8;      // 0-based input for A/B against a real pedal
+        int reference = 7;      // 0-based input for A/B against a real pedal (socket 8: where the board and the Dream come back)
         float trimDb = 0.0f;    // the chain's own level, set by hand or by the level match
         juce::String name;      // "Drive test", shown on screen
     };
@@ -189,7 +189,7 @@ private:
         fx::Chain chain;
         Routing route;                                  // message thread's copy
         std::atomic<bool> on { false };
-        std::atomic<int> source { 9 }, outFirst { 2 }, looperHears { -2 }, reference { 8 }, listen { 0 };
+        std::atomic<int> source { 9 }, outFirst { 2 }, looperHears { -2 }, reference { 7 }, listen { 0 };
         std::atomic<bool> outPair { true };
         std::atomic<float> trim { 1.0f };
         std::atomic<float> inPeak { 0.0f }, outPeak { 0.0f }, refPeak { 0.0f };

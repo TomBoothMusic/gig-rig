@@ -296,6 +296,45 @@ same drives, one through the real Dream and one through the model.
 Press **Copy effects results** and paste it, with how each model compares with the real Dream
 (tone, feel, how it cleans up when you play softer, any fizz or noise) and how the gate behaves.
 
+## The effects, third batch: compressor and graphic EQ
+
+New in this build:
+- **1176 style compressor**: a copy of the 1176 Rev E "blackface" studio compressor, like the
+  Purified Audio 1176 you know. It works like the real one:
+  - **Input** pushes your guitar harder into it: more Input, more squash. There is no
+    threshold knob, just as on the 1176.
+  - **Output** sets how loud it comes out afterwards.
+  - **Attack** and **Release** go from 1 to 7, and **7 is the fastest**, as on the front panel.
+  - **Ratio** is the four buttons: 4, 8, 12 and 20. **All** is the all-buttons-in trick:
+    harder, with a bit of grit.
+  - **Mix** blends your dry guitar back in. 100% is the plain 1176.
+  - The **Turning down by:** line under it is the needle: how many dB it is squashing right
+    now. The proper VU meter look comes later, with the pedal faces.
+- **Graphic EQ (GE-7 style)**: seven sliders, 100 Hz to 6.4 kHz, each up or down 15 dB, and a
+  **Level** slider. To trim the lows, pull 100 Hz (and maybe 200 Hz) down.
+- A new chain now starts with its **Reference** set to **Socket 8**, where the board and the
+  Dream come back.
+
+### Trying them (about 15 minutes)
+
+Use the same leads and set-up as the second batch (the A/B with the amp model).
+
+1. In **Chain 2**, load one of your drive presets and add the **Amp model** at the end, as in
+   the second batch.
+2. Pick **1176 style compressor** on the right and press **Add**, then **Graphic EQ (GE-7
+   style)** and **Add**. Click each one's box and press **Move left** until it sits in front of
+   the drives, so the order is compressor, EQ, drives, gate, amp, like your pedalboard.
+3. Click the compressor's box. Turn **Input** up until **Turning down by:** shows about 3 to
+   6 dB when you dig in, then set **Output** so switching it on and off sounds about as loud.
+4. Try **Ratio 4** against **All**, and Attack and Release at 3 and at 7.
+5. Click the EQ's box and pull **100 Hz** down until the low end sits right.
+
+### What to send Claude
+
+Press **Copy effects results** and paste it, with how the compressor feels against your Ego
+76 or the Purified Audio 1176 (attack, how it lets go, any pumping or grit), and whether the
+EQ does what you need. Save any settings you like as a preset and attach the file.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.
