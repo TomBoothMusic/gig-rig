@@ -6,3 +6,6 @@ out/
 CMakeUserPresets.json
 *.user
 .DS_Store
+
+# Python packages downloaded while working (never commit them)
+*.whl

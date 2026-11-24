@@ -19,7 +19,7 @@ single script, including a free trial on the laptop from a USB stick.
 
 ## Getting the app (no tools needed)
 
-1. Open the [latest release](https://github.com/TomBoothMusic/gig-rig/releases/latest). You need to be signed in to GitHub, because the repository is private.
+1. Open the [latest release](https://github.com/TomBoothMusic/gig-rig/releases/latest). If the repository is private at the time, you need to be signed in to GitHub first.
 2. Under **Assets**, click **GigRig-Windows.exe** to download it.
 3. Double-click the downloaded file. The first time, Windows shows a blue "Windows protected your PC" box, because the app is home-made and not signed. Click **More info**, then **Run anyway**.
 
@@ -667,7 +667,10 @@ GigRig --report report.txt      # write the device report, no window
 
 ## Licence note
 
-JUCE is used under its free AGPLv3 option, and the ASIO headers bundled with
-JUCE are GPLv3. That is fine for a private, personal build. If the app is ever
-given or sold to someone else, it must either be released with its source code
-under the AGPLv3, or JUCE's paid licence is needed.
+This app is released under the GNU AGPLv3 (see `LICENSE`). JUCE is used under
+its free AGPLv3 option and the ASIO headers bundled with JUCE are GPLv3, so the
+app's own code must use a matching licence whenever builds are shared, and a
+public repository with downloadable builds counts as sharing. Anyone may read,
+build and change the code, as long as what they share stays under the same
+licence with its source. Selling a closed-source copy would need JUCE's paid
+licence instead.

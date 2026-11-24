@@ -23,7 +23,10 @@ project's instructions). Read it before design decisions; the code follows it.
 - **A working gig system is never put at risk.** The rig computer runs a pinned
   release. New work goes to a new release, is tested away from gigs, and
   `linux/rollback.sh` goes back in one command.
-- **Licence:** JUCE under AGPLv3. Fine for Tom's private build; see the README.
+- **Licence:** the app is AGPLv3 (`LICENSE`), matching JUCE's free licence; see the README.
+- **The repository may be public.** Never commit personal names (other than Tom),
+  email addresses, phone numbers, home paths, passwords or tokens. Songs, presets
+  and amp captures are fine.
 
 ## Building
 
