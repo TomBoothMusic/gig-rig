@@ -49,6 +49,10 @@ public:
         return ((c3 * f + c2) * f + c1) * f + y1;
     }
 
+    /** The same for a whole number of samples: no interpolation, so it costs next to nothing
+        (reverbs read dozens of fixed points per sample). */
+    float readWhole (int delay) const noexcept   { return at (writePos - 1 - std::clamp (delay, 0, mask - 4)); }
+
 private:
     float at (int i) const noexcept          { return buffer[(size_t) (i & mask)]; }
 

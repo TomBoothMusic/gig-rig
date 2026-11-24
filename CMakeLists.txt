@@ -126,6 +126,17 @@ target_sources(GigRig PRIVATE
     src/effects/tremolo/Tremolo.cpp
     src/effects/vibrato/Vibrato.cpp
     src/effects/chorus/Chorus.cpp
+    src/effects/flanger/Flanger.cpp
+    src/effects/univibe/UniVibe.cpp
+    src/effects/plate/PlateReverb.cpp
+    src/effects/room/RoomReverb.cpp
+    src/effects/peq/ChannelEq.cpp
+    src/effects/body/AcousticBody.cpp
+    src/effects/ir/IrTools.cpp
+    src/effects/ir/ResponsePlayer.cpp
+    src/effects/ir/ResponseChecks.cpp
+    src/effects/harmony/Harmony.cpp
+    src/effects/harmony/HarmonyChecks.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp
