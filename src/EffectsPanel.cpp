@@ -645,6 +645,7 @@ void EffectsPanel::fillPedalBoxes()
             const auto r = rack.routing (c);
             ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): A/B", c * 100 + 1);
             ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): on/off", c * 100 + 2);
+            ab.addItem ("Chain " + juce::String (c + 1) + ": whammy bend while held", c * 100 + 4);
 
             const auto& m = rack.chain (c).model();
             for (int k = 0; k < (int) m.slots.size(); ++k)
@@ -654,7 +655,7 @@ void EffectsPanel::fillPedalBoxes()
 
         const auto a = rack.pedalAssign (i);
         sb.setSelectedId (a.sw < 0 ? 1 : 10 + a.sw, juce::dontSendNotification);
-        ab.setSelectedId (a.action == 2 ? 3 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : 11 + a.action - 10), juce::dontSendNotification);
+        ab.setSelectedId (a.action == 2 ? 3 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : a.action == 3 ? 4 : 11 + a.action - 10), juce::dontSendNotification);
     }
 }
 
@@ -666,7 +667,7 @@ void EffectsPanel::pushPedal (int i)
     a.sw = sid >= 10 ? sid - 10 : -1;
     a.chain = aid / 100;
     const auto code = aid % 100;
-    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : 10 + code - 11;
+    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : code == 4 ? 3 : 10 + code - 11;
     rack.setPedalAssign (i, a);
 }
 

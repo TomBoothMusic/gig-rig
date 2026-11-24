@@ -753,6 +753,131 @@ void modulationChecks (const std::string& id, const Check& check)
     check (diff > 0.01, id + ": with depth up the sound moves (differs by up to " + num (diff, 3) + ")");
 }
 
+void whammyChecks (const Check& check)
+{
+    constexpr double rate = 96000.0;
+    const size_t from = (size_t) (0.4 * rate);
+    auto fx = makeEffect ("whammy");
+    fx->prepare (rate, 64);
+    const auto modeCount = (int) fx->params()[(size_t) fx->paramIndex ("mode")].choices.size();
+    check (modeCount == 21, "whammy: has its 21 modes (10 whammy, 9 harmony, 2 detune)");
+
+    // Heel down in a Whammy mode: the guitar itself, to the sample.
+    {
+        const auto x = sine (196.0, 0.6, 0.1, rate);
+        fx->reset();
+        const auto y = run (*fx, x);
+        double diff = 0.0;
+        for (size_t i = 0; i < x.size(); ++i) diff = std::max (diff, (double) std::abs (y[i] - x[i]));
+        check (diff < 1.0e-6, "whammy: with the pedal at the heel the guitar passes untouched and undelayed");
+    }
+
+    // Toe down: the note lands on the interval the mode names, and stays a clean note.
+    // A guitar-like note (a fundamental and a few harmonics), low E to the 12th fret.
+    const auto note = [&] (double hz)
+    {
+        std::vector<float> x ((size_t) (1.0 * rate));
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            const double t = twoPi * hz * (double) i / rate;
+            x[i] = (float) (0.1 * (std::sin (t) + 0.5 * std::sin (2.0 * t + 0.4) + 0.3 * std::sin (3.0 * t + 1.1) + 0.15 * std::sin (5.0 * t)));
+        }
+        return x;
+    };
+
+    struct Case { int mode; double semis; const char* name; };
+    for (const auto& c : { Case { 0, 12.0, "1 octave up" }, Case { 1, 24.0, "2 octaves up" }, Case { 2, 7.0, "5th up" },
+                           Case { 5, -5.0, "4th down" }, Case { 7, -12.0, "1 octave down" }, Case { 8, -24.0, "2 octaves down" } })
+    {
+        double worstLevel = 1.0e9, worstStray = 0.0;
+
+        for (double hz : { 82.41, 196.0, 329.63, 659.26 })
+        {
+            const auto x = note (hz);
+            fx->setParam ("mode", (float) c.mode);
+            fx->setParam ("pedal", 100.0f);
+            fx->reset();
+            const auto y = run (*fx, x);
+            const double want = hz * std::pow (2.0, c.semis / 12.0);
+
+            // The four partials at their new pitches should hold nearly all the sound.
+            double tones = 0.0;
+            for (double k : { 1.0, 2.0, 3.0, 5.0 })
+                tones += 0.5 * std::pow (strength (y, from, want * k, rate), 2.0);
+            const double total = std::pow (rms (y, from), 2.0);
+            worstLevel = std::min (worstLevel, strength (y, from, want, rate) / 0.1);
+            worstStray = std::max (worstStray, std::max (0.0, total - tones) / std::max (total, 1.0e-12));
+        }
+
+        check (worstLevel > 0.8 && worstLevel < 1.2 && worstStray < 0.05,
+               std::string ("whammy: ") + c.name + " puts notes from low E to high E on pitch (level " + num (worstLevel * 100.0, 0)
+               + "% at worst, stray sound " + num (worstStray * 100.0, 1) + "% at worst)");
+    }
+
+    // Halfway down the pedal in the octave-up mode is half the interval (6 semitones).
+    {
+        fx->setParam ("mode", 0.0f);
+        fx->setParam ("pedal", 50.0f);
+        fx->reset();
+        const auto y = run (*fx, sine (220.0, 1.0, 0.1, rate));
+        const double got = strength (y, from, 220.0 * std::pow (2.0, 0.5), rate);
+        check (got > 0.08, "whammy: the pedal halfway gives half the bend (" + num (got * 1000.0, 0) + "% of the note at 6 semitones up)");
+    }
+
+    // Harmony: the dry guitar and the added voice together.
+    {
+        fx->setParam ("mode", 10.0f);       // octave down (heel) to octave up (toe)
+        fx->setParam ("pedal", 0.0f);
+        fx->reset();
+        auto y = run (*fx, sine (220.0, 1.0, 0.1, rate));
+        const double dryHeel = strength (y, from, 220.0, rate), voiceHeel = strength (y, from, 110.0, rate);
+        fx->setParam ("pedal", 100.0f);
+        fx->reset();
+        y = run (*fx, sine (220.0, 1.0, 0.1, rate));
+        const double voiceToe = strength (y, from, 440.0, rate);
+        check (dryHeel > 0.06 && voiceHeel > 0.05 && voiceToe > 0.05,
+               "whammy: harmony mode plays the guitar with a voice an octave below at the heel and an octave above at the toe");
+    }
+
+    // Detune: nothing added at the heel, a slightly sharp copy at the toe.
+    {
+        const auto x = sine (220.0, 1.0, 0.1, rate);
+        fx->setParam ("mode", 20.0f);
+        fx->setParam ("pedal", 0.0f);
+        fx->reset();
+        auto y = run (*fx, x);
+        double diff = 0.0;
+        for (size_t i = 0; i < x.size(); ++i) diff = std::max (diff, (double) std::abs (y[i] - x[i]));
+        fx->setParam ("pedal", 100.0f);
+        fx->reset();
+        y = run (*fx, x);
+        double moved = 0.0;
+        for (size_t i = from; i < x.size(); ++i) moved = std::max (moved, (double) std::abs (y[i] - x[i]));
+        check (diff < 1.0e-6 && moved > 0.01, "whammy: detune adds nothing at the heel and a thickening copy at the toe");
+    }
+
+    // Bend time: a jump of the pedal takes that long to arrive, then lands exactly.
+    {
+        fx->setParam ("mode", 0.0f);
+        fx->setParam ("pedal", 0.0f);
+        fx->setParam ("glide", 500.0f);
+        fx->reset();
+        auto x = sine (220.0, 1.5, 0.1, rate);
+        const size_t jumpAt = (size_t) (0.2 * rate);
+        for (size_t i = 0; i < x.size(); i += 64)
+        {
+            if (i >= jumpAt) fx->setParam ("pedal", 100.0f);
+            float* p = x.data() + i;
+            fx->process (&p, 1, (int) std::min<size_t> (64, x.size() - i));
+        }
+        const std::vector<float> early (x.begin() + (long) (0.3 * rate), x.begin() + (long) (0.5 * rate));
+        const std::vector<float> late (x.begin() + (long) (1.0 * rate), x.end());
+        check (strength (early, 0, 440.0, rate) < 0.02 && strength (late, 0, 440.0, rate) > 0.08,
+               "whammy: with Bend time at half a second the bend is still on its way after 0.2 s and has arrived after 0.8 s");
+        fx->setParam ("glide", 60.0f);
+    }
+}
+
 void ampChecks (const Check& check)
 {
     constexpr double rate = 96000.0;

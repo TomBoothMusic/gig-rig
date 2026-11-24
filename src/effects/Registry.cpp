@@ -8,6 +8,7 @@
 #include "tapedelay/TapeDelay.h"
 #include "tremolo/Tremolo.h"
 #include "vibrato/Vibrato.h"
+#include "whammy/Whammy.h"
 #include "bass9/Bass9.h"
 #include "bluesdriver/BluesDriver.h"
 #include "boost/CleanBoost.h"
@@ -34,6 +35,7 @@ void delayChecks (const std::string& id, const Check&);
 void tremoloChecks (const Check&);
 void springChecks (const Check&);
 void modulationChecks (const std::string& id, const Check&);
+void whammyChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -73,6 +75,8 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Vibrato>(); }, [] (const Check& c) { modulationChecks ("vibrato", c); } },
         { "chorus",       "Chorus",                "Modulation", "Analog-style chorus (CE-2): two swept, slightly dark copies with the dry guitar.",
           [] { return std::make_unique<Chorus>(); }, [] (const Check& c) { modulationChecks ("chorus", c); } },
+        { "whammy",       "Whammy style pedal", "Pitch", "Bends the guitar up or down as far as two octaves (or a dive bomb) with the Pedal slider or a held switch; harmony and detune modes too.",
+          [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
     };
