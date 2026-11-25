@@ -27,6 +27,11 @@ public:
     /** Brings everything in line with the song book and the rack. */
     void refresh();
 
+    /** The button that lifts this panel out into a window of its own (so the Effects tab can stay
+        open beside it on a second screen) and puts it back. The main window does the moving. */
+    std::function<void()> onWindowButton;
+    void setInOwnWindow (bool);
+
 private:
     void timerCallback() override;
     void say (const juce::String& text);
@@ -42,7 +47,8 @@ private:
     juce::TextButton programButton { "Load that program" }, copyButton { "Copy song results" },
                      keepButton { "Keep these sounds for this song" }, defaultButton { "Keep these sounds as the default" },
                      forgetButton { "Forget this song's own sounds" }, folderButton { "Open songs folder" },
-                     addButton { "Add as a new entry" }, againButton { "Set this song's sounds again" };
+                     addButton { "Add as a new entry" }, againButton { "Set this song's sounds again" },
+                     windowButton { "Open in its own window" };
     juce::ToggleButton tailsBox { "Delays and reverbs ring out when the sound changes" };
     std::array<juce::ComboBox, EffectsRack::numPedalAssigns> switchBoxes, actionBoxes;
     juce::String said, shownNotes, shownFile;

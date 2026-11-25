@@ -627,6 +627,10 @@ In short: a song names the presets it uses, so changing a preset once changes ev
 uses it. Songs without sounds of their own use the **default sounds**. There is a new **Songs**
 tab between Looper and Effects.
 
+**Two screens.** On the Songs tab, **Open in its own window** lifts the Songs tab out into a
+window you can drag to a second screen, so the Effects tab stays open while you go through the
+songs. Closing that window (or **Put back as a tab**) puts it back.
+
 ### Part A: the default sounds (10 minutes)
 
 1. Open the app and start the audio as usual. Click the **Effects** tab.
@@ -641,13 +645,14 @@ tab between Looper and Effects.
 1. On the Songs tab, choose **Wicked Game** in the Song box.
 2. On the Effects tab, change chain 1 to what that song needs: **Load** and **Add to chain**
    different presets, and turn any knobs (more reverb, tremolo on).
-3. Back on the Songs tab, in the Switches rows, set one row to **Switch 9** and
-   **Chain 1: next amp sound**, and another to a switch you like and **delay throw while held**
-   on the vocal chain.
+3. Back on the Songs tab, in the Switches rows, set one row to **CTL4** (or any switch the
+   song does not need for looping) and **next amp sound** on the chain your electric is on, and
+   another to a switch you like and **delay throw while held** on the vocal chain. A switch
+   given to the effects stops working for the looper, so do not use All start/stop (switch 9).
 4. Click **Keep these sounds for this song**. The left box shows the file it wrote.
 5. Choose another song in the Song box, then Wicked Game again. Its sounds and switches should
    come back each time, and the other song should have the default sounds.
-6. Play and press switch 9: the amp should step to the next amp sound each press.
+6. Play and press that switch: the amp should step to the next amp sound each press.
 
 ### Part C: edit a preset once (5 minutes)
 

@@ -105,7 +105,11 @@ MainComponent::MainComponent()
                 safe->songBook.programChange (program, "GIGRIG_PROGRAM");
         });
 
+    songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
+    if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
+        juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->moveSongsPanel (true); });
+
     setSize (980, 790);
     devicePanel.requestScan();
 }
@@ -119,6 +123,66 @@ MainComponent::~MainComponent()
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (style::background);
+}
+
+namespace
+{
+    constexpr int songsTabIndex = 3;
+
+    /** Gives the Songs panel the same margin in its own window as it has under the tabs. */
+    struct Padded final : juce::Component
+    {
+        explicit Padded (juce::Component& c) : inner (c)   { addAndMakeVisible (inner); setSize (980, 720); }
+        void paint (juce::Graphics& g) override            { g.fillAll (style::background); }
+        void resized() override                            { inner.setBounds (getLocalBounds().reduced (16, 6)); }
+        juce::Component& inner;
+    };
+
+    struct SongsWindow final : juce::DocumentWindow
+    {
+        SongsWindow (juce::Component& panel, std::function<void()> whenClosed)
+            : juce::DocumentWindow ("Gig Rig: Songs", style::background, juce::DocumentWindow::allButtons), onClose (std::move (whenClosed))
+        {
+            setUsingNativeTitleBar (true);
+            setContentOwned (new Padded (panel), true);
+            setResizable (true, false);
+            setResizeLimits (860, 560, 4000, 3000);
+        }
+
+        void closeButtonPressed() override      { juce::MessageManager::callAsync (onClose); }
+        std::function<void()> onClose;
+    };
+}
+
+void MainComponent::moveSongsPanel (bool toOwnWindow)
+{
+    if (toOwnWindow == (songsWindow != nullptr))
+        return;
+
+    if (toOwnWindow)
+    {
+        tabs.removeTab (songsTabIndex);
+        songsWindow = std::make_unique<SongsWindow> (songsPanel, [safe = juce::Component::SafePointer<MainComponent> (this)]
+        {
+            if (safe != nullptr)
+                safe->moveSongsPanel (false);
+        });
+
+        if (auto* top = getTopLevelComponent())
+            songsWindow->setTopLeftPosition (top->getX() + 60, top->getY() + 60);
+
+        songsWindow->setVisible (true);
+        tabs.setCurrentTabIndex (songsTabIndex);        // the Effects tab has moved up into this place: the two are used together
+    }
+    else
+    {
+        songsWindow.reset();
+        tabs.addTab ("Songs", style::background, &songsPanel, false, songsTabIndex);
+        tabs.setCurrentTabIndex (songsTabIndex);
+    }
+
+    songsPanel.setInOwnWindow (songsWindow != nullptr);
+    songsPanel.refresh();
 }
 
 void MainComponent::resized()
