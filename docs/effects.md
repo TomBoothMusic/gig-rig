@@ -89,6 +89,9 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
    inside its budget.
 5. If the effect has a character worth guarding (the Tube Screamer's mid hump, the Bass9's
    octave), add checks for it in a `<id>/<Name>Checks.cpp` and point the registry line at them.
+   **Anything that follows pitch or splits the sound into bands must also be checked on a
+   played instrument, not only on test tones** (see "The bass, reworked" below for why, and
+   for a made-up guitar to borrow).
 6. Open a PR. CI must be green. Tom tries it on the laptop or on the rig with
    `linux/install.sh --version <build>` between gigs; `linux/rollback.sh` goes back.
 7. Keep the design doc's effects list in step.
@@ -196,6 +199,52 @@ says how its effect works; the points a future session needs:
 - **`HalfRate`** has a few samples of delay at 96 kHz (measured at prepare and reported). Its
   half-band filters are not linear-phase, so "the dry sound, late" is only true of level, not
   sample for sample.
+
+## The bass, reworked (25 November 2026)
+
+Tom's first real test of the `bass9` effect (build 70, raw electric straight into the mixer):
+he liked the tone but heard "clicky artifacts the whole time" and "static noise", less at a
+slow Tracking speed. Every check passed, because every check used plain tones.
+
+**Cause.** The first version split the guitar into 33 overlapping filters, halved each one's
+phase, and kept neighbouring filters the same way up by flipping one in a single sample
+whenever the two agreed for a moment. On a real guitar (stiff strings, harmonics beating,
+hiss) that agreement comes and goes, so filters flipped at full level many times a second:
+about 8 ticks a second on Tom's take, 100 a second on the made-up guitar with his compressor
+and drive. Filters that heard two harmonics at once also came out as noise.
+
+**What `BassMachine` does now** (the header has the full story):
+
+- The bank runs at about 12 kHz (every 8th sample at 96 kHz; three running averages on the
+  way in, a straight line and one more average on the way out), 41 to 97 bands depending on
+  Tracking speed. It costs about 2% of a block, down from 11%.
+- Each band works out where its tone sits (the smoothed turn of its arrow against its own
+  centre) and how steady that is. A tone is spoken for only by the one or two bands nearest
+  to it, with the filter's loss and lag at that pitch taken out, so the level is the same at
+  every pitch. An unsteady band (two tones, or hiss) is turned down.
+- A band that has to turn over is always the quieter of the pair and fades through zero in
+  2 ms. Two octaves down turns a band by quarter turns the same way.
+- Above about 300 Hz the bands stop getting wider (13 Hz either side at Tracking speed 0, 30 Hz
+  at 1), so the harmonics of a low E, 82 Hz apart, stay in bands of their own.
+
+**Settings are unchanged** (same ids, same ranges), so old presets load. Tracking speed still
+trades quick low notes against clean chords: at 0 a low E takes about 50 ms to reach half
+level, at 0.6 (the default) about 22 ms, the same as before. Tom had set 0 to hide the ticks;
+the middle is the place to start now.
+
+**Checks** (`Bass9Checks.cpp`): a made-up guitar (`played`, `bassLine`: stiff strings, each
+harmonic dying at its own rate and beating against a twin, pick click, hiss, hum) through the
+bass at three Tracking speeds must leave next to nothing above 3 kHz (a clean octave down of
+a guitar below 2.4 kHz has nothing there, so anything there is ticks), a single note must come
+out as the note an octave down and little else, and a bend, a vibrato and a slide must not
+tick. Borrow `played` for any other effect that follows pitch.
+
+**Still true:** two notes a fourth or closer apart on the low strings cannot be told apart
+at a quick Tracking speed, and come out rough (the real Bass9 is a bass-line pedal too).
+Nothing above 1.2 kHz comes out of the octave itself; if Tom finds it dull, raise the bank's
+top (`highestBandHz`) before reaching for EQ. Tom's take of 25 Nov (raw electric, 96 kHz, in
+the project files under `effects/bass-takes/`) is the real-guitar reference: it is far too
+big for the repository.
 
 ## The delay throw
 

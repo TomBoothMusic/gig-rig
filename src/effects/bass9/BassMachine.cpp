@@ -10,21 +10,18 @@ namespace gigrig::fx::bass9
 namespace
 {
     constexpr double pi = 3.14159265358979323846;
-    constexpr int bandsPerOctave = 6;
-    constexpr double lowestBandHz = 55.0, highestBandHz = 2400.0;
+    constexpr double lowestBandHz = 70.0, highestBandHz = 2400.0;
+    constexpr double innerRateWanted = 12000.0;
+    constexpr double halfWidthOfPitch = 0.0578;         // a twelfth of an octave either side, before Tracking speed
+    constexpr double widestSlowHz = 13.0, widestQuickHz = 30.0;
+    constexpr double followTime = 0.5, steadyTime = 0.5, steadyLeastSeconds = 0.012;    // in filter ring times
+    constexpr double wobbleAllowed = 0.7;
     constexpr double tiny = 1.0e-9;
+    constexpr double keepAwake = 1.0e-18;   // far below hearing: stops the filters idling down into slow "denormal" numbers in dead silence
 
     using cd = std::complex<double>;
 
     double dbToGain (double db)     { return std::pow (10.0, db / 20.0); }
-
-    /** The square root of a unit arrow, on the right-hand side (no trig needed). */
-    cd halfTurn (cd unit) noexcept
-    {
-        const double re = std::sqrt (std::max (0.0, 0.5 * (1.0 + unit.real())));
-        const double im = std::sqrt (std::max (0.0, 0.5 * (1.0 - unit.real())));
-        return { re, unit.imag() < 0.0 ? -im : im };
-    }
 
     double dot (cd a, cd b) noexcept    { return a.real() * b.real() + a.imag() * b.imag(); }
 
@@ -166,11 +163,25 @@ void BassMachine::prepare (double sampleRate)
 {
     rate = sampleRate > 0.0 ? sampleRate : 48000.0;
 
-    const int count = (int) std::floor (std::log2 (highestBandHz / lowestBandHz) * bandsPerOctave) + 1;
-    bands.assign ((size_t) count, Band());
+    // The bank only listens below 2.4 kHz, so it runs on every 2nd, 4th or 8th sample.
+    step = std::clamp ((int) std::lround (rate / innerRateWanted), 1, (int) hist1.size());
+    innerRate = rate / step;
+    perStep = 1.0 / step;
 
-    // How quickly two neighbouring bands are judged to hear the same harmonic.
-    coherenceCoeff = 1.0 - std::exp (-1.0 / (0.004 * rate));
+    bands.assign ((size_t) maxBands, Band());
+    signCoeff = 1.0 - std::exp (-1.0 / (0.002 * innerRate));
+
+    {   // 2nd order Butterworth low-pass at 3 kHz on the bank's output: an octave below 2.4 kHz needs no more
+        smoothHz = std::min (3000.0, 0.4 * innerRate);
+        const double w = 2.0 * pi * smoothHz / innerRate;
+        const double alpha = std::sin (w) / (2.0 * 0.7071);
+        const double a0 = 1.0 + alpha, cw = std::cos (w);
+        smooth.b0 = (1.0 - cw) / 2.0 / a0;
+        smooth.b1 = (1.0 - cw) / a0;
+        smooth.b2 = smooth.b0;
+        smooth.a1 = -2.0 * cw / a0;
+        smooth.a2 = (1.0 - alpha) / a0;
+    }
 
     gateAttack  = 1.0 - std::exp (-1.0 / (0.001 * rate));
     gateRelease = 1.0 - std::exp (-1.0 / (0.060 * rate));
@@ -187,16 +198,21 @@ void BassMachine::reset()
 {
     for (auto& b : bands)
     {
-        b.s1 = b.s2 = {};
-        b.w = b.v = b.lastRatio = { 1.0, 0.0 };
-        b.coherence = pi;
-        b.mag = 0.0;
+        b.s1 = b.s2 = b.last = b.turn = {};
+        b.w = b.v = b.lined = { 1.0, 0.0 };
+        b.sign = b.signNow = 1.0;
+        b.turned = b.turnedNow = { 1.0, 0.0 };
+        b.offset = b.wobble = b.share = b.amp = b.size = 0.0;
     }
 
     pickup.clear();
-    for (auto* f : { &highPass, &low, &lowMid, &mid })
+    for (auto* f : { &highPass, &low, &lowMid, &mid, &smooth })
         f->clear();
 
+    for (auto* h : { &hist1, &hist2, &hist3, &hist4 })
+        h->fill (0.0);
+    box1 = box2 = box3 = box4 = bankNow = bankBefore = 0.0;
+    histAt = phase = 0;
     gateEnv = gateGain = compEnv = 0.0;
 }
 
@@ -208,43 +224,67 @@ void BassMachine::setSettings (const BassSettings& s)
 
 void BassMachine::buildBands()
 {
-    // Tracking speed widens the filters: wider rings up sooner (quicker low notes)
-    // but lets neighbouring notes of a chord bleed into each other more.
-    const double widen = 0.8 + 1.6 * std::clamp ((double) current.tracking, 0.0, 1.0);
-    const double spread = std::pow (2.0, 0.5 / bandsPerOctave) - std::pow (2.0, -0.5 / bandsPerOctave);
+    // Tracking speed sets how wide the filters are. Wider rings up sooner (quicker notes) but
+    // tells neighbouring harmonics and the notes of a chord apart less well. Low down each
+    // filter is a fixed fraction of its pitch wide; higher up the width stops growing, so the
+    // harmonics of a low note (82 Hz apart on the low E) each still get a filter to themselves.
+    const double tracking = std::clamp ((double) current.tracking, 0.0, 1.0);
+    const double fraction = halfWidthOfPitch * (0.8 + 1.6 * tracking);
+    const double widest = widestSlowHz + (widestQuickHz - widestSlowHz) * tracking;
 
-    for (size_t k = 0; k < bands.size(); ++k)
+    const int before = count;
+    count = 0;
+
+    for (double hz = lowestBandHz; hz <= highestBandHz && count < maxBands;)
     {
-        const double hz = lowestBandHz * std::pow (2.0, (double) k / bandsPerOctave);
-        const double width = hz * spread * widen;
-        const double r = std::exp (-pi * width / rate);
-        bands[k].pole = std::polar (r, 2.0 * pi * hz / rate);
-        bands[k].gain = 1.0 - r;
+        const double half = std::min (fraction * hz, widest);
+        auto& b = bands[(size_t) count++];
+        const double turn = 2.0 * pi * hz / innerRate, halfTurnWide = 2.0 * pi * half / innerRate;
+        const double r = std::exp (-halfTurnWide);
+        b.hz = hz;
+        b.halfHz = half;
+        b.pole = std::polar (r, turn);
+        b.centre = std::polar (1.0, turn);
+        b.gain = 1.0 - r;
+        b.perHalfWidth = r / (1.0 - r);
 
-        // Two neighbouring bands drifting against each other by less than 3% of the
-        // band's pitch (half a semitone) are taken to be hearing the same harmonic.
-        bands[k].coherenceLimit = 2.0 * pi * 0.03 * hz / rate;
+        // The running averages either side of the bank take a little off the top: put it back.
+        const auto average = [this] (double f)
+        {
+            const double a = pi * f / rate;
+            return step > 1 && a > 1.0e-9 ? std::abs (std::sin (a * step) / (step * std::sin (a))) : 1.0;
+        };
+        const double in3 = std::pow (average (hz), 3.0), out3 = std::pow (average (0.5 * hz), 3.0);
+        const double tidy = 1.0 / std::sqrt (1.0 + std::pow (0.5 * hz / smoothHz, 4.0));
+        b.trim = 2.0 / (in3 * out3 * tidy);     // 2: a filter that turns one way hears half of a real tone
+
+        b.followCoeff = 1.0 - std::exp (-1.0 / (followTime / (2.0 * pi * half) * innerRate));
+        b.steadyCoeff = 1.0 - std::exp (-1.0 / (std::max (steadyLeastSeconds, steadyTime / (2.0 * pi * half)) * innerRate));
+
+        if (fraction * hz >= widest)
+            hz += 2.0 * widest;
+        else
+        {
+            const double next = hz * (1.0 + fraction) / (1.0 - fraction);
+            hz = fraction * next > widest ? hz + half + widest : next;
+        }
     }
 
-    // Level: the bands overlap, so a steady note comes through several of them at once.
-    // Average how much gets through across the guitar's range, so the bass comes out
-    // about as loud as the guitar went in.
-    double total = 0.0;
-    int n = 0;
-
-    for (double hz = 82.0; hz < 1200.0; hz *= std::pow (2.0, 1.0 / 24.0), ++n)
+    // How far each band's say reaches: to the centre of the next band either side.
+    for (int k = 0; k < count; ++k)
     {
-        const cd e = std::polar (1.0, -2.0 * pi * hz / rate);
-        double sum = 0.0;
-
-        for (const auto& b : bands)
-            sum += std::norm (b.gain / (1.0 - b.pole * e));     // two stages: |H|^2 of one
-
-        total += sum;
+        auto& b = bands[(size_t) k];
+        b.perGapDown = b.halfHz / (k > 0 ? b.hz - bands[(size_t) (k - 1)].hz : 2.0 * b.halfHz);
+        b.perGapUp   = b.halfHz / (k + 1 < count ? bands[(size_t) (k + 1)].hz - b.hz : 2.0 * b.halfHz);
     }
 
-    // The 1.5 is measured: lined-up bands still meet at slight angles, so they add to a little less than the sum.
-    bankScale = 1.5 * 2.0 / std::max (tiny, total / std::max (1, n));
+    // Filters no longer in use forget what they held.
+    for (int k = count; k < std::max (before, count) && k < maxBands; ++k)
+    {
+        auto& b = bands[(size_t) k];
+        b.s1 = b.s2 = b.last = b.turn = {};
+        b.share = b.amp = b.size = 0.0;
+    }
 }
 
 void BassMachine::buildVoicing()
@@ -295,6 +335,115 @@ void BassMachine::buildVoicing()
     level = dbToGain (current.levelDb);
 }
 
+double BassMachine::runBank (double x, double sub) noexcept
+{
+    const bool wantTwo = sub > 0.0;
+    double one = 0.0, two = 0.0;
+
+    for (int k = 0; k < count; ++k)
+    {
+        auto& b = bands[(size_t) k];
+        b.s1 = b.gain * x + b.pole * b.s1;
+        b.s2 = b.gain * b.s1 + b.pole * b.s2;
+
+        const cd z = b.s2;
+        const double m = std::sqrt (std::norm (z));
+
+        // How fast the arrow really turns, against the band's own pitch: where the tone sits.
+        const cd d = z * std::conj (b.last);
+        const double nowSize = m * b.size;
+        b.last = z;
+        b.size = m;
+        b.turn += b.followCoeff * (d - b.turn);
+        const cd rot = b.turn * std::conj (b.centre);
+
+        b.signNow += signCoeff * (b.sign - b.signNow);
+
+        if (nowSize < tiny * tiny || rot.real() < tiny * tiny)
+        {
+            b.share = 0.0;
+            b.amp = 0.0;
+            continue;
+        }
+
+        const double offset = std::clamp (rot.imag() / rot.real() * b.perHalfWidth, -4.0, 4.0);
+        const double offsetNow = std::clamp ((d.imag() * b.centre.real() - d.real() * b.centre.imag()) / nowSize * b.perHalfWidth, -8.0, 8.0);
+        const double dev = offsetNow - offset;
+        b.wobble += b.steadyCoeff * (dev * dev - b.wobble);
+        b.offset = offset;
+
+        // The half-speed arrow. Stepping it on by half of the arrow's own step keeps it continuous.
+        cd q = m * b.w + z * std::conj (b.w);
+        const double qq = std::norm (q);
+        q = qq > tiny * tiny * m * m ? q / std::sqrt (qq) : b.w * cd (0.0, 1.0);
+        b.w = q;
+
+        // The filter lags a tone above its centre and leads one below, by a known angle.
+        // Taking half of that out leaves every band that hears a tone pointing the same way.
+        const double stretch = 1.0 + offset * offset;
+        b.lined = q * cd (1.0, offset);     // (not unit length: stretch^0.5 long)
+
+        // Each tone is spoken for by the one or two bands nearest to it, and only while it is steady.
+        const double near = std::max (0.0, 1.0 - std::abs (offset) * (offset < 0.0 ? b.perGapDown : b.perGapUp));
+        const double steady = 1.0 / (1.0 + (b.wobble * b.wobble) / (wobbleAllowed * wobbleAllowed));
+        b.share = near * steady;
+        const double amp = b.trim * m * std::sqrt (stretch) * b.share;      // times lined: trim * m * stretch * share
+
+        bool sameTone = false;
+
+        if (k > 0)
+        {
+            auto& below = bands[(size_t) (k - 1)];
+            sameTone = b.share > 0.02 && below.share > 0.02
+                       && std::abs ((b.hz + offset * b.halfHz) - (below.hz + below.offset * below.halfHz)) < 0.6 * b.halfHz;
+
+            if (sameTone && b.sign * below.sign * dot (b.lined, below.lined) < 0.0)
+            {
+                if (amp <= below.amp)   b.sign = -b.sign;
+                else                    below.sign = -below.sign;
+            }
+        }
+
+        b.amp = amp;
+        one += amp * b.signNow * b.lined.real();
+
+        if (wantTwo)
+        {
+            // Half again, from the same lined-up arrow. A quarter-speed arrow can sit at any of
+            // four quarter turns against its neighbour's, so here a band is turned (smoothly)
+            // rather than flipped.
+            const double perLength = 1.0 / std::sqrt (stretch);
+            cd u = b.v + b.lined * perLength * std::conj (b.v);
+            const double uu = std::norm (u);
+            u = uu > tiny ? u / std::sqrt (uu) : b.v * cd (0.0, 1.0);
+            b.v = u;
+
+            if (k > 0)
+            {
+                auto& below = bands[(size_t) (k - 1)];
+
+                if (sameTone)
+                {
+                    const cd apart = (b.turned * u) * std::conj (below.turned * below.v);
+
+                    if (apart.real() < 0.7)
+                    {
+                        const cd quarter = std::abs (apart.real()) > std::abs (apart.imag()) ? cd (apart.real() > 0.0 ? 1.0 : -1.0, 0.0)
+                                                                                            : cd (0.0, apart.imag() > 0.0 ? 1.0 : -1.0);
+                        if (amp <= below.amp)   b.turned *= std::conj (quarter);
+                        else                    below.turned *= quarter;
+                    }
+                }
+            }
+
+            b.turnedNow += signCoeff * (b.turned - b.turnedNow);
+            two += amp * std::sqrt (stretch) * (b.turnedNow * u).real();
+        }
+    }
+
+    return (1.0 - sub) * one + sub * two;
+}
+
 void BassMachine::process (const float* in, float* out, int numSamples) noexcept
 {
     if (pendingChanged)
@@ -310,7 +459,6 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
     }
 
     const double sub = std::clamp ((double) current.subMix, 0.0, 1.0);
-    const bool wantTwo = sub > 0.0;
     const double gateOpen = dbToGain (current.gateDb);
     const double gateClose = gateOpen * 0.5;
     const bool gateOff = current.gateDb <= -89.0f;
@@ -320,93 +468,33 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
     const double makeupDb = -thresholdDb * (1.0 - 1.0 / ratio) * 0.5;
     const double driveK = 1.0 + 8.0 * current.drive * current.drive;
 
-    const size_t count = bands.size();
-
     for (int i = 0; i < numSamples; ++i)
     {
         const double x = in[i];
 
-        // ---- 1 to 3: split, halve, line up ----
-        double one = 0.0, two = 0.0;
-        cd belowUnit { 1.0, 0.0 };
-        double belowMag = 0.0;
+        // ---- down to the bank's own rate: three running averages, each one bank step long ----
+        box1 += x - hist1[(size_t) histAt];
+        hist1[(size_t) histAt] = x;
+        const double a1 = box1 * perStep;
+        box2 += a1 - hist2[(size_t) histAt];
+        hist2[(size_t) histAt] = a1;
+        const double a2 = box2 * perStep;
+        box3 += a2 - hist3[(size_t) histAt];
+        hist3[(size_t) histAt] = a2;
 
-        for (size_t k = 0; k < count; ++k)
+        if (++phase >= step)
         {
-            auto& b = bands[k];
-            b.s1 = b.gain * x + b.pole * b.s1;
-            b.s2 = b.gain * b.s1 + b.pole * b.s2;
-
-            const double m = std::abs (b.s2);
-            b.mag = m;
-
-            if (m < tiny)
-            {
-                b.coherence = pi;
-                belowMag = 0.0;
-                continue;
-            }
-
-            const cd unit = b.s2 / m;
-
-            cd q = halfTurn (unit);
-            if (dot (q, b.w) < 0.0)
-                q = -q;
-
-            // Line up with the band below when both hear the same harmonic.
-            bool lined = false;
-
-            if (belowMag > tiny && m > 0.1 * belowMag && belowMag > 0.1 * m)
-            {
-                const cd rel = unit * std::conj (belowUnit);
-                const cd turn = rel * std::conj (b.lastRatio);
-                const double speed = turn.real() > 0.0 ? std::abs (turn.imag()) : pi;
-                b.coherence += coherenceCoeff * (speed - b.coherence);
-                b.lastRatio = rel;
-
-                if (b.coherence < b.coherenceLimit)
-                {
-                    const cd target = bands[k - 1].w * halfTurn (rel);
-                    if (dot (q, target) < 0.0)
-                    {
-                        q = -q;
-                        b.v *= cd (0.0, 1.0);    // keep the two-octave arrow next to its new parent
-                    }
-                    lined = true;
-                }
-            }
-            else
-            {
-                b.coherence = pi;
-                if (k > 0)
-                    b.lastRatio = unit * std::conj (belowUnit);
-            }
-
-            b.w = q;
-            one += m * q.real();
-
-            if (wantTwo)
-            {
-                cd u = halfTurn (q);
-                if (dot (u, b.v) < 0.0)
-                    u = -u;
-
-                if (lined)
-                {
-                    const cd target = bands[k - 1].v * halfTurn (q * std::conj (bands[k - 1].w));
-                    if (dot (u, target) < 0.0)
-                        u = -u;
-                }
-
-                b.v = u;
-                two += m * u.real();
-            }
-
-            belowUnit = unit;
-            belowMag = m;
+            phase = 0;
+            bankBefore = bankNow;
+            bankNow = smooth.run (runBank (box3 * perStep + keepAwake, sub));
         }
 
-        double y = bankScale * ((1.0 - sub) * one + sub * two);
+        // ---- and back up: a straight line between the bank's outputs, then one more running average ----
+        const double line = bankBefore + (bankNow - bankBefore) * ((double) (phase + 1) * perStep);
+        box4 += line - hist4[(size_t) histAt];
+        hist4[(size_t) histAt] = line;
+        histAt = histAt + 1 < step ? histAt + 1 : 0;
+        double y = box4 * perStep + keepAwake;
 
         // ---- 4: pickup and tone knob, EQ ----
         y = pickup.run (y);

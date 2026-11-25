@@ -45,23 +45,32 @@ struct BassSettings
 /** Guitar in, bass out: a polyphonic octave (and two-octave) down with a P-bass voicing.
 
     How it works, in order:
-      1. A bank of narrow filters, six to an octave from 55 Hz to 2.4 kHz, splits the guitar
-         into strands, so each string's notes and harmonics end up in their own filters.
-         Each filter gives a "complex" output: an arrow that turns once per cycle.
-      2. Each arrow is turned at half speed (the square root, kept continuous), which halves
-         that strand's frequency without touching how loud it is or how it rises and dies
-         away. Halving every harmonic of a note gives exactly the harmonics of the note an
-         octave down, so a single note comes out as a clean, natural bass note with the
-         guitar's own attack and dynamics. Two octaves down is the same again.
-      3. Halving leaves each strand free to come out upside down. Neighbouring filters that
-         hear the same harmonic are lined up with each other so they add rather than
-         cancel (without this a note comes out at a random level between strong and almost
-         gone, the "unnatural" sound of many octave pedals).
-      4. The bass then goes through a model of a P-bass pickup and its passive tone knob,
+      1. A bank of narrow filters from 70 Hz to 2.4 kHz splits the guitar into strands. Low
+         down each filter is a fixed fraction of its pitch wide; higher up the width stops
+         growing, so the harmonics of a low note (82 Hz apart on the low E) still land in
+         filters of their own. Each filter gives a "complex" output: an arrow that turns once
+         per cycle. The bank runs at about 12 kHz (every 8th sample at 96 kHz), which is
+         plenty for what it listens to and keeps it cheap.
+      2. Each band works out where its tone really sits (from how fast its arrow turns) and
+         how steady it is. A tone is then spoken for only by the one or two bands nearest to
+         it, with the filter's own loss and lag at that pitch taken back out, so every pitch
+         comes out at the same level. A band that hears two tones fighting, or only hiss,
+         has an unsteady arrow and is turned down: that band would come out as static.
+      3. Each arrow is turned at half speed (stepped on by half of its own step, so it stays
+         continuous), which halves that strand's frequency without touching how loud it is
+         or how it rises and dies away. Halving every harmonic of a note gives exactly the
+         harmonics of the note an octave down. Two octaves down is the same again.
+      4. Halving leaves each strand free to come out upside down. Two neighbouring bands
+         that speak for the same tone are kept the same way up, and when one has to turn
+         over it is the quieter of the two and it fades through zero in a few ms. (The first
+         version flipped bands in one sample, at full level, many times a second on a real
+         guitar: Tom heard it on 25 Nov 2026 as ticking and static.)
+      5. The bass then goes through a model of a P-bass pickup and its passive tone knob,
          an EQ, a compressor, a soft valve-style drive and a level.
 
     Nothing looks ahead: the only delay is what the filters themselves take to ring up,
-    a few ms on high notes and more on the lowest notes (see measuredDelayMs()). */
+    a few ms on high notes and more on the lowest notes, plus a third of a millisecond for
+    the change of rate. */
 class BassMachine
 {
 public:
@@ -76,20 +85,32 @@ public:
     /** In and out may be the same buffer. */
     void process (const float* in, float* out, int numSamples) noexcept;
 
-    int numBands() const noexcept                   { return (int) bands.size(); }
+    int numBands() const noexcept                   { return count; }
     double sampleRate() const noexcept              { return rate; }
 
 private:
+    static constexpr int maxBands = 160;
+
     struct Band
     {
         std::complex<double> pole, s1, s2;      // two complex one-pole filters in a row
-        double gain = 0.0;
+        std::complex<double> centre;            // one sample's turn at the band's own pitch
+        double gain = 0.0, trim = 2.0;
+        double perHalfWidth = 0.0;              // 1 / (half the band's width, as a turn per sample)
+        double followCoeff = 0.0, steadyCoeff = 0.0;
+        std::complex<double> last;              // the band's output one sample ago
+        std::complex<double> turn;              // smoothed turn per sample: how fast its arrow really goes round
+        double offset = 0.0;                    // the tone's pitch against the band's centre, in half-widths
+        double wobble = 0.0;                    // how unsteady that pitch is (one steady tone: 0)
         std::complex<double> w { 1.0, 0.0 };    // the half-speed arrow (one octave down)
         std::complex<double> v { 1.0, 0.0 };    // half again (two octaves down)
-        std::complex<double> lastRatio { 1.0, 0.0 };
-        double coherence = 1.0;                 // smoothed turning speed against the band below
-        double coherenceLimit = 0.0;            // slower than this counts as the same harmonic
-        double mag = 0.0;
+        std::complex<double> lined { 1.0, 0.0 };    // the half-speed arrow with the filter's own lag taken out
+        double size = 0.0;                      // how long the band's arrow was one sample ago
+        double perGapDown = 0.5, perGapUp = 0.5;    // half-width over the distance to the next band's centre
+        double sign = 1.0, signNow = 1.0;       // which way up it plays, and the smooth move there
+        std::complex<double> turned { 1.0, 0.0 }, turnedNow { 1.0, 0.0 };   // the same for two octaves down: a quarter turn at a time
+        double share = 0.0;                     // how much of its tone this band speaks for
+        double hz = 0.0, halfHz = 0.0, amp = 0.0;
     };
 
     struct Biquad
@@ -121,6 +142,7 @@ private:
     };
 
     void buildBands();
+    double runBank (double x, double sub) noexcept;
     void buildVoicing();
 
     double rate = 48000.0;
@@ -128,7 +150,16 @@ private:
     bool pendingChanged = false;
 
     std::vector<Band> bands;
-    double coherenceCoeff = 0.0, bankScale = 1.0;
+    int count = 0;                              // bands in use (depends on Tracking speed)
+    int step = 1, phase = 0;                    // the bank runs on every step-th sample
+    double innerRate = 12000.0, smoothHz = 3000.0;
+    double perStep = 1.0;
+    double box1 = 0.0, box2 = 0.0, box3 = 0.0, box4 = 0.0;      // running averages before and after the bank
+    std::array<double, 16> hist1 {}, hist2 {}, hist3 {}, hist4 {};
+    int histAt = 0;
+    double bankNow = 0.0, bankBefore = 0.0;     // the bank's last two outputs, joined by a straight line
+    double signCoeff = 0.0;
+    Biquad smooth;                              // tidies the bank's output before it goes back to the full rate
 
     Cubic pickup;
     Biquad highPass, low, lowMid, mid;

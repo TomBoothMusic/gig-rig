@@ -95,6 +95,9 @@ the exact steps, file names and rules. Keep it true.** In short:
   the budget (start with 5% of one block per effect and adjust when the whole
   chain is known).
 - Reports its latency truthfully (an impulse through it lands where it says).
+- An effect that follows pitch or splits the sound into bands is also checked on a played
+  instrument, not only on test tones: the first Bass9 copy passed every tone check and ticked
+  on Tom's guitar (`docs/effects.md`, "The bass, reworked").
 
 **Getting it to Tom**
 
