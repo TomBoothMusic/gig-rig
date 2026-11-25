@@ -26,6 +26,7 @@ class DigitalDelay final : public Effect
 public:
     DigitalDelay();
     std::string typeId() const override         { return "digitaldelay"; }
+    bool hasTail() const noexcept override              { return true; }
 
 private:
     void onPrepare (double rate, int maxBlock) override;

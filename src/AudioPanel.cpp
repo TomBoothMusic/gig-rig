@@ -125,10 +125,13 @@ AudioPanel::AudioPanel (AudioEngine& e)
         }
         else
         {
+            reconnect.arm (false);
             engine.close();
             syncToEngine();
         }
     };
+
+    engine.reconnectReport = [this] { return reconnect.text(); };
 
     rateBox.setTooltip ("Sample rate. On Windows the CQ's rate is set in its driver settings, so only that one shows here.");
     rateBox.onChange = [this]
@@ -187,6 +190,7 @@ AudioPanel::AudioPanel (AudioEngine& e)
 AudioPanel::~AudioPanel()
 {
     stopTimer();
+    engine.reconnectReport = nullptr;
 }
 
 void AudioPanel::resized()
@@ -290,6 +294,14 @@ void AudioPanel::openDevice (const DeviceChoice& choice, int bufferSize, double 
 
     if (engine.isOpen())
         saveAudio (choice, engine.sampleRate(), engine.bufferSize());
+
+    // Watch a device that opened; a device that would not open is left alone (no endless retries
+    // for something chosen by mistake). The watch keeps going through its own tries.
+    // A try by hand (or by the device check) at the device that went away counts like one of the watch's own.
+    if (reconnect.isLost() && choice == lostChoice)
+        reconnect.result (engine.isOpen());
+    else
+        reconnect.arm (engine.isOpen());
 
     syncToEngine();
 }
@@ -450,6 +462,14 @@ void AudioPanel::updateVerdict()
 
 void AudioPanel::updateDropoutLine()
 {
+    if (reconnect.isLost())
+    {
+        dropoutLabel.setColour (juce::Label::textColourId, style::red);
+        dropoutLabel.setText ("\"" + lostChoice.deviceName + "\" has gone away (switched off or unplugged?). Nothing to do: the app tries to open it again every 3 seconds. "
+                              "Loops recorded before it went are lost.", juce::dontSendNotification);
+        return;
+    }
+
     if (! engine.isOpen())
     {
         dropoutLabel.setText ({}, juce::dontSendNotification);
@@ -528,6 +548,26 @@ void AudioPanel::updateGlitchLine()
 void AudioPanel::timerCallback()
 {
     engine.tick();
+
+    // The mixer switched off or unplugged: let go of it, then keep trying to open it again.
+    switch (reconnect.tick (engine.isOpen(), engine.blocksRun(), engine.takeDeviceError(), engine.isMeasuring()))
+    {
+        case ReconnectWatch::Action::lost:
+            lostChoice = engine.currentChoice();
+            lostBuffer = lostChoice.typeName == "ASIO" ? 0 : engine.bufferSize();
+            lostRate = engine.sampleRate();
+            engine.close();
+            syncToEngine();
+            break;
+
+        case ReconnectWatch::Action::tryOpen:
+            engine.listDevices();       // look again: the device list changes when the mixer comes back
+            openDevice (lostChoice, lostBuffer, lostRate);
+            break;
+
+        case ReconnectWatch::Action::none:
+            break;
+    }
 
     for (int i = 0; i < numMeteredInputs; ++i)
         inputMeters.setLevel (i, engine.takeInputPeak (i));

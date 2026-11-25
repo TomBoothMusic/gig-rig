@@ -8,6 +8,8 @@
 #include "EffectsPanel.h"
 #include "LooperPanel.h"
 #include "PedalPanel.h"
+#include "SongBook.h"
+#include "SongsPanel.h"
 
 namespace gigrig
 {
@@ -29,13 +31,16 @@ private:
     AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
     PedalInput pedal;       // the RC-600's switches; feeds the looper inside the engine
 
+    SongBook songBook { engine, SongBook::defaultSongFolder(), EffectsPanel::presetFolder() };     // the song list: looper layouts and sounds
+
     juce::Label title, subtitle;
     juce::TextButton copyButton { "Copy report" };
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     AudioPanel audioPanel { engine };
     DeviceCheckPanel devicePanel;
     PedalPanel pedalPanel { pedal };
-    LooperPanel looperPanel { engine, pedal };
+    LooperPanel looperPanel { engine, pedal, songBook };
+    SongsPanel songsPanel { engine, songBook };
     EffectsPanel effectsPanel { engine };
     AmpCapturePanel ampPanel { engine };
     juce::TooltipWindow tooltips { this };

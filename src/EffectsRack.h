@@ -75,14 +75,16 @@ public:
         switch is held (toe down on the press, heel on the release), 4 = the test take (record,
         then play, then stop; any chain), 5 = a delay throw while the switch is held (the chain's
         delay catches what is played or sung; let go and the repeats ring out), 6 = rock the chain's
-        wah while the switch is held (toe on the press, heel on the release), 10 + k = slot k on/off. */
+        wah while the switch is held (toe on the press, heel on the release), 7 = the chain's next
+        amp sound (steps round the amp models, see nextAmp), 10 + k = slot k on/off.
+        These belong to the song: loading a song that names switches replaces them all (SongBook). */
     struct PedalAssign
     {
         int sw = -1;        // pedal switch (0..8 = switches 1 to 9, 9 = CTL3, 10 = CTL4), -1 = none
         int chain = 0;
         int action = 0;
     };
-    static constexpr int numPedalAssigns = 2;
+    static constexpr int numPedalAssigns = 6;
     PedalAssign pedalAssign (int i) const noexcept;
     void setPedalAssign (int i, PedalAssign a) noexcept;
     /** Any thread. True if the effects use this switch (so the looper must not); presses are
@@ -98,6 +100,35 @@ public:
     /** Message thread: the delay throw. Sets the "throw" setting of the first effect in the chain
         that has one to Catching (held) or Ready (let go). False if the chain has none. */
     bool holdThrow (int chain, bool held);
+    /** Message thread: the amp-cycling switch. Sets the first amp in the chain to the next amp
+        model in the chain's list (setAmpCycle), or in the models folder when the list is empty,
+        going round to the first after the last. The amp fades from one to the other by itself.
+        Returns a line for the screen ("Chain 1 amp: Dream 65 - Driven"). */
+    juce::String nextAmp (int chain);
+    /** The amp models the amp-cycling switch steps through on a chain (empty = every model installed). */
+    void setAmpCycle (int chain, const juce::StringArray& models);
+    juce::StringArray ampCycle (int chain) const;
+    /** The last thing nextAmp() did, for the screen and the report. */
+    juce::String ampNote;
+
+    /** Whether delays and reverbs ring out when a chain's effects are changed (another song,
+        another preset), or are cut in 10 ms. On by default; a rig setting, saved with the rack. */
+    void setTailsRingOut (bool shouldRing);
+    bool tailsRingOut() const noexcept                  { return tails; }
+    /** How many chains have an old set of effects still ringing out right now. */
+    int tailsRinging() const noexcept;
+
+    /** The presets a chain was built from, in the order they were loaded and added (empty when
+        the chain was built by hand). Kept so "Keep these sounds for this song" can name the
+        presets instead of copying their settings. Message thread. */
+    juce::StringArray recipe (int chain) const;
+    void setRecipe (int chain, const juce::StringArray& presets);
+    /** The chain as it was when it was last loaded (by a song, or by Load and Add to chain), so
+        "Update its presets" can tell which knobs were turned since and save only those: a
+        song's own changes on top of a preset must not leak into the preset. Saved with the rack. */
+    const fx::ChainModel& baseline (int chain) const;
+    void setBaseline (int chain, const fx::ChainModel&);
+
     /** Called on the message thread after a pedal press changed something (so the screen can follow). */
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
@@ -263,6 +294,8 @@ private:
     {
         fx::Chain chain;
         Routing route;                                  // message thread's copy
+        juce::StringArray recipe, ampCycle;             // message thread
+        fx::ChainModel baseline;                        // message thread
         std::atomic<bool> on { false };
         std::atomic<int> source { 9 }, outFirst { 2 }, looperHears { -2 }, reference { 7 }, listen { 0 };
         std::atomic<bool> outPair { true };
@@ -298,7 +331,7 @@ private:
     std::array<std::atomic<float>, 16> socketMax {};
     std::array<std::atomic<int>, numPedalAssigns> assignSw, assignChain, assignAction;
     double envCoeff = 0.0;
-    bool dirty = false;
+    bool dirty = false, tails = true;
     int ticksSinceChange = 0;
 
     // ---- capture ----

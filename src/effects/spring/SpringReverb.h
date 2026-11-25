@@ -18,6 +18,7 @@ class SpringReverb final : public Effect
 public:
     SpringReverb();
     std::string typeId() const override         { return "spring"; }
+    bool hasTail() const noexcept override              { return true; }
     double cpuBudgetPercent() const noexcept override { return 8.0; }
 
 private:

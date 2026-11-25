@@ -22,6 +22,7 @@ class RoomReverb final : public Effect
 public:
     RoomReverb();
     std::string typeId() const override                 { return "room"; }
+    bool hasTail() const noexcept override              { return true; }
     double cpuBudgetPercent() const noexcept override   { return 8.0; }
 
     /** Seconds for the tail to fall 60 dB (for the checks and the docs). */

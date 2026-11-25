@@ -138,6 +138,14 @@ public:
     juce::Array<int> availableBufferSizes() const;
     juce::Array<double> availableSampleRates() const;
     juce::String lastError() const              { return errorText; }
+
+    /** Blocks of audio the device has asked for since the app started: a pulse for the
+        reconnect watch (ReconnectWatch.h). Any thread. */
+    juce::int64 blocksRun() const noexcept      { return blockCount.load (std::memory_order_relaxed); }
+    /** True once after the driver reported an error (the device was unplugged, say). */
+    bool takeDeviceError() noexcept             { return deviceError.exchange (false); }
+    /** The reconnect watch's line, shown in the report (the audio tab owns the watch). */
+    std::function<juce::String()> reconnectReport;
     bool hasControlPanel() const;
     void showControlPanel();
 
@@ -182,7 +190,7 @@ public:
         latency table, then the play-through and dropout counts. */
     juce::String latencyText() const;
     juce::String dropoutText() const;
-    juce::String reportText() const                 { return latencyText() + "\n" + dropoutText() + (extraReport != nullptr ? "\n" + extraReport() : juce::String()); }
+    juce::String reportText() const                 { return latencyText() + "\n" + dropoutText() + (reconnectReport != nullptr ? reconnectReport() + "\n" : juce::String()) + (extraReport != nullptr ? "\n" + extraReport() : juce::String()); }
 
     /** Later stages (the pedal, the looper) add their own part to the report through this. */
     std::function<juce::String()> extraReport;
@@ -255,6 +263,8 @@ private:
     std::atomic<int> playMode { (int) PlayThrough::off };
     std::atomic<int> toneReturn { -1 };
     std::atomic<bool> measuring { false };
+    std::atomic<juce::int64> blockCount { 0 };
+    std::atomic<bool> deviceError { false };
     std::atomic<bool> guardTripped { false };
     std::array<std::atomic<float>, numMeteredInputs> inputPeaks {};
     std::array<std::atomic<float>, numReturns> returnPeaks {};

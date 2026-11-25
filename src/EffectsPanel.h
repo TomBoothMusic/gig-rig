@@ -26,6 +26,11 @@ public:
     void refresh();
 
     static juce::File presetFolder();
+
+    /** One row of "which switch does what", shared with the Songs tab: fills the two boxes
+        from the rack's switch i, and writes them back. */
+    static void fillPedalRow (EffectsRack&, int i, juce::ComboBox& switchBox, juce::ComboBox& actionBox);
+    static void pushPedalRow (EffectsRack&, int i, const juce::ComboBox& switchBox, const juce::ComboBox& actionBox);
     static juce::File captureFolder();
 
 private:
@@ -91,11 +96,12 @@ private:
     // Presets.
     juce::ComboBox presetBox;
     juce::TextEditor presetName;
-    juce::TextButton loadButton { "Load" }, addPresetButton { "Add to chain" }, saveButton { "Save as" }, folderButton { "Open folder" };
+    juce::TextButton loadButton { "Load" }, addPresetButton { "Add to chain" }, saveButton { "Save as" }, updateButton { "Update its presets" }, folderButton { "Open folder" };
     juce::Array<juce::File> presetFiles;
 
     // Pedal switches.
-    std::array<juce::ComboBox, EffectsRack::numPedalAssigns> pedalSwitchBoxes, pedalActionBoxes;
+    static constexpr int shownPedalRows = 2;     // the first two of the rack's six; the Songs tab shows all six
+    std::array<juce::ComboBox, shownPedalRows> pedalSwitchBoxes, pedalActionBoxes;
 
     juce::Rectangle<int> meterArea;
     float inDb = -100.0f, outDb = -100.0f, refDb = -100.0f;

@@ -9,6 +9,7 @@ namespace gigrig
 
 void runLooperSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runEffectsSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runSongSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
 {
@@ -527,6 +528,7 @@ juce::String runSelfTest (bool& passed)
 
     runLooperSelfTest (check);
     runEffectsSelfTest (check);
+    runSongSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

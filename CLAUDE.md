@@ -60,6 +60,16 @@ Real audio and MIDI are proven only on Tom's hardware.
   options or restart the app while Tom might be playing. Ask first. Changes go
   through the scripts in `linux/` so they can be repeated on a fresh install.
 
+## Songs and their sounds
+
+Built 25 Nov 2026 (the song-linking batch); **`docs/songs.md` is the guide. Keep it true.**
+A song entry is a text file in `Documents/GigRig/Songs` that names effect presets per chain
+(it does not copy them), plus its own changes, switches and amp list. `Default sounds.txt` is
+what songs without lines of their own use. Program changes from Songbook Pro load entries.
+Logic in `src/SongBook.*` (no screen, checked by `src/SongSelfTest.cpp`), screen in
+`src/SongsPanel.*`. The words used in song files (chain, effect, setting and switch-action
+names) are saved on Tom's disk: never rename them, only add.
+
 ## Adding an effect
 
 Tom wants to keep adding effects for years, mostly after his heavy-use

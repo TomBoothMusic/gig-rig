@@ -122,8 +122,11 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   `smoothingMs` 0 because they handle it themselves.
 - Ids: `analogdelay`, `digitaldelay`, `tapedelay`, `spring`, `tremolo`, `vibrato`, `chorus`.
   Vibrato reports its shortest delay (0.5 ms) and only ever wobbles later than that.
-- Switching a slot off fades it out in 10 ms, so delay and reverb tails stop. Spill-over (tails
-  ringing on) would need the chain to keep feeding the effect silence while blending its output.
+- Switching a slot off fades it out in 10 ms, so its delay or reverb tail stops.
+- When the whole chain changes (a song or preset loads), tails ring out instead (25 Nov 2026,
+  `docs/songs.md`, "Tails ring out"). **A new delay or reverb must add
+  `bool hasTail() const noexcept override { return true; }`** and be added to the list in
+  `src/SongSelfTest.cpp` that checks which effects say so.
 
 ## The whammy (pitch bending)
 

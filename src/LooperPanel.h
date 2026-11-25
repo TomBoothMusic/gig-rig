@@ -4,6 +4,7 @@
 
 #include "AudioEngine.h"
 #include "PedalPanel.h"
+#include "SongBook.h"
 
 namespace gigrig
 {
@@ -28,11 +29,14 @@ class LooperPanel final : public juce::Component,
                           private juce::Timer
 {
 public:
-    LooperPanel (AudioEngine&, PedalInput&);
+    LooperPanel (AudioEngine&, PedalInput&, SongBook&);
     ~LooperPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
+
+    /** After the song book loaded a song or read its folder again. */
+    void songChanged();
 
     /** The stage 3 part of the report. Message thread. */
     juce::String reportText();
@@ -46,6 +50,7 @@ private:
 
     AudioEngine& engine;
     PedalInput& pedal;
+    SongBook& book;
 
     juce::Label songLabel, outLabel, trimLabel, descriptionHeading, logHeading;
     juce::ComboBox songBox, firstLoopBox, outBox;

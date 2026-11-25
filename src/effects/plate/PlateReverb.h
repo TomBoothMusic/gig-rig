@@ -23,6 +23,7 @@ class PlateReverb final : public Effect
 public:
     PlateReverb();
     std::string typeId() const override                 { return "plate"; }
+    bool hasTail() const noexcept override              { return true; }
     double cpuBudgetPercent() const noexcept override   { return 8.0; }
 
     /** Seconds for the tail to fall 60 dB at a Decay setting (for the checks and the docs). */

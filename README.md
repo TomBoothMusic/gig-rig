@@ -611,6 +611,62 @@ effect, attach any presets you save, and for the BodyRez paste the line the Amp 
 showed when it made the file. A **Capture** of the vocal chain with the harmony on (it holds
 your dry voice and the result) tells Claude more about the harmony than any description.
 
+## Songs: each song calls up its own sounds
+
+This build links the effects to the songs. The full guide is [docs/songs.md](docs/songs.md).
+In short: a song names the presets it uses, so changing a preset once changes every song that
+uses it. Songs without sounds of their own use the **default sounds**. There is a new **Songs**
+tab between Looper and Effects.
+
+### Part A: the default sounds (10 minutes)
+
+1. Open the app and start the audio as usual. Click the **Effects** tab.
+2. On chain 1 (your electric), choose your everyday comp and EQ preset in the Presets box and
+   click **Load**. Then choose your everyday amp preset and click **Add to chain**. The line near
+   the bottom now says "This chain was built from:" with both names.
+3. Do the same on the acoustic and vocal chains with the presets you like there.
+4. Click the **Songs** tab. Click **Keep these sounds as the default**.
+
+### Part B: a song with sounds of its own (10 minutes)
+
+1. On the Songs tab, choose **Wicked Game** in the Song box.
+2. On the Effects tab, change chain 1 to what that song needs: **Load** and **Add to chain**
+   different presets, and turn any knobs (more reverb, tremolo on).
+3. Back on the Songs tab, in the Switches rows, set one row to **Switch 9** and
+   **Chain 1: next amp sound**, and another to a switch you like and **delay throw while held**
+   on the vocal chain.
+4. Click **Keep these sounds for this song**. The left box shows the file it wrote.
+5. Choose another song in the Song box, then Wicked Game again. Its sounds and switches should
+   come back each time, and the other song should have the default sounds.
+6. Play and press switch 9: the amp should step to the next amp sound each press.
+
+### Part C: edit a preset once (5 minutes)
+
+1. With Wicked Game loaded, go to the Effects tab and turn one knob on an effect that came from
+   a preset another song also uses (for example the compressor).
+2. Click **Update its presets**. The line under the buttons says which preset it saved into.
+3. Load a different song that uses the same preset. The knob should be where you left it.
+
+### Part D: tails, program numbers and the mixer coming back (10 minutes)
+
+1. Load a song with a long delay or reverb, play a chord, and while it rings choose another
+   song. The delay or reverb should die away naturally under the new sound, with no click.
+2. On the Songs tab, type **11** in **Try a program number** and click **Load that program**.
+   Wicked Game should load. Type a number no song uses (say **50**): the general set-up with the
+   default sounds should load.
+3. If you have a way to get Songbook Pro's MIDI into the laptop, tap a song there and watch the
+   Song box follow.
+4. With the audio running, pull the CQ's USB cable out, wait five seconds and plug it back in.
+   A red line should appear on the first tab, and the sound should come back by itself within a
+   few seconds.
+
+### What to send Claude
+
+Press **Copy report** after Part D and paste it. Say whether any tail was cut short or rang too
+long, whether the amp switch should also change the amp's knobs, and send your list of which
+songs use which presets (the format is at the end of docs/songs.md) so Claude can write all the
+song files in one go.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.

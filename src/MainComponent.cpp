@@ -28,6 +28,7 @@ MainComponent::MainComponent()
     tabs.addTab ("Latency and audio test", style::background, &audioPanel, false);
     tabs.addTab ("Pedal (RC-600)", style::background, &pedalPanel, false);
     tabs.addTab ("Looper", style::background, &looperPanel, false);
+    tabs.addTab ("Songs", style::background, &songsPanel, false);
     tabs.addTab ("Effects", style::background, &effectsPanel, false);
     tabs.addTab ("Amp capture", style::background, &ampPanel, false);
     tabs.addTab ("Device check", style::background, &devicePanel, false);
@@ -42,20 +43,40 @@ MainComponent::MainComponent()
 
         engine.looper().pedal (event);
     };
-    devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message) { pedal.handleMidi (deviceName, message); };
+    // A program change from any MIDI device (Songbook Pro through its Bluetooth receiver)
+    // loads the song with that number. MIDI arrives on the driver's thread; songs load on this one.
+    devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message)
+    {
+        pedal.handleMidi (deviceName, message);
+
+        if (message.isProgramChange())
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), deviceName, program = message.getProgramChangeNumber() + 1]
+            {
+                if (safe != nullptr)
+                    safe->songBook.programChange (program, deviceName);
+            });
+    };
+
+    songBook.onChanged = [this]
+    {
+        looperPanel.songChanged();
+        effectsPanel.refresh();
+        songsPanel.refresh();
+    };
     devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
 
     // The pedal and the looper add their parts to the report, and a glitch check
     // starts a fresh count of what the RC-600 sent while it ran.
-    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText() + "\n" + engine.effects().reportText() + "\n" + ampPanel.reportText(); };
+    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText() + "\n" + songBook.reportText() + "\n" + engine.effects().reportText() + "\n" + ampPanel.reportText(); };
     engine.onGlitchCheckStarted = [this] { pedal.resetCounts(); };
 
     // ASIO drivers allow one user at a time, so the engine lets go of its
     // device while the device check looks at every driver, then picks it up again.
     devicePanel.onBeforeScan = [this]
     {
-        reopenChoice = engine.isOpen() ? engine.currentChoice() : DeviceChoice();
-        reopenBufferSize = engine.bufferSize();
+        reopenChoice = engine.isOpen() ? engine.currentChoice() : audioPanel.lostDevice();
+        reopenBufferSize = engine.isOpen() ? engine.bufferSize() : 0;
+        audioPanel.pauseReconnect();
         engine.close();
     };
 
@@ -72,10 +93,19 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab.
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 
+    // The same for a program change: GIGRIG_PROGRAM=11 does what Songbook Pro's program 11 does, a moment after the start.
+    if (const auto program = juce::SystemStats::getEnvironmentVariable ("GIGRIG_PROGRAM", {}).getIntValue(); program > 0)
+        juce::Timer::callAfterDelay (1500, [safe = juce::Component::SafePointer<MainComponent> (this), program]
+        {
+            if (safe != nullptr)
+                safe->songBook.programChange (program, "GIGRIG_PROGRAM");
+        });
+
+    songsPanel.refresh();       // the effects panel has read the rack's memory by now
     setSize (980, 790);
     devicePanel.requestScan();
 }

@@ -60,6 +60,16 @@ public:
     void prepare (double sampleRate, int maxBlockSize);
     void setModel (const ChainModel& m);
     const ChainModel& model() const noexcept        { return current; }
+    /** Brings the row to m as gently as it can. When m has the same effects in the same order,
+        only the settings move (they glide, nothing restarts, and delays and reverbs carry on);
+        otherwise it is setModel. Returns true if only settings moved. What a song change uses. */
+    bool setModelGently (const ChainModel& m);
+    /** Whether a changed row lets its delays and reverbs ring out (the default) or cuts them in 10 ms. */
+    void setTailsRingOut (bool shouldRing) noexcept { tailsOn.store (shouldRing); }
+    /** True while an old row is still ringing out. Any thread. */
+    bool tailRinging() const noexcept               { return ringing.load (std::memory_order_relaxed); }
+    /** The longest an old row may ring before it is faded away. */
+    static constexpr double maxTailSeconds = 10.0;
     void setSlotOn (int slot, bool on);
     void setParam (int slot, int index, float value);
     void setText (int slot, const std::string& key, const std::string& value);
@@ -91,7 +101,8 @@ private:
 
     Built* build (const ChainModel& m) const;
     void submit (Built* b);
-    void runBuilt (Built& b, float* buffer, int numSamples) noexcept;
+    void runBuilt (Built& b, float* buffer, int numSamples, int from = 0) noexcept;
+    void retireFading() noexcept;
     void freeAll();
 
     ChainModel current;
@@ -106,6 +117,16 @@ private:
     Built* fading = nullptr;        // audio thread: the old set during a change-over
     int fadePos = 0, fadeLength = 480;
     double tempo = 0.0;             // audio thread
+
+    // Ringing out (audio thread). When the old set has a delay or reverb that is on, the
+    // change-over fades the sound going INTO the first such effect instead of the old set's
+    // output, then keeps running the old set from that effect on, fed with silence, until it
+    // has died away. tailFrom is that effect's slot, or -1 for a plain 10 ms cross-fade.
+    int tailFrom = -1;
+    long long tailPos = 0;
+    int tailQuiet = 0;
+    float tailGain = 1.0f, tailStep = 0.0f;
+    std::atomic<bool> tailsOn { true }, ringing { false };
 
     std::vector<float> wet, old;
 };
