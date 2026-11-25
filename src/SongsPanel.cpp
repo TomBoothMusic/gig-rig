@@ -59,6 +59,8 @@ SongsPanel::SongsPanel (AudioEngine& e, SongBook& b)
     defaultButton.onClick = [this] { say (book.keepAsDefault()); };
     forgetButton.onClick  = [this] { say (book.forgetCurrent()); };
     againButton.onClick   = [this] { book.applySounds ("asked for on the Songs tab"); };
+    windowButton.onClick  = [this] { if (onWindowButton != nullptr) onWindowButton(); };
+    windowButton.setTooltip ("Lifts the Songs tab out into a window of its own, so it can sit on a second screen while the Effects tab stays open. Closing that window puts it back.");
     folderButton.onClick  = [this] { book.folder().createDirectory(); book.folder().startAsProcess(); };
 
     addButton.onClick = [this]
@@ -101,7 +103,7 @@ SongsPanel::SongsPanel (AudioEngine& e, SongBook& b)
 
     for (auto* c : std::initializer_list<juce::Component*> { &songLabel, &statusLabel, &programLabel, &newLabel, &switchHeading, &fileHeading, &notesHeading, &helpLabel,
                                                              &songBox, &programEditor, &newName, &newProgram, &fileView, &notesView, &programButton, &copyButton,
-                                                             &keepButton, &defaultButton, &forgetButton, &folderButton, &addButton, &againButton, &tailsBox })
+                                                             &keepButton, &defaultButton, &forgetButton, &folderButton, &addButton, &againButton, &windowButton, &tailsBox })
         addAndMakeVisible (c);
 
     refresh();
@@ -194,6 +196,11 @@ void SongsPanel::timerCallback()
         refreshNotes();
 }
 
+void SongsPanel::setInOwnWindow (bool own)
+{
+    windowButton.setButtonText (own ? "Put back as a tab" : "Open in its own window");
+}
+
 void SongsPanel::visibilityChanged()
 {
     if (isShowing())
@@ -220,7 +227,10 @@ void SongsPanel::resized()
     programLabel.setBounds (top.removeFromRight (150));
 
     area.removeFromTop (6);
-    statusLabel.setBounds (area.removeFromTop (24));
+    auto statusRow = area.removeFromTop (24);
+    windowButton.setBounds (statusRow.removeFromRight (190));
+    statusRow.removeFromRight (8);
+    statusLabel.setBounds (statusRow);
     area.removeFromTop (6);
 
     auto buttons = area.removeFromTop (30);

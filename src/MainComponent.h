@@ -27,6 +27,7 @@ public:
 
 private:
     void timerCallback() override;
+    void moveSongsPanel (bool toOwnWindow);
 
     AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
     PedalInput pedal;       // the RC-600's switches; feeds the looper inside the engine
@@ -44,6 +45,7 @@ private:
     EffectsPanel effectsPanel { engine };
     AmpCapturePanel ampPanel { engine };
     juce::TooltipWindow tooltips { this };
+    std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 
     DeviceChoice reopenChoice;      // what was running before a rescan, to start it again after
     int reopenBufferSize = 0;

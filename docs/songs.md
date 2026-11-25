@@ -44,7 +44,7 @@ chain 1 = Comp & GE7 for Electric
 chain 1 = Clean amp standard Verb & Modulations
 set = chain 1 / spring / reverb = 3.5
 set = chain 1 / tremolo / off
-switch 9 = chain 1 / next amp
+switch CTL4 = chain 1 / next amp
 switch CTL3 = chain 3 / delay throw
 amps = chain 1 / Dream 65 - Clean / Dream 65 - Break Up
 ```
@@ -58,7 +58,7 @@ Every line is optional. Lines starting with `#` are notes.
 | `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
 | `set = chain 1 / spring / reverb = 3.5` | The song's own change on top: chain, effect, setting, value. |
 | `set = chain 1 / tremolo / off` | Switches one effect off (or `on`) for this song. |
-| `switch 9 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). |
+| `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). |
 | `switches = none` | This song uses no switches for effects (overrides the default's). |
 | `amps = chain 1 / A / B` | The amp models the "next amp" switch steps through, in order. Without it the switch steps through every installed amp model. |
 
@@ -94,6 +94,9 @@ set again.
 - **New entry**: a new song with the loaded song's looper layout and the sounds as they stand.
 - **Switches**: six rows. What they show is saved by the **Keep** buttons.
 - **Delays and reverbs ring out when the sound changes**: see below.
+- **Open in its own window**: lifts the Songs tab out into its own window (for a second screen,
+  with the Effects tab open in the main window). Closing it, or **Put back as a tab**, returns it.
+  `MainComponent::moveSongsPanel`.
 
 On the Effects tab, **Update its presets** writes the knobs turned since the chain was loaded
 back into the presets the chain was built from, each preset getting its own effects. This is the
@@ -169,7 +172,7 @@ Wicked Game (program 11)
   changes:  spring reverb 3.5, tremolo off
   acoustic: default
   vocal:    default, harmony on in key of B
-  switches: 9 = next amp (Clean, Break Up), CTL3 = vocal delay throw
+  switches: CTL4 = next amp (Clean, Break Up), CTL3 = vocal delay throw
 ```
 
 And once, at the top: `Default: electric = ..., acoustic = ..., vocal = ..., switches = ...`.

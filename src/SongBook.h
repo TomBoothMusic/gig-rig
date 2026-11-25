@@ -19,7 +19,7 @@ namespace gigrig
         chain 1 = Clean amp standard Verb & Modulations
         set = chain 1 / spring / reverb = 3.5
         set = chain 1 / tremolo / off
-        switch 9 = chain 1 / next amp
+        switch CTL4 = chain 1 / next amp
         switch CTL3 = chain 3 / delay throw
         amps = chain 1 / Dream 65 - Clean / Dream 65 - Break Up
 

@@ -887,6 +887,8 @@ void SongBook::load (int index, const juce::String& why, bool withSounds)
 
 void SongBook::applySounds (const juce::String& why)
 {
+    engine.effects().ampNote.clear();       // what the amp switch last did belongs to the sounds that were there before
+
     auto& rack = engine.effects();
     const auto& e = currentEntry();
     std::array<fx::ChainModel, EffectsRack::numChains> now;
