@@ -265,6 +265,40 @@ void harmonyChecks (const Check& check)
         const double level = 20.0 * std::log10 (std::max (rms (h, (size_t) rate), 1.0e-9) / rms (x, (size_t) rate));
         check (level < -8.0, "harmony: with only hiss to hear (no note), the harmony voice stays " + num (-level) + " dB under it");
     }
+
+    {
+        // The second voice: its own note from the same key, Off unless chosen, and the first voice unchanged by it.
+        const auto x = vowel (60, 0.9, rate);
+
+        auto one = makeEffect ("harmony");
+        one->setParam ("level", 0.0f);
+        one->prepare (rate, 64);
+        const auto alone = run (*one, x);
+
+        auto off = makeEffect ("harmony");
+        off->setParam ("level", 0.0f);
+        off->setParam ("level2", 6.0f);         // loud, but its Voice is Off
+        off->prepare (rate, 64);
+        const auto stillAlone = run (*off, x);
+        check (alone == stillAlone, "harmony: with the second voice Off nothing is added, whatever its level says (old presets sound as before)");
+
+        auto two = makeEffect ("harmony");
+        two->setParam ("level", 0.0f);
+        two->setParam ("voice2", 9.0f);         // "5th above" (the list starts with Off)
+        two->setParam ("level2", 0.0f);
+        two->prepare (rate, 64);
+        auto both = run (*two, x);
+        const std::string line = two->status();
+
+        std::vector<float> secondOnly (x.size());
+        for (size_t i = 0; i < x.size(); ++i) secondOnly[i] = both[i] - alone[i];
+        const double hz = pitchOf (secondOnly, 0.3, 0.5, rate);
+        const double level = 20.0 * std::log10 (rms (std::vector<float> (secondOnly.begin() + (long) (0.3 * rate), secondOnly.begin() + (long) (0.8 * rate)))
+                                 / rms (std::vector<float> (x.begin() + (long) (0.3 * rate), x.begin() + (long) (0.8 * rate))));
+        check (std::abs (cents (hz, hzOf (67))) < 15.0, "harmony: the second voice sings its own note: C with a 3rd and a 5th above gives E and G (second voice at " + num (hz) + " Hz)");
+        check (std::abs (level) < 3.0, "harmony: the second voice at 0 dB is as loud as the lead (within " + num (std::abs (level)) + " dB), and the first voice is not changed by it");
+        check (line == "hears C4, sings E4 and G4", "harmony: with two voices its screen line names both (\"" + line + "\")");
+    }
 }
 
 } // namespace gigrig::fx

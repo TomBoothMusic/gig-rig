@@ -40,6 +40,17 @@ const std::vector<std::string>& Harmony::voiceNames()
     return names;
 }
 
+const std::vector<std::string>& Harmony::secondVoiceNames()
+{
+    static const std::vector<std::string> names = []
+    {
+        std::vector<std::string> n { "Off" };
+        n.insert (n.end(), voiceNames().begin(), voiceNames().end());
+        return n;
+    }();
+    return names;
+}
+
 int Harmony::interval (int key, int voice, int midiNote) noexcept
 {
     const int steps = voiceSteps[std::clamp (voice, 0, 10)];
@@ -63,6 +74,9 @@ Harmony::Harmony()
     pKey   = addChoice ("key",   "Key",   keyNames(), 0);
     pVoice = addChoice ("voice", "Voice", voiceNames(), 6);
     pLevel = addParam ("level",  "Harmony level", "dB", -30.0f, 6.0f, -6.0f);
+    // The second voice (added 26 Nov 2026, so after the others: older presets load with it Off).
+    pVoice2 = addChoice ("voice2", "Second voice", secondVoiceNames(), 0);
+    pLevel2 = addParam ("level2",  "Second voice level", "dB", -30.0f, 6.0f, -6.0f);
 }
 
 std::string Harmony::status() const
@@ -74,8 +88,19 @@ std::string Harmony::status() const
         return "no note heard just now";
 
     const int h = n + shownInterval.load (std::memory_order_relaxed);
-    char text[96];
-    std::snprintf (text, sizeof (text), "hears %s%d, sings %s%d", names[n % 12], n / 12 - 1, names[((h % 12) + 12) % 12], h / 12 - 1);
+    char text[128];
+
+    if (shownSecond.load (std::memory_order_relaxed))
+    {
+        const int h2 = n + shownInterval2.load (std::memory_order_relaxed);
+        std::snprintf (text, sizeof (text), "hears %s%d, sings %s%d and %s%d", names[n % 12], n / 12 - 1,
+                       names[((h % 12) + 12) % 12], h / 12 - 1, names[((h2 % 12) + 12) % 12], h2 / 12 - 1);
+    }
+    else
+    {
+        std::snprintf (text, sizeof (text), "hears %s%d, sings %s%d", names[n % 12], n / 12 - 1, names[((h % 12) + 12) % 12], h / 12 - 1);
+    }
+
     return text;
 }
 
@@ -97,7 +122,8 @@ void Harmony::onPrepare (double rate, int)
 
     in.assign (bufferSize, 0.0f);
     energy.assign (bufferSize, 0.0f);
-    ola.assign (bufferSize, 0.0f);
+    for (auto& part : parts)
+        part.ola.assign (bufferSize, 0.0f);
 
     maxPeriod = inner / lowestHz;
     restPeriod = inner * 0.005;
@@ -122,14 +148,17 @@ void Harmony::onReset() noexcept
 
     std::fill (in.begin(), in.end(), 0.0f);
     std::fill (energy.begin(), energy.end(), 0.0f);
-    std::fill (ola.begin(), ola.end(), 0.0f);
+    for (auto& part : parts)
+    {
+        std::fill (part.ola.begin(), part.ola.end(), 0.0f);
+        part.nextGrain = 0.0;
+        part.ratioNow = 1.0f;
+        part.grainGain = 0.0f;
+    }
     marks = {};
     markCount = 0;
     now = 0;
     nextMark = 0.0;
-    nextGrain = 0.0;
-    ratioNow = 1.0f;
-    grainGain = 0.0f;
     energyHigh.clear();
     energyNow = 0.0;
     shownNote.store (-1, std::memory_order_relaxed);
@@ -283,7 +312,7 @@ void Harmony::placeMarks() noexcept
     }
 }
 
-void Harmony::writeGrain (double centre, double source, double grainPeriod, float gain) noexcept
+void Harmony::writeGrain (std::vector<float>& into, double centre, double source, double grainPeriod, float gain) noexcept
 {
     // Two cycles long under a smooth (Hann) window; grains one cycle apart add up to the voice itself.
     const auto first = (long long) std::ceil (centre - grainPeriod), last = (long long) std::floor (centre + grainPeriod);
@@ -293,14 +322,18 @@ void Harmony::writeGrain (double centre, double source, double grainPeriod, floa
     {
         const double u = ((double) k - centre) / grainPeriod;
         const float w = (float) (0.5 + 0.5 * std::cos (pi * u));
-        ola[(size_t) (k & mask)] += gain * w * hermite (in, mask, (double) k + shift);
+        into[(size_t) (k & mask)] += gain * w * hermite (in, mask, (double) k + shift);
     }
 }
 
 void Harmony::runInner (float* x, int m) noexcept
 {
     const int key = (int) std::lround (value (pKey));
-    const int voice = (int) std::lround (value (pVoice));
+    // Which Voice each part sings (-1 = that part is off) and how loud.
+    const int second = (int) std::lround (value (pVoice2));
+    const int voices[numParts] { (int) std::lround (value (pVoice)), second - 1 };
+    const float levels[numParts] { dbToGain (value (pLevel)), second > 0 ? dbToGain (value (pLevel2)) : 0.0f };
+    shownSecond.store (second > 0, std::memory_order_relaxed);
 
     for (int i = 0; i < m; ++i)
     {
@@ -336,54 +369,74 @@ void Harmony::runInner (float* x, int m) noexcept
             }
         }
 
-        // ---- how far to move the pitch ----
-        float ratioTarget = 1.0f;
-        if (voiced)
-        {
-            const int semis = interval (key, voice, note);
-            shownInterval.store (semis, std::memory_order_relaxed);
-            ratioTarget = (float) std::pow (2.0, ((double) semis + (voice == unisonVoice ? unisonCents * 0.01 : 0.0)) / 12.0);
-        }
-        ratioNow += (ratioTarget - ratioNow) * (float) (1.0 / (0.012 * inner));
-
         placeMarks();
 
-        // ---- grains: written just before the harmony's read point reaches where they start ----
         const double readAt = (double) (now - delay);
-        if (nextGrain < readAt)
-            nextGrain = readAt + restPeriod;
+        const auto at = (size_t) ((now - delay) & mask);
+        float out = 0.0f;
 
-        for (int guard = 0; guard < 8; ++guard)
+        for (int p = 0; p < numParts; ++p)
         {
-            // The newest mark at or before this grain's place.
-            const Mark* mark = nullptr;
-            for (int k = 1; k <= std::min (markCount, numMarks); ++k)
+            auto& part = parts[(size_t) p];
+            const int voice = voices[p];
+
+            if (voice < 0)
             {
-                const auto& c = marks[(size_t) ((markCount - k) % numMarks)];
-                if (c.pos <= nextGrain) { mark = &c; break; }
+                // Off: nothing is written, and it starts cleanly when it is chosen.
+                part.ola[at] = 0.0f;
+                part.grainGain = 0.0f;
+                part.ratioNow = 1.0f;
+                part.nextGrain = 0.0;
+                continue;
             }
 
-            const double t = mark != nullptr ? mark->period : restPeriod;
-            if (nextGrain - t > readAt + 1.0)
-                break;
+            // ---- how far to move the pitch ----
+            float ratioTarget = 1.0f;
+            if (voiced)
+            {
+                const int semis = interval (key, voice, note);
+                (p == 0 ? shownInterval : shownInterval2).store (semis, std::memory_order_relaxed);
+                ratioTarget = (float) std::pow (2.0, ((double) semis + (voice == unisonVoice ? unisonCents * 0.01 : 0.0)) / 12.0);
+            }
+            part.ratioNow += (ratioTarget - part.ratioNow) * (float) (1.0 / (0.012 * inner));
 
-            const bool sung = mark != nullptr && mark->voiced;
-            const float ratio = sung ? ratioNow : 1.0f;
-            // Closer grains add up louder: keep the harmony as loud as the lead. Breaths and
-            // consonants come through quietly, so an "s" is not doubled.
-            const float target = sung ? 1.0f / std::sqrt (ratio) : 0.3f;
-            grainGain += 0.5f * (target - grainGain);
+            // ---- grains: written just before the harmony's read point reaches where they start ----
+            if (part.nextGrain < readAt)
+                part.nextGrain = readAt + restPeriod;
 
-            if (mark != nullptr)
-                writeGrain (nextGrain, mark->pos, t, grainGain);
+            for (int guard = 0; guard < 8; ++guard)
+            {
+                // The newest mark at or before this grain's place.
+                const Mark* mark = nullptr;
+                for (int k = 1; k <= std::min (markCount, numMarks); ++k)
+                {
+                    const auto& c = marks[(size_t) ((markCount - k) % numMarks)];
+                    if (c.pos <= part.nextGrain) { mark = &c; break; }
+                }
 
-            nextGrain += t / ratio;
+                const double t = mark != nullptr ? mark->period : restPeriod;
+                if (part.nextGrain - t > readAt + 1.0)
+                    break;
+
+                const bool sung = mark != nullptr && mark->voiced;
+                const float ratio = sung ? part.ratioNow : 1.0f;
+                // Closer grains add up louder: keep the harmony as loud as the lead. Breaths and
+                // consonants come through quietly, so an "s" is not doubled.
+                const float target = sung ? 1.0f / std::sqrt (ratio) : 0.3f;
+                part.grainGain += 0.5f * (target - part.grainGain);
+
+                if (mark != nullptr)
+                    writeGrain (part.ola, part.nextGrain, mark->pos, t, part.grainGain);
+
+                part.nextGrain += t / ratio;
+            }
+
+            // ---- the harmony, read 'delay' behind, and its place in the buffer wiped for next time ----
+            out += levels[p] * part.ola[at];
+            part.ola[at] = 0.0f;
         }
 
-        // ---- the harmony, read 'delay' behind, and its place in the buffer wiped for next time ----
-        const auto at = (size_t) ((now - delay) & mask);
-        x[i] = ola[at];
-        ola[at] = 0.0f;
+        x[i] = out;
         ++now;
     }
 }
@@ -394,9 +447,8 @@ void Harmony::processChunk (float* const* ch, int numCh, int n) noexcept
     std::copy (ch[0], ch[0] + n, voiceCopy.begin());
     bridge.process (voiceCopy.data(), n, [this] (float* x, int m) { runInner (x, m); });
 
-    const float level = dbToGain (value (pLevel));
     for (int i = 0; i < n; ++i)
-        ch[0][i] += level * voiceCopy[(size_t) i];
+        ch[0][i] += voiceCopy[(size_t) i];      // the levels were applied voice by voice inside
 
     for (int c = 1; c < numCh; ++c)
         std::copy (ch[0], ch[0] + n, ch[c]);
