@@ -255,6 +255,29 @@ void runEffectsSelfTest (const Check& check)
                    "effects: a held switch makes the chain's delay catch what is sung (a throw), and letting go leaves it ringing out and clean");
         }
 
+        // A held switch works the harmony: Singing on the press, Ready on the release, and a
+        // harmony that the song left switched off is switched on by the first press.
+        {
+            const auto before = rack.chain (0).model();
+            fx::ChainModel hm;
+            hm.slots.push_back ({ "boost", true, {}, {} });
+            hm.slots.push_back ({ "harmony", false, {}, {} });
+            rack.chain (0).setModel (hm);
+            const bool held = rack.holdHarmony (0, true);
+            const bool nowOn = rack.chain (0).model().slots[1].on;
+            const float singing = rack.chain (0).model().slots[1].param ("hold", -1.0f);
+            rack.holdHarmony (0, false);
+            const float ready = rack.chain (0).model().slots[1].param ("hold", -1.0f);
+            const bool stillOn = rack.chain (0).model().slots[1].on;
+            rack.setPedalAssign (0, { 10, 0, 8 });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false);
+            const bool says = rack.pedalText().contains ("harmony while held");
+            rack.setPedalAssign (0, { -1, 0, 0 });
+            rack.chain (0).setModel (before);
+            check (held && nowOn && stillOn && std::abs (singing - 2.0f) < 0.1f && std::abs (ready - 1.0f) < 0.1f && taken && says && ! rack.holdHarmony (0, true),
+                   "effects: a held switch makes the chain's harmony sing, letting go silences it, and a harmony left switched off is switched on by the first press");
+        }
+
         // The feedback guard.
         rack.chain (0).setModel (boostOnly (24.0f));
         r = rack.routing (0);

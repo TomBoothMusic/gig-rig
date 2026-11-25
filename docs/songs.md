@@ -69,7 +69,7 @@ Naming things:
   one of the same kind is `eq #2`.
 - A setting is its id or its name on screen. Ids are listed in `docs/effects.md`.
 - What a switch does: `compare`, `chain on off`, `tap tempo`, `whammy`, `wah`, `delay throw`,
-  `test take`, `next amp`, or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
+  `test take`, `next amp`, `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
 
 When a line cannot be used (a preset that is not in the folder, a setting no effect has), the
 song still loads. The line is reported as `PROBLEM:` on the Songs tab and in the report, and a

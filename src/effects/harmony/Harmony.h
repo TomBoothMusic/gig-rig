@@ -21,6 +21,8 @@ namespace gigrig::fx
     A second harmony voice (26 Nov 2026) has its own Voice and Level and follows the same key
     and the same pitch tracker; it is Off unless chosen. Two harmony effects in a row would not
     do this: the second would hear the lead and the first harmony mixed.
+    "On a held switch" (26 Nov 2026): Off = always sings; Ready = silent until a switch given
+    "harmony while held" goes down; Singing = that switch is down.
 
     How it works, in three parts (all in this folder, nothing else needed):
       1. A pitch tracker listens to a low-passed copy of the voice and finds how long one
@@ -64,7 +66,8 @@ private:
     void placeMarks() noexcept;
     void writeGrain (std::vector<float>& into, double centre, double source, double period, float gain) noexcept;
 
-    int pKey, pVoice, pLevel, pVoice2, pLevel2;
+    int pKey, pVoice, pLevel, pVoice2, pLevel2, pHold;
+    float gate = 1.0f;              // how far the harmony is open (the held switch)
     HalfRate bridge;
     double inner = 48000.0;
 
@@ -111,6 +114,7 @@ private:
     // ---- for the screen and the report ----
     std::atomic<int> shownNote { -1 }, shownInterval { 0 }, shownInterval2 { 0 };
     std::atomic<bool> shownSecond { false };
+    std::atomic<int> shownHold { 0 };
 };
 
 } // namespace gigrig::fx

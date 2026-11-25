@@ -298,6 +298,32 @@ void harmonyChecks (const Check& check)
         check (std::abs (cents (hz, hzOf (67))) < 15.0, "harmony: the second voice sings its own note: C with a 3rd and a 5th above gives E and G (second voice at " + num (hz) + " Hz)");
         check (std::abs (level) < 3.0, "harmony: the second voice at 0 dB is as loud as the lead (within " + num (std::abs (level)) + " dB), and the first voice is not changed by it");
         check (line == "hears C4, sings E4 and G4", "harmony: with two voices its screen line names both (\"" + line + "\")");
+
+        // Harmony only while a switch is held: Ready is silent (the lead alone), Singing is the harmony as usual.
+        auto ready = makeEffect ("harmony");
+        ready->setParam ("level", 0.0f);
+        ready->setParam ("hold", 1.0f);
+        ready->prepare (rate, 64);
+        const auto waiting = run (*ready, x);
+        const std::string waitingLine = ready->status();
+        check (waiting == x, "harmony: set to Ready it adds nothing until the switch is held (the voice passes untouched)");
+        check (waitingLine.find ("waiting for the switch") != std::string::npos, "harmony: while it waits its screen line says so (\"" + waitingLine + "\")");
+
+        ready->setParam ("hold", 2.0f);          // the switch goes down
+        auto sung = run (*ready, x);
+        std::vector<float> added (x.size());
+        for (size_t i = 0; i < x.size(); ++i) added[i] = sung[i] - x[i];
+        const double hzHeld = pitchOf (added, 0.3, 0.5, rate);
+        float step = 0.0f;
+        for (size_t i = 1; i < (size_t) (0.05 * rate); ++i) step = std::max (step, std::abs (added[i] - added[i - 1]));
+        check (std::abs (cents (hzHeld, hzOf (64))) < 15.0 && step < 0.05f,
+               "harmony: when the switch goes down it sings at once on the right note (" + num (hzHeld) + " Hz) and comes in without a click");
+
+        ready->setParam ("hold", 1.0f);          // let go
+        const auto after = run (*ready, x);
+        double tail = 0.0;
+        for (size_t i = (size_t) (0.2 * rate); i < x.size(); ++i) tail = std::max (tail, (double) std::abs (after[i] - x[i]));
+        check (tail < 1.0e-6, "harmony: letting go of the switch fades the harmony out and leaves the voice alone");
     }
 }
 

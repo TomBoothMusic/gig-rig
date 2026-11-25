@@ -77,6 +77,9 @@ Harmony::Harmony()
     // The second voice (added 26 Nov 2026, so after the others: older presets load with it Off).
     pVoice2 = addChoice ("voice2", "Second voice", secondVoiceNames(), 0);
     pLevel2 = addParam ("level2",  "Second voice level", "dB", -30.0f, 6.0f, -6.0f);
+    // Harmony only while a switch is held (added 26 Nov 2026). Laid out like the delay's
+    // "throw": the held switch moves it from Ready to Singing and back (EffectsRack::holdHarmony).
+    pHold = addChoice ("hold", "On a held switch", { "Off: the harmony always sings", "Ready: silent until the switch is held", "Singing: the switch is held" }, 0);
 }
 
 std::string Harmony::status() const
@@ -100,6 +103,9 @@ std::string Harmony::status() const
     {
         std::snprintf (text, sizeof (text), "hears %s%d, sings %s%d", names[n % 12], n / 12 - 1, names[((h % 12) + 12) % 12], h / 12 - 1);
     }
+
+    if (shownHold.load (std::memory_order_relaxed) == 1)
+        return std::string (text) + " (silent: waiting for the switch)";
 
     return text;
 }
@@ -136,6 +142,7 @@ void Harmony::onPrepare (double rate, int)
 void Harmony::onReset() noexcept
 {
     bridge.clear();
+    gate = (int) std::lround (value (pHold)) == 1 ? 0.0f : 1.0f;
     low1.clear(); low2.clear(); high.clear();
     ring.fill (0.0f);
     snap.fill (0.0f);
@@ -334,6 +341,13 @@ void Harmony::runInner (float* x, int m) noexcept
     const int voices[numParts] { (int) std::lround (value (pVoice)), second - 1 };
     const float levels[numParts] { dbToGain (value (pLevel)), second > 0 ? dbToGain (value (pLevel2)) : 0.0f };
     shownSecond.store (second > 0, std::memory_order_relaxed);
+    // While it waits for the switch the harmony is shut, but the tracker and the grains keep
+    // running, so it is on the right note the moment the switch goes down. Opens in 10 ms,
+    // closes in 60 ms: no click either way.
+    const int hold = (int) std::lround (value (pHold));
+    const float gateTarget = hold == 1 ? 0.0f : 1.0f;
+    const float gateUp = (float) (1.0 / (0.010 * inner)), gateDown = (float) (1.0 / (0.060 * inner));
+    shownHold.store (hold, std::memory_order_relaxed);
 
     for (int i = 0; i < m; ++i)
     {
@@ -436,7 +450,8 @@ void Harmony::runInner (float* x, int m) noexcept
             part.ola[at] = 0.0f;
         }
 
-        x[i] = out;
+        gate = gateTarget > gate ? std::min (gateTarget, gate + gateUp) : std::max (gateTarget, gate - gateDown);
+        x[i] = out * gate;
         ++now;
     }
 }
