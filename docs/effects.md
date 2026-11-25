@@ -199,6 +199,10 @@ says how its effect works; the points a future session needs:
   next version (tracking on real consonants and breath, guitar spill, grain artefacts).
   Planned control (design doc): hold the harmony switch and turn the song encoder to change
   key, the key shown on the switch's screen.
+  A **second voice** (26 Nov 2026): settings `voice2` (a list that starts with Off, then the
+  same choices as `voice`) and `level2`. Both voices share the tracker, the key and the pulse
+  marks; each has its own grains (`Harmony::Part`). Never put two harmony effects in a row for
+  this: the second would hear the lead and the first harmony mixed.
 - **`HalfRate`** has a few samples of delay at 96 kHz (measured at prepare and reported). Its
   half-band filters are not linear-phase, so "the dry sound, late" is only true of level, not
   sample for sample.

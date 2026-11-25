@@ -1029,11 +1029,12 @@ void EffectsPanel::resized()
     area.removeFromTop (6);
     slotsLabel.setBounds (area.removeFromTop (20));
 
-    // Row 4: the slots (six to a row, a second row once there are more), then "add".
+    // Row 4: the slots (six to a row, as many rows as it takes), then "add".
     {
         constexpr int perRow = 6;
-        const int rows = slotButtons.size() > perRow ? 2 : 1;
-        auto block = area.removeFromTop (54 * rows);
+        const int rows = juce::jmax (1, (slotButtons.size() + perRow - 1) / perRow);
+        const int rowH = rows > 2 ? 44 : 54;     // a third row is squeezed so the page still fits
+        auto block = area.removeFromTop (rowH * rows);
         auto add = block.removeFromRight (230);
         addBox.setBounds (add.removeFromTop (26).reduced (0, 1));
         addButton.setBounds (add.removeFromTop (26).removeFromLeft (80).reduced (0, 1));
@@ -1041,11 +1042,11 @@ void EffectsPanel::resized()
         const int w = juce::jmin (170, block.getWidth() / juce::jlimit (4, perRow, slotButtons.size()));
         for (int r = 0; r < rows; ++r)
         {
-            auto row = block.removeFromTop (54);
+            auto row = block.removeFromTop (rowH);
             for (int s = r * perRow; s < juce::jmin (slotButtons.size(), (r + 1) * perRow); ++s)
             {
                 auto tile = row.removeFromLeft (w).reduced (2, 0);
-                slotButtons[s]->setBounds (tile.removeFromTop (28));
+                slotButtons[s]->setBounds (tile.removeFromTop (rows > 2 ? 24 : 28));
                 slotToggles[s]->setBounds (tile);
             }
         }
