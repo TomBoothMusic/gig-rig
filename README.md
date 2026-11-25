@@ -595,10 +595,19 @@ comes with the real board; for now Key is the box on screen.
 3. To compare with the real Bass9: set Reference to the Bass9's socket and flip
    **Effects / Reference**. A take makes this easy: both hear the same notes.
 
-The bass was reworked on 25 November after your first test found ticking and static in it.
-Start with **Tracking speed** in the middle (0.6): lower makes chords cleaner but low notes
-slower to speak, higher makes low notes quicker. If you saved a bass preset with Tracking
-speed at 0 to hide the ticks, put it back to the middle and save it again.
+The bass was reworked twice on 25 November: first for the ticking and static you found in
+it, then for the warble, and to make Tone and Drive do something. What to know:
+
+- **Tracking speed**: lower makes chords cleaner but low notes slower to speak, higher makes
+  low notes quicker. It should no longer warble at any setting, so start in the middle (0.6)
+  and go lower only if you like it better.
+- **Drive** and **Compression** now work the same however quiet or hot the guitar arrives.
+  Drive around 0.3 is a little warmth, 0.6 is plainly gritty, 1 is nearly a fuzz bass.
+- **Tone** has more to work with, and two new sliders feed it: **String brightness** (how
+  much top the "strings" have before the tone knob) and **Pluck (string noise)** (a short
+  click from your own pick or finger attack on the front of each note; 0 turns it off).
+- **A bass preset you saved before this build will come out about 8 dB quieter**, because the
+  compressor no longer adds loudness of its own. Turn **Level** up by about 8 dB and save it again.
 
 In the finished rig the bass chain only sounds while its switch is held or latched. For now
 it is simply on or off with **This chain on** (or put **Chain on/off** on a pedal switch).

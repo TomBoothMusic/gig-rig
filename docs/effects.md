@@ -215,29 +215,64 @@ and drive. Filters that heard two harmonics at once also came out as noise.
 
 **What `BassMachine` does now** (the header has the full story):
 
-- The bank runs at about 12 kHz (every 8th sample at 96 kHz; three running averages on the
-  way in, a straight line and one more average on the way out), 41 to 97 bands depending on
-  Tracking speed. It costs about 2% of a block, down from 11%.
+- The bank runs at about 12 kHz (every 8th sample at 96 kHz; four running averages on the
+  way in, a straight line and one more average on the way out), about 170 bands from 70 Hz
+  to 4.4 kHz. It costs about 6% of a block, down from 11%.
 - Each band works out where its tone sits (the smoothed turn of its arrow against its own
   centre) and how steady that is. A tone is spoken for only by the one or two bands nearest
   to it, with the filter's loss and lag at that pitch taken out, so the level is the same at
   every pitch. An unsteady band (two tones, or hiss) is turned down.
 - A band that has to turn over is always the quieter of the pair and fades through zero in
   2 ms. Two octaves down turns a band by quarter turns the same way.
-- Above about 300 Hz the bands stop getting wider (13 Hz either side at Tracking speed 0, 30 Hz
-  at 1), so the harmonics of a low E, 82 Hz apart, stay in bands of their own.
+- Higher up the bands stop getting wider at 13 Hz either side, at every Tracking speed, so
+  the harmonics of a low E, 82 Hz apart, stay in bands of their own.
 
-**Settings are unchanged** (same ids, same ranges), so old presets load. Tracking speed still
-trades quick low notes against clean chords: at 0 a low E takes about 50 ms to reach half
-level, at 0.6 (the default) about 22 ms, the same as before. Tom had set 0 to hide the ticks;
-the middle is the place to start now.
+Tracking speed trades quick low notes against clean chords, for notes below about 200 Hz: at
+0 a low E takes about 50 ms to reach half level, at 0.6 (the default) about 22 ms.
 
 **Checks** (`Bass9Checks.cpp`): a made-up guitar (`played`, `bassLine`: stiff strings, each
 harmonic dying at its own rate and beating against a twin, pick click, hiss, hum) through the
-bass at three Tracking speeds must leave next to nothing above 3 kHz (a clean octave down of
-a guitar below 2.4 kHz has nothing there, so anything there is ticks), a single note must come
+bass at three Tracking speeds must leave next to nothing above 6 kHz (a clean octave down of
+a guitar below 4.4 kHz has nothing there, so anything there is ticks), a single note must come
 out as the note an octave down and little else, and a bend, a vibrato and a slide must not
 tick. Borrow `played` for any other effect that follows pitch.
+
+### Second pass the same day: warble, Tone, Drive and string noise
+
+Tom on build 77: no ticks, "so much better", but "a bit of a weird warble" that eased at a
+low Tracking speed, Tone and Drive "seem to not really do anything", and it still sounded
+like "a normal octave pedal", without the string noise the real Bass9's tone knob brings in.
+
+- **Warble.** The steadiness test compared each band's turn sample by sample with its
+  smoothed turn. A strong harmonic a long way off upsets that far more than it upsets the
+  band's level (the upset falls only in step with the distance, not its square), so the low
+  harmonics of a note made the bands holding its upper harmonics look unsteady. From the 5th
+  harmonic up they came out 6 to 20 dB down and wobbling by 3 to 9 dB. Now a lightly smoothed
+  turn (`turnQuick`, a third of the band's ring time) is compared with the slow one, and the
+  upper bands stay 13 Hz wide at every Tracking speed (they used to widen to 30 Hz). The same
+  harmonics now come out within 3 dB and steady to under 1 dB. Check: "the harmonics of a
+  dying low E come out at their own level and steady".
+- **Tone.** Nothing above 1.2 kHz came out of the octave, so the tone knob had little to
+  work on. The bank now reaches 4.4 kHz (2.2 kHz out), and a new setting `brightDb`
+  ("String brightness", a lift above 1 kHz, default 9 dB) puts back the octave of top that
+  halving a guitar takes away.
+- **Drive and Compression** worked against a fixed level near full scale; Tom's raw electric
+  peaks 28 dB below that, so the drive never bit and the compressor was only a 9 dB boost.
+  Both now work against the playing's own recent peaks (a follower with a 2.5 s release), so
+  they do the same at any input level. Compression no longer changes loudness, so **a preset
+  saved on build 77 or earlier comes out about 8 dB quieter**: turn Level up. Checks: "Drive
+  adds the same grit to a quiet guitar as to a hot one", "Compression evens out ...".
+- **Pluck.** The octave takes 20 to 50 ms to ring up, so every note swelled in. A new setting
+  `pluck` ("Pluck (string noise)", default 0.5) lets the guitar's own attack above 700 Hz
+  through for the first few ms of each note, through the same pickup and tone model, and
+  shuts as soon as the top of the guitar's sound settles. Check: "the pluck puts a click on
+  the front of each note and nothing of the guitar after it".
+
+New setting ids are added at the END of `BassSettings::ranges()` and of `setIndex`'s list:
+the Effects tab hands values across by position. All of this was voiced by measurement on
+Tom's take, not by ear and not against the real Bass9: a **Capture** of the real pedal (dry
+on the chain's input socket, EFFECT OUT on the Reference socket, Tone fully down, at his
+usual setting and fully up) is what would let the tone and string noise be matched properly.
 
 **Still true:** two notes a fourth or closer apart on the low strings cannot be told apart
 at a quick Tracking speed, and come out rough (the real Bass9 is a bass-line pedal too).

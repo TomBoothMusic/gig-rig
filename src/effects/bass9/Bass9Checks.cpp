@@ -163,23 +163,25 @@ namespace
         return notes;
     }
 
-    /** A clean octave down of a guitar below 2.4 kHz has next to nothing above 3 kHz, so anything
+    /** A clean octave down of a guitar below 4.4 kHz has next to nothing above 6 kHz, so anything
         up there is ticks. Gives the whole of it and its biggest moment, in dB against the bass itself. */
     struct Ticks { double wholeDb, biggestDb; };
 
     Ticks ticksIn (const std::vector<float>& out)
     {
-        const double a = std::exp (-twoPi * 3000.0 / rate);
-        double z[3] {}, p[3] {}, top = 0.0, all = 0.0, peak = 0.0, tick = 0.0;
+        // Three 2nd order high-passes at 6 kHz in a row.
+        const double w = twoPi * 6000.0 / rate, alpha = std::sin (w) / (2.0 * 0.7071), a0 = 1.0 + alpha, cw = std::cos (w);
+        const double b0 = (1.0 + cw) / 2.0 / a0, b1 = -(1.0 + cw) / a0, a1 = -2.0 * cw / a0, a2 = (1.0 - alpha) / a0;
+        double z1[3] {}, z2[3] {}, top = 0.0, all = 0.0, peak = 0.0, tick = 0.0;
 
         for (const float sample : out)
         {
             double v = sample;
             for (int stage = 0; stage < 3; ++stage)
             {
-                const double y = a * (z[stage] + v - p[stage]);
-                p[stage] = v;
-                z[stage] = y;
+                const double y = b0 * v + z1[stage];
+                z1[stage] = b1 * v - a1 * y + z2[stage];
+                z2[stage] = b0 * v - a2 * y;
                 v = y;
             }
 
@@ -190,6 +192,36 @@ namespace
         }
 
         return { 10.0 * std::log10 (std::max (top, 1.0e-30) / std::max (all, 1.0e-30)), 20.0 * std::log10 (std::max (tick, 1.0e-15) / std::max (peak, 1.0e-15)) };
+    }
+
+    /** One strand of a sound followed through time: its level every 2 ms, in dB. The two
+        running averages, each as long as one cycle of `clearOfHz`, shut out neighbours that far away. */
+    std::vector<double> strandDb (const std::vector<float>& x, double hz, double clearOfHz, double fromSeconds, double toSeconds)
+    {
+        const size_t span = (size_t) std::lround (rate / clearOfHz);
+        std::vector<std::complex<double>> first (x.size()), second (x.size());
+        std::complex<double> sum;
+
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            first[i] = (double) x[i] * std::polar (1.0, -twoPi * hz * (double) i / rate);
+            sum += first[i];
+            if (i >= span)  sum -= first[i - span];
+            second[i] = sum / (double) span;
+        }
+
+        std::vector<double> db;
+        sum = {};
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            sum += second[i];
+            if (i >= span)  sum -= second[i - span];
+            const double t = (double) i / rate;
+            if (t >= fromSeconds && t < toSeconds && i % 192 == 0)
+                db.push_back (20.0 * std::log10 (2.0 * std::abs (sum) / (double) span + 1.0e-12));
+        }
+
+        return db;
     }
 
     /** Of what comes out between 30 and 1300 Hz, how much is NOT at the harmonics of the note an
@@ -250,6 +282,8 @@ namespace
         s.gateDb = -90.0f;
         s.lowDb = s.lowMidDb = s.midDb = 0.0f;
         s.tone = 1.0f;
+        s.pluck = 0.0f;
+        s.brightDb = 0.0f;
         return s;
     }
 }
@@ -358,8 +392,8 @@ void bass9Checks (const Check& check)
         const std::string at = " (Tracking speed " + num (tracking, 1) + ")";
 
         const auto heard = ticksIn (run (s, line));
-        check (heard.wholeDb < -50.0 && heard.biggestDb < -40.0,
-               "bass: a played bass line with hiss and hum comes out without ticks" + at + ": above 3 kHz "
+        check (heard.wholeDb < -72.0 && heard.biggestDb < -62.0,
+               "bass: a played bass line with hiss and hum comes out without ticks" + at + ": above 6 kHz "
                + num (heard.wholeDb, 1) + " dB, biggest tick " + num (heard.biggestDb, 1) + " dB against the bass");
 
         double worst = -200.0;
@@ -390,7 +424,7 @@ void bass9Checks (const Check& check)
         const auto vibrato = ticksIn (run (s, moving ([] (double t) { return 146.83 * std::pow (2.0, 0.4 / 12.0 * std::sin (twoPi * 6.0 * t)); }, 1.2)));
         const auto slide = ticksIn (run (s, moving ([] (double t) { return 82.41 * std::pow (2.0, std::clamp ((t - 0.3) / 0.4, 0.0, 1.0)); }, 1.2)));
         const double biggest = std::max ({ bend.biggestDb, vibrato.biggestDb, slide.biggestDb });
-        check (biggest < -50.0, "bass: a bend, a vibrato and a slide come out without ticks" + at + ": biggest "
+        check (biggest < -78.0, "bass: a bend, a vibrato and a slide come out without ticks" + at + ": biggest "
                                 + num (biggest, 1) + " dB against the bass");
     }
 
@@ -399,7 +433,7 @@ void bass9Checks (const Check& check)
         auto two = plain();
         two.subMix = 1.0f;
         const auto t = ticksIn (run (two, line));
-        check (t.wholeDb < -50.0 && t.biggestDb < -40.0, "bass: two octaves down, the played bass line comes out without ticks: above 3 kHz "
+        check (t.wholeDb < -88.0 && t.biggestDb < -74.0, "bass: two octaves down, the played bass line comes out without ticks: above 6 kHz "
                                                          + num (t.wholeDb, 1) + " dB, biggest tick " + num (t.biggestDb, 1) + " dB");
 
         std::string levels;
@@ -422,6 +456,153 @@ void bass9Checks (const Check& check)
         }
 
         check (same, "bass: sounds at the same level at 44.1, 48 and 192 kHz (" + levels + " dB)");
+    }
+
+    // ---- no warble: every harmonic of a dying note comes out at its own level and steady ----
+    // Build 77 let the strong low harmonics of a note upset the bands that held its upper
+    // harmonics: those came out 6 to 20 dB down and wobbling by 3 to 9 dB, which Tom heard as
+    // a warble (25 Nov 2026). A real string's harmonics are a little sharp and each dies at
+    // its own rate, so that is what is played here.
+    for (float tracking : { 0.0f, 0.6f, 1.0f })
+    {
+        const double hz = 82.41, start = 0.1, from = 0.3, to = 0.9;
+        std::vector<float> in ((size_t) (1.0 * rate), 0.0f);
+        struct Part { double hz, level, dying; };
+        std::vector<Part> parts;
+
+        for (int h = 1; h <= 26; ++h)
+        {
+            const Part p { h * hz * std::sqrt (1.0 + 1.2e-4 * h * h), 0.25 / h, 0.7 + 0.22 * h };
+            parts.push_back (p);
+            for (size_t i = (size_t) (start * rate); i < in.size(); ++i)
+            {
+                const double t = (double) i / rate - start;
+                in[i] += (float) (p.level * std::exp (-p.dying * t) * std::min (1.0, t / 0.0015) * std::sin (twoPi * p.hz * t + 1.7 * h));
+            }
+        }
+
+        auto s = plain();
+        s.tracking = tracking;
+        const auto out = run (s, in);
+        double worstLevel = 0.0, worstWobble = 0.0;
+
+        for (int h = 4; h <= 16; ++h)
+        {
+            const auto& p = parts[(size_t) (h - 1)];
+            const auto db = strandDb (out, 0.5 * p.hz, 0.5 * hz, from, to);
+
+            // A harmonic dying evenly is a straight line in dB: how far off the line it strays is the wobble.
+            const double n = (double) db.size();
+            double sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
+            for (size_t i = 0; i < db.size(); ++i)
+            {
+                sx += (double) i;  sy += db[i];  sxx += (double) i * (double) i;  sxy += (double) i * db[i];
+            }
+            const double slope = (n * sxy - sx * sy) / (n * sxx - sx * sx), base = (sy - slope * sx) / n;
+            double off = 0.0;
+            for (size_t i = 0; i < db.size(); ++i)
+                off += std::pow (db[i] - (base + slope * (double) i), 2.0);
+
+            const double middle = 0.5 * (from + to) - start;
+            const double wanted = 20.0 * std::log10 (p.level) - 8.686 * p.dying * middle;
+            const double level = base + slope * 0.5 * (n - 1.0) - wanted;
+            if (std::abs (level) > std::abs (worstLevel))
+                worstLevel = level;
+            worstWobble = std::max (worstWobble, std::sqrt (off / n));
+        }
+
+        check (std::abs (worstLevel) < 4.0 && worstWobble < 1.5,
+               "bass: the harmonics of a dying low E come out at their own level and steady, no warble (Tracking speed "
+               + num (tracking, 1) + "): furthest off " + num (worstLevel, 1) + " dB, biggest wobble " + num (worstWobble, 2) + " dB");
+    }
+
+    // ---- drive and compression work the same on a quiet guitar as on a hot one ----
+    // They used to work against a fixed level near full scale. Tom's guitar arrived 28 dB
+    // below that, and neither did anything he could hear.
+    {
+        const auto third = [] (double level, float drive)
+        {
+            std::vector<float> in ((size_t) (1.0 * rate));
+            for (size_t i = 0; i < in.size(); ++i)
+                in[i] = (float) (level * std::sin (twoPi * 110.0 * (double) i / rate));
+
+            auto s = plain();
+            s.drive = drive;
+            const auto out = run (s, in);
+            const auto from = (size_t) (0.5 * rate);
+            return 20.0 * std::log10 (strength (out, from, 165.0) / strength (out, from, 55.0));
+        };
+
+        const double clean = third (0.3, 0.0f), hot = third (0.3, 0.6f), quiet = third (0.003, 0.6f);
+        check (clean < -50.0 && hot > -30.0 && std::abs (hot - quiet) < 1.0,
+               "bass: Drive adds the same grit to a quiet guitar as to a hot one (third harmonic: " + num (clean, 1)
+               + " dB with Drive off, " + num (hot, 1) + " dB at 0.6 on a hot guitar, " + num (quiet, 1) + " dB on one 40 dB quieter)");
+
+        // A loud note then one 12 dB softer: compression brings them closer, by the same amount at any level.
+        const auto apart = [] (double level, float compress)
+        {
+            std::vector<float> in ((size_t) (2.0 * rate));
+            for (size_t i = 0; i < in.size(); ++i)
+            {
+                const double t = (double) i / rate;
+                in[i] = (float) (level * (t < 1.0 ? 1.0 : 0.25) * std::sin (twoPi * 110.0 * t));
+            }
+
+            auto s = plain();
+            s.compress = compress;
+            const auto out = run (s, in);
+            const std::vector<float> loud (out.begin() + (long) (0.6 * rate), out.begin() + (long) (1.0 * rate));
+            const std::vector<float> soft (out.begin() + (long) (1.6 * rate), out.begin() + (long) (2.0 * rate));
+            return 20.0 * std::log10 (rms (loud, 0) / rms (soft, 0));
+        };
+
+        const double none = apart (0.3, 0.0f), squeezed = apart (0.3, 1.0f), squeezedQuiet = apart (0.003, 1.0f);
+        check (std::abs (none - 12.0) < 0.5 && squeezed < 6.0 && std::abs (squeezed - squeezedQuiet) < 0.5,
+               "bass: Compression evens out a quiet guitar the same as a hot one (two notes 12 dB apart come out " + num (none, 1)
+               + " dB apart with it off, " + num (squeezed, 1) + " dB at 1, and " + num (squeezedQuiet, 1) + " dB on a guitar 40 dB quieter)");
+    }
+
+    // ---- the pluck: a click on the front of each note, and none of the guitar after it ----
+    {
+        const std::vector<Played> notes { { 0.2, 110.0, 0.3, 0.9 }, { 0.9, 146.83, 0.3, 1.6 } };
+        const auto in = played (notes, 1.8, true);
+        auto with = plain(), without = plain();
+        with.pluck = 0.5f;
+        const auto a = run (with, in), b = run (without, in);
+
+        // What the pluck added, 2 ms at a time.
+        std::vector<double> added;
+        for (size_t i = 0; i + 192 <= a.size(); i += 192)
+        {
+            double sum = 0.0;
+            for (size_t k = i; k < i + 192; ++k)
+                sum += std::pow ((double) a[k] - b[k], 2.0);
+            added.push_back (std::sqrt (sum / 192.0));
+        }
+
+        const auto most = [&added] (double fromSeconds, double toSeconds)
+        {
+            double m = 0.0;
+            for (size_t i = (size_t) (fromSeconds / 0.002); i < std::min (added.size(), (size_t) (toSeconds / 0.002)); ++i)
+                m = std::max (m, added[i]);
+            return m;
+        };
+
+        const double first = most (0.2, 0.215), second = most (0.9, 0.915);
+        const double between = std::max (most (0.26, 0.9), most (0.96, 1.8)), bass = rms (b, (size_t) (0.3 * rate));
+        const double clickDb = 20.0 * std::log10 (std::min (first, second) / bass), restDb = 20.0 * std::log10 (between / std::min (first, second) + 1.0e-12);
+        check (clickDb > -20.0 && clickDb < 6.0 && restDb < -30.0,
+               "bass: the pluck puts a click on the front of each note and nothing of the guitar after it (click " + num (clickDb, 1)
+               + " dB against the bass, the rest of the note " + num (restDb, 1) + " dB below the click)");
+
+        // Hiss and hum alone must not open it.
+        const auto hiss = played ({}, 1.0, true);
+        const auto c = run (with, hiss), d = run (without, hiss);
+        double extra = 0.0;
+        for (size_t i = (size_t) (0.2 * rate); i < c.size(); ++i)
+            extra += std::pow ((double) c[i] - d[i], 2.0);
+        const double hissDb = 20.0 * std::log10 (std::sqrt (extra / (0.8 * rate)) / rms (hiss, (size_t) (0.2 * rate)) + 1.0e-12);
+        check (hissDb < -20.0, "bass: hiss and hum alone do not open the pluck (it adds " + num (hissDb, 1) + " dB against the hiss going in)");
     }
 
     // ---- tone knob ----

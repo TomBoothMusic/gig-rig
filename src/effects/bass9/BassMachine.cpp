@@ -10,13 +10,19 @@ namespace gigrig::fx::bass9
 namespace
 {
     constexpr double pi = 3.14159265358979323846;
-    constexpr double lowestBandHz = 70.0, highestBandHz = 2400.0;
+    constexpr double lowestBandHz = 70.0, highestBandHz = 4400.0;
     constexpr double innerRateWanted = 12000.0;
     constexpr double halfWidthOfPitch = 0.0578;         // a twelfth of an octave either side, before Tracking speed
-    constexpr double widestSlowHz = 13.0, widestQuickHz = 30.0;
-    constexpr double followTime = 0.5, steadyTime = 0.5, steadyLeastSeconds = 0.012;    // in filter ring times
+    constexpr double widestHz = 13.0;                   // and never more than this: the low E's harmonics are 82 Hz apart
+    constexpr double followTime = 0.5, quickTime = 0.33, steadyTime = 0.5, steadyLeastSeconds = 0.012;    // in filter ring times
     constexpr double wobbleAllowed = 0.7;
     constexpr double tiny = 1.0e-9;
+    constexpr double quietest = 1.0e-7;                 // -140 dB: stands in for silence where a level is divided by
+    constexpr double brightHz = 1000.0;
+    constexpr double driveMost = 5.0;                   // how hard Drive at 1 pushes the peaks into the valve curve
+    constexpr double pluckFromHz = 700.0, pluckToHz = 3500.0;
+    constexpr double pluckOpen = 4.0, pluckShut = 1.5;  // the top of the guitar's sound jumping to 4 times its recent level opens the pluck fully, under 1.5 times shuts it
+    constexpr double pluckMost = 10.0;                  // Pluck at 1 passes the guitar's attack ten times louder than it came in; at 0.5, two and a half times
     constexpr double keepAwake = 1.0e-18;   // far below hearing: stops the filters idling down into slow "denormal" numbers in dead silence
 
     using cd = std::complex<double>;
@@ -83,6 +89,8 @@ const std::vector<BassSettings::Range>& BassSettings::ranges()
         { "drive",    "Drive",                  0.0f,   1.0f,   0.1f,   "" },
         { "gateDb",   "Noise gate",             -90.0f, -30.0f, -66.0f, "dB" },
         { "levelDb",  "Level",                  -24.0f, 24.0f,  0.0f,   "dB" },
+        { "pluck",    "Pluck (string noise)",   0.0f,   1.0f,   0.5f,   "" },
+        { "brightDb", "String brightness",      0.0f,   18.0f,  9.0f,   "dB" },
     };
     return list;
 }
@@ -99,6 +107,8 @@ float BassSettings::get (const std::string& key) const
     if (key == "drive")     return drive;
     if (key == "gateDb")    return gateDb;
     if (key == "levelDb")   return levelDb;
+    if (key == "pluck")     return pluck;
+    if (key == "brightDb")  return brightDb;
     return 0.0f;
 }
 
@@ -118,11 +128,13 @@ void BassSettings::set (const std::string& key, float value)
     else if (key == "drive")    drive = value;
     else if (key == "gateDb")   gateDb = value;
     else if (key == "levelDb")  levelDb = value;
+    else if (key == "pluck")    pluck = value;
+    else if (key == "brightDb") brightDb = value;
 }
 
 void BassSettings::setIndex (int index, float value) noexcept
 {
-    float* fields[] { &subMix, &tone, &tracking, &lowDb, &lowMidDb, &midDb, &compress, &drive, &gateDb, &levelDb };
+    float* fields[] { &subMix, &tone, &tracking, &lowDb, &lowMidDb, &midDb, &compress, &drive, &gateDb, &levelDb, &pluck, &brightDb };
 
     if (index >= 0 && index < (int) (sizeof (fields) / sizeof (fields[0])))
         *fields[index] = value;
@@ -163,7 +175,7 @@ void BassMachine::prepare (double sampleRate)
 {
     rate = sampleRate > 0.0 ? sampleRate : 48000.0;
 
-    // The bank only listens below 2.4 kHz, so it runs on every 2nd, 4th or 8th sample.
+    // The bank only listens below 4.4 kHz, so it runs on every 2nd, 4th or 8th sample.
     step = std::clamp ((int) std::lround (rate / innerRateWanted), 1, (int) hist1.size());
     innerRate = rate / step;
     perStep = 1.0 / step;
@@ -171,7 +183,7 @@ void BassMachine::prepare (double sampleRate)
     bands.assign ((size_t) maxBands, Band());
     signCoeff = 1.0 - std::exp (-1.0 / (0.002 * innerRate));
 
-    {   // 2nd order Butterworth low-pass at 3 kHz on the bank's output: an octave below 2.4 kHz needs no more
+    {   // 2nd order Butterworth low-pass at 3 kHz on the bank's output: an octave below 4.4 kHz needs no more
         smoothHz = std::min (3000.0, 0.4 * innerRate);
         const double w = 2.0 * pi * smoothHz / innerRate;
         const double alpha = std::sin (w) / (2.0 * 0.7071);
@@ -188,6 +200,13 @@ void BassMachine::prepare (double sampleRate)
     gateHoldCoeff = 1.0 - std::exp (-1.0 / (0.010 * rate));
     compAttack  = 1.0 - std::exp (-1.0 / (0.004 * rate));
     compRelease = 1.0 - std::exp (-1.0 / (0.150 * rate));
+    refAttack   = 1.0 - std::exp (-1.0 / (0.002 * rate));
+    refRelease  = 1.0 - std::exp (-1.0 / (2.5 * rate));
+    quickAttack = 1.0 - std::exp (-1.0 / (0.0001 * rate));
+    quickRelease = 1.0 - std::exp (-1.0 / (0.008 * rate));
+    slowAttack  = 1.0 - std::exp (-1.0 / (0.015 * rate));
+    slowRelease = 1.0 - std::exp (-1.0 / (0.060 * rate));
+    pluckSmooth = 1.0 - std::exp (-1.0 / (0.0005 * rate));
 
     buildBands();
     buildVoicing();
@@ -198,7 +217,7 @@ void BassMachine::reset()
 {
     for (auto& b : bands)
     {
-        b.s1 = b.s2 = b.last = b.turn = {};
+        b.s1 = b.s2 = b.last = b.turn = b.turnQuick = {};
         b.w = b.v = b.lined = { 1.0, 0.0 };
         b.sign = b.signNow = 1.0;
         b.turned = b.turnedNow = { 1.0, 0.0 };
@@ -206,12 +225,15 @@ void BassMachine::reset()
     }
 
     pickup.clear();
-    for (auto* f : { &highPass, &low, &lowMid, &mid, &smooth })
+    pluckPickup.clear();
+    pluckQuick = pluckSlow = pluckGate = 0.0;
+    compRef = driveRef = 0.0;
+    for (auto* f : { &highPass, &low, &lowMid, &mid, &smooth, &bright, &pluckHigh, &pluckLow })
         f->clear();
 
-    for (auto* h : { &hist1, &hist2, &hist3, &hist4 })
+    for (auto* h : { &hist1, &hist2, &hist3, &hist4, &hist5 })
         h->fill (0.0);
-    box1 = box2 = box3 = box4 = bankNow = bankBefore = 0.0;
+    box1 = box2 = box3 = box4 = box5 = bankNow = bankBefore = 0.0;
     histAt = phase = 0;
     gateEnv = gateGain = compEnv = 0.0;
 }
@@ -230,7 +252,7 @@ void BassMachine::buildBands()
     // harmonics of a low note (82 Hz apart on the low E) each still get a filter to themselves.
     const double tracking = std::clamp ((double) current.tracking, 0.0, 1.0);
     const double fraction = halfWidthOfPitch * (0.8 + 1.6 * tracking);
-    const double widest = widestSlowHz + (widestQuickHz - widestSlowHz) * tracking;
+    const double widest = widestHz;
 
     const int before = count;
     count = 0;
@@ -254,10 +276,11 @@ void BassMachine::buildBands()
             const double a = pi * f / rate;
             return step > 1 && a > 1.0e-9 ? std::abs (std::sin (a * step) / (step * std::sin (a))) : 1.0;
         };
-        const double in3 = std::pow (average (hz), 3.0), out3 = std::pow (average (0.5 * hz), 3.0);
+        const double in4 = std::pow (average (hz), 4.0), out3 = std::pow (average (0.5 * hz), 3.0);
         const double tidy = 1.0 / std::sqrt (1.0 + std::pow (0.5 * hz / smoothHz, 4.0));
-        b.trim = 2.0 / (in3 * out3 * tidy);     // 2: a filter that turns one way hears half of a real tone
+        b.trim = 2.0 / (in4 * out3 * tidy);     // 2: a filter that turns one way hears half of a real tone
 
+        b.quickCoeff = 1.0 - std::exp (-1.0 / (quickTime / (2.0 * pi * half) * innerRate));
         b.followCoeff = 1.0 - std::exp (-1.0 / (followTime / (2.0 * pi * half) * innerRate));
         b.steadyCoeff = 1.0 - std::exp (-1.0 / (std::max (steadyLeastSeconds, steadyTime / (2.0 * pi * half)) * innerRate));
 
@@ -282,7 +305,7 @@ void BassMachine::buildBands()
     for (int k = count; k < std::max (before, count) && k < maxBands; ++k)
     {
         auto& b = bands[(size_t) k];
-        b.s1 = b.s2 = b.last = b.turn = {};
+        b.s1 = b.s2 = b.last = b.turn = b.turnQuick = {};
         b.share = b.amp = b.size = 0.0;
     }
 }
@@ -312,8 +335,26 @@ void BassMachine::buildVoicing()
 
     for (int i = 0; i < 4; ++i)
     {
-        pickup.b[i] = bz[(size_t) i] * dcFix / norm;
-        pickup.a[i] = az[(size_t) i] / norm;
+        pickup.b[i] = pluckPickup.b[i] = bz[(size_t) i] * dcFix / norm;
+        pickup.a[i] = pluckPickup.a[i] = az[(size_t) i] / norm;
+    }
+
+    // ---- the pluck: the guitar's own attack above 700 Hz, with the fizz above 3.5 kHz taken off ----
+    {
+        const auto butter = [this] (Biquad& f, double hz, bool high)
+        {
+            const double w = 2.0 * pi * std::min (hz, 0.45 * rate) / rate;
+            const double alpha = std::sin (w) / (2.0 * 0.7071);
+            const double a0 = 1.0 + alpha, cw = std::cos (w);
+            f.b0 = (high ? 1.0 + cw : 1.0 - cw) / 2.0 / a0;
+            f.b1 = (high ? -(1.0 + cw) : 1.0 - cw) / a0;
+            f.b2 = f.b0;
+            f.a1 = -2.0 * cw / a0;
+            f.a2 = (1.0 - alpha) / a0;
+        };
+        butter (pluckHigh, pluckFromHz, true);
+        butter (pluckLow, pluckToHz, false);
+        pluckLevel = pluckMost * current.pluck * current.pluck;
     }
 
     // ---- clean-up high-pass (2nd order Butterworth, 25 Hz) ----
@@ -326,6 +367,23 @@ void BassMachine::buildVoicing()
         highPass.b2 = highPass.b0;
         highPass.a1 = -2.0 * cw / a0;
         highPass.a2 = (1.0 - alpha) / a0;
+    }
+
+    // ---- string brightness ----
+    // Halving the guitar also halves where its pickups roll the top off, so the octave comes
+    // out an octave duller than a bass string through a bass pickup. A lift above 1 kHz puts
+    // that back, and gives the tone knob below something to work on.
+    {
+        const double A = std::pow (10.0, current.brightDb / 40.0);
+        const double w = 2.0 * pi * brightHz / rate, cw = std::cos (w);
+        const double alpha = std::sin (w) / 2.0 * std::sqrt (2.0);      // shelf slope 1
+        const double root = 2.0 * std::sqrt (A) * alpha;
+        const double a0 = (A + 1.0) - (A - 1.0) * cw + root;
+        bright.b0 = A * ((A + 1.0) + (A - 1.0) * cw + root) / a0;
+        bright.b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cw) / a0;
+        bright.b2 = A * ((A + 1.0) + (A - 1.0) * cw - root) / a0;
+        bright.a1 = 2.0 * ((A - 1.0) - (A + 1.0) * cw) / a0;
+        bright.a2 = ((A + 1.0) - (A - 1.0) * cw - root) / a0;
     }
 
     setPeak (rate, 90.0,  0.9, current.lowDb,    low.b0, low.b1, low.b2, low.a1, low.a2);
@@ -355,11 +413,12 @@ double BassMachine::runBank (double x, double sub) noexcept
         b.last = z;
         b.size = m;
         b.turn += b.followCoeff * (d - b.turn);
-        const cd rot = b.turn * std::conj (b.centre);
+        b.turnQuick += b.quickCoeff * (d - b.turnQuick);
+        const cd rot = b.turn * std::conj (b.centre), rotQuick = b.turnQuick * std::conj (b.centre);
 
         b.signNow += signCoeff * (b.sign - b.signNow);
 
-        if (nowSize < tiny * tiny || rot.real() < tiny * tiny)
+        if (nowSize < tiny * tiny || rot.real() < tiny * tiny || rotQuick.real() < tiny * tiny)
         {
             b.share = 0.0;
             b.amp = 0.0;
@@ -367,7 +426,7 @@ double BassMachine::runBank (double x, double sub) noexcept
         }
 
         const double offset = std::clamp (rot.imag() / rot.real() * b.perHalfWidth, -4.0, 4.0);
-        const double offsetNow = std::clamp ((d.imag() * b.centre.real() - d.real() * b.centre.imag()) / nowSize * b.perHalfWidth, -8.0, 8.0);
+        const double offsetNow = std::clamp (rotQuick.imag() / rotQuick.real() * b.perHalfWidth, -8.0, 8.0);
         const double dev = offsetNow - offset;
         b.wobble += b.steadyCoeff * (dev * dev - b.wobble);
         b.offset = offset;
@@ -463,16 +522,22 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
     const double gateClose = gateOpen * 0.5;
     const bool gateOff = current.gateDb <= -89.0f;
 
+    // Compression and drive work against how loud the playing has lately been (its peaks over
+    // the last couple of seconds), not against a fixed level, so they do the same thing to a
+    // quiet guitar as to a hot one. (They used to need a guitar near full scale: Tom's arrived
+    // 28 dB down and neither did anything he could hear, 25 Nov 2026.)
     const double ratio = 1.0 + 5.0 * current.compress;
-    const double thresholdDb = -12.0 - 18.0 * current.compress;
-    const double makeupDb = -thresholdDb * (1.0 - 1.0 / ratio) * 0.5;
-    const double driveK = 1.0 + 8.0 * current.drive * current.drive;
+    const double depthDb = 6.0 + 18.0 * current.compress;       // the squeeze starts this far below the recent peaks
+    const double makeupDb = depthDb * (1.0 - 1.0 / ratio) * 0.85;     // about as loud squeezed as not
+    const double driveK = driveMost * std::pow ((double) current.drive, 1.5);
+    const bool driving = driveK > 1.0e-3;
+    const double driveTrim = driving ? 0.5 * driveK / std::tanh (0.5 * driveK) : 1.0;    // keeps a middling note as loud as it was
 
     for (int i = 0; i < numSamples; ++i)
     {
         const double x = in[i];
 
-        // ---- down to the bank's own rate: three running averages, each one bank step long ----
+        // ---- down to the bank's own rate: four running averages, each one bank step long ----
         box1 += x - hist1[(size_t) histAt];
         hist1[(size_t) histAt] = x;
         const double a1 = box1 * perStep;
@@ -481,12 +546,15 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
         const double a2 = box2 * perStep;
         box3 += a2 - hist3[(size_t) histAt];
         hist3[(size_t) histAt] = a2;
+        const double a3 = box3 * perStep;
+        box5 += a3 - hist5[(size_t) histAt];
+        hist5[(size_t) histAt] = a3;
 
         if (++phase >= step)
         {
             phase = 0;
             bankBefore = bankNow;
-            bankNow = smooth.run (runBank (box3 * perStep + keepAwake, sub));
+            bankNow = smooth.run (runBank (box5 * perStep + keepAwake, sub));
         }
 
         // ---- and back up: a straight line between the bank's outputs, then one more running average ----
@@ -496,8 +564,8 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
         histAt = histAt + 1 < step ? histAt + 1 : 0;
         double y = box4 * perStep + keepAwake;
 
-        // ---- 4: pickup and tone knob, EQ ----
-        y = pickup.run (y);
+        // ---- string brightness, pickup and tone knob, EQ ----
+        y = pickup.run (bright.run (y));
         y = highPass.run (y);
         y = low.run (y);
         y = lowMid.run (y);
@@ -506,17 +574,44 @@ void BassMachine::process (const float* in, float* out, int numSamples) noexcept
         // ---- compressor ----
         const double level0 = std::abs (y);
         compEnv += (level0 > compEnv ? compAttack : compRelease) * (level0 - compEnv);
+        compRef += (level0 > compRef ? refAttack : refRelease) * (level0 - compRef);
         if (current.compress > 0.0f)
         {
-            const double envDb = 20.0 * std::log10 (compEnv + 1.0e-12);
-            const double over = envDb - thresholdDb;
+            const double over = 20.0 * std::log10 ((compEnv + quietest) / (compRef + quietest)) + depthDb;
             const double cutDb = over > 0.0 ? -over * (1.0 - 1.0 / ratio) : 0.0;
             y *= dbToGain (cutDb + makeupDb);
         }
 
-        // ---- drive ----
-        if (current.drive > 0.0f)
-            y = std::tanh (driveK * y) / driveK;
+        // ---- drive: a soft valve-style squash of the peaks ----
+        const double level1 = std::abs (y);
+        driveRef += (level1 > driveRef ? refAttack : refRelease) * (level1 - driveRef);
+        if (driving)
+        {
+            const double ref = driveRef + quietest;
+            y = ref * driveTrim * std::tanh (driveK * y / ref) / driveK;
+        }
+
+        // ---- the pluck: the front edge of each note, straight from the guitar ----
+        // The octave takes 20 to 50 ms to ring up, so on its own every note swells in and the
+        // bass sounds like an octave pedal. A bass string gives a short click first. The
+        // guitar's own attack is let through for the first few ms of each note and no longer:
+        // it opens when the top of the guitar's sound jumps up and shuts as soon as that
+        // settles, so nothing of the guitar comes through while a note rings.
+        {
+            const double top = pluckHigh.run (x) + keepAwake;
+            const double size = std::abs (top);
+            pluckQuick += (size > pluckQuick ? quickAttack : quickRelease) * (size - pluckQuick);
+            pluckSlow += (pluckQuick > pluckSlow ? slowAttack : slowRelease) * (pluckQuick - pluckSlow);
+            const double jump = pluckQuick / (pluckSlow + quietest);
+            const double open = std::clamp ((jump - pluckShut) / (pluckOpen - pluckShut), 0.0, 1.0);
+            pluckGate += pluckSmooth * (open - pluckGate);
+            if (pluckGate < 1.0e-6)
+                pluckGate = 0.0;
+            const double click = pluckPickup.run (pluckLow.run (top) * pluckGate + keepAwake);
+
+            if (pluckLevel > 0.0)
+                y += pluckLevel * click;
+        }
 
         // ---- gate, keyed by the guitar itself ----
         const double ax = std::abs (x);
