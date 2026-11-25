@@ -25,6 +25,8 @@ struct BassSettings
     float drive    = 0.1f;      // 0 = clean, 1 = a valve bass amp pushed hard
     float gateDb   = -66.0f;    // quieter than this at the input and the bass goes silent; -90 = off
     float levelDb  = 0.0f;      // output level
+    float pluck    = 0.5f;      // the click at the front of each note, from the guitar's own attack; 0 = none
+    float brightDb = 9.0f;      // lift above 1 kHz: how bright the "strings" are before the tone knob
 
     bool operator== (const BassSettings&) const = default;
 
@@ -45,7 +47,7 @@ struct BassSettings
 /** Guitar in, bass out: a polyphonic octave (and two-octave) down with a P-bass voicing.
 
     How it works, in order:
-      1. A bank of narrow filters from 70 Hz to 2.4 kHz splits the guitar into strands. Low
+      1. A bank of narrow filters from 70 Hz to 4.4 kHz splits the guitar into strands. Low
          down each filter is a fixed fraction of its pitch wide; higher up the width stops
          growing, so the harmonics of a low note (82 Hz apart on the low E) still land in
          filters of their own. Each filter gives a "complex" output: an arrow that turns once
@@ -56,6 +58,9 @@ struct BassSettings
          it, with the filter's own loss and lag at that pitch taken back out, so every pitch
          comes out at the same level. A band that hears two tones fighting, or only hiss,
          has an unsteady arrow and is turned down: that band would come out as static.
+         (Unsteady is judged on a lightly smoothed arrow. Judged sample by sample, as in
+         build 77, the strong low harmonics of a note upset the bands holding its upper
+         harmonics, which came out quiet and wobbling: Tom heard a warble.)
       3. Each arrow is turned at half speed (stepped on by half of its own step, so it stays
          continuous), which halves that strand's frequency without touching how loud it is
          or how it rises and dies away. Halving every harmonic of a note gives exactly the
@@ -65,12 +70,18 @@ struct BassSettings
          over it is the quieter of the two and it fades through zero in a few ms. (The first
          version flipped bands in one sample, at full level, many times a second on a real
          guitar: Tom heard it on 25 Nov 2026 as ticking and static.)
-      5. The bass then goes through a model of a P-bass pickup and its passive tone knob,
-         an EQ, a compressor, a soft valve-style drive and a level.
+      5. The bass then goes through a lift above 1 kHz ("string brightness": halving a
+         guitar leaves it an octave duller than a bass string), a model of a P-bass pickup
+         and its passive tone knob, an EQ, a compressor, a soft valve-style drive and a
+         level. The compressor and drive work against the playing's own recent peaks, so
+         they do the same to a quiet guitar as to a hot one.
+      6. The pluck: the guitar's own attack above 700 Hz, let through for the first few ms
+         of each note, so a note starts with a click as a bass string does instead of
+         swelling in while the filters ring up.
 
     Nothing looks ahead: the only delay is what the filters themselves take to ring up,
-    a few ms on high notes and more on the lowest notes, plus a third of a millisecond for
-    the change of rate. */
+    20 to 50 ms on the notes of a bass line, plus a third of a millisecond for the change
+    of rate. The pluck has no delay at all. */
 class BassMachine
 {
 public:
@@ -89,7 +100,7 @@ public:
     double sampleRate() const noexcept              { return rate; }
 
 private:
-    static constexpr int maxBands = 160;
+    static constexpr int maxBands = 208;
 
     struct Band
     {
@@ -97,9 +108,10 @@ private:
         std::complex<double> centre;            // one sample's turn at the band's own pitch
         double gain = 0.0, trim = 2.0;
         double perHalfWidth = 0.0;              // 1 / (half the band's width, as a turn per sample)
-        double followCoeff = 0.0, steadyCoeff = 0.0;
+        double followCoeff = 0.0, quickCoeff = 0.0, steadyCoeff = 0.0;
         std::complex<double> last;              // the band's output one sample ago
         std::complex<double> turn;              // smoothed turn per sample: how fast its arrow really goes round
+        std::complex<double> turnQuick;         // the same, smoothed less: shows a second tone or hiss as a wobble
         double offset = 0.0;                    // the tone's pitch against the band's centre, in half-widths
         double wobble = 0.0;                    // how unsteady that pitch is (one steady tone: 0)
         std::complex<double> w { 1.0, 0.0 };    // the half-speed arrow (one octave down)
@@ -154,15 +166,18 @@ private:
     int step = 1, phase = 0;                    // the bank runs on every step-th sample
     double innerRate = 12000.0, smoothHz = 3000.0;
     double perStep = 1.0;
-    double box1 = 0.0, box2 = 0.0, box3 = 0.0, box4 = 0.0;      // running averages before and after the bank
-    std::array<double, 16> hist1 {}, hist2 {}, hist3 {}, hist4 {};
+    double box1 = 0.0, box2 = 0.0, box3 = 0.0, box5 = 0.0, box4 = 0.0;     // running averages before (1, 2, 3, 5) and after (4) the bank
+    std::array<double, 16> hist1 {}, hist2 {}, hist3 {}, hist5 {}, hist4 {};
     int histAt = 0;
     double bankNow = 0.0, bankBefore = 0.0;     // the bank's last two outputs, joined by a straight line
     double signCoeff = 0.0;
     Biquad smooth;                              // tidies the bank's output before it goes back to the full rate
 
-    Cubic pickup;
-    Biquad highPass, low, lowMid, mid;
+    Cubic pickup, pluckPickup;
+    Biquad bright, highPass, low, lowMid, mid, pluckHigh, pluckLow;
+    double pluckQuick = 0.0, pluckSlow = 0.0, pluckGate = 0.0, pluckLevel = 0.0;
+    double quickAttack = 0.0, quickRelease = 0.0, slowAttack = 0.0, slowRelease = 0.0, pluckSmooth = 0.0;
+    double compRef = 0.0, driveRef = 0.0, refAttack = 0.0, refRelease = 0.0;     // how loud the playing has lately been
     double gateEnv = 0.0, gateGain = 0.0, gateAttack = 0.0, gateRelease = 0.0, gateHoldCoeff = 0.0;
     double compEnv = 0.0, compAttack = 0.0, compRelease = 0.0;
     double level = 1.0;
