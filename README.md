@@ -567,6 +567,10 @@ take with both chains on, play it, and flip **Effects / Reference**.
    **Harmony level** sets how loud the second voice is.
 3. Watch the status line: it says which note it hears and which it sings. Try Cocaine in F and
    Lucky in A against what the RC-600's Harmonist does.
+   **Harmony only while you hold a switch:** under **RC-600 switches for the effects**, choose
+   a switch and **Chain 3: harmony while held** (use the number of your Vocal chain). The
+   harmony sings while the switch is down and stops when you let go. For a song, set the
+   **Key**, leave the harmony unticked, and keep the song: the first press wakes it.
 4. Tick **Flanger** on for Come As You Are. Try the **Tape delay** and **Digital delay**.
 5. **The delay throw** (the "after love, after love, after love" in Believe). Under
    **RC-600 switches for the effects**, choose CTL3 or CTL4 and **Chain 3: delay throw while

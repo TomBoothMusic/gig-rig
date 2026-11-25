@@ -121,7 +121,7 @@ namespace
         return "it has no setting called \"" + setting + "\"";
     }
 
-    constexpr const char* actionWords[] = { "compare", "chain on off", "tap tempo", "whammy", "test take", "delay throw", "wah", "next amp" };
+    constexpr const char* actionWords[] = { "compare", "chain on off", "tap tempo", "whammy", "test take", "delay throw", "wah", "next amp", "harmony" };
 }
 
 //==============================================================================

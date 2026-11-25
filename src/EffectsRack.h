@@ -100,6 +100,9 @@ public:
     /** Message thread: the delay throw. Sets the "throw" setting of the first effect in the chain
         that has one to Catching (held) or Ready (let go). False if the chain has none. */
     bool holdThrow (int chain, bool held);
+    /** The harmony sings only while a switch is held: its "hold" setting goes to Singing and back to Ready.
+        A harmony that is switched off is switched on by the first press. False when the chain has none. */
+    bool holdHarmony (int chain, bool held);
     /** Message thread: the amp-cycling switch. Sets the first amp in the chain to the next amp
         model in the chain's list (setAmpCycle), or in the models folder when the list is empty,
         going round to the first after the last. The amp fades from one to the other by itself.

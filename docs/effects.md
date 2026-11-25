@@ -203,6 +203,12 @@ says how its effect works; the points a future session needs:
   same choices as `voice`) and `level2`. Both voices share the tracker, the key and the pulse
   marks; each has its own grains (`Harmony::Part`). Never put two harmony effects in a row for
   this: the second would hear the lead and the first harmony mixed.
+  **Only while a switch is held** (26 Nov 2026, Tom: "it will always be done by holding a
+  switch"): choice setting `hold`: 0 Off (always sings), 1 Ready (silent, still tracking),
+  2 Singing. `EffectsRack::holdHarmony` (pedal action 8, "harmony while held", `harmony` in a
+  song file) sets it to 2 on the press and 1 on the release, and switches the effect on first if
+  the song left it off. The harmony opens in 10 ms and closes in 60. Songs are saved with the
+  key set and the harmony switched off; the first press wakes it.
 - **`HalfRate`** has a few samples of delay at 96 kHz (measured at prepare and reported). Its
   half-band filters are not linear-phase, so "the dry sound, late" is only true of level, not
   sample for sample.
