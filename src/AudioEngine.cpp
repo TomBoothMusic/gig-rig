@@ -381,6 +381,7 @@ void AudioEngine::makeAudioThreadRealtime() noexcept
 void AudioEngine::audioDeviceError (const juce::String& message)
 {
     errorText = message;
+    deviceError.store (true);
 }
 
 int AudioEngine::driverLatencySamples() const
@@ -630,6 +631,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
 {
     if (rtState.load (std::memory_order_relaxed) == 0)
         makeAudioThreadRealtime();
+
+    blockCount.fetch_add (1, std::memory_order_relaxed);
 
     const auto startTicks = juce::Time::getHighResolutionTicks();
     const auto period = currentSampleRate > 0.0 ? numSamples / currentSampleRate : 0.0;

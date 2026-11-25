@@ -125,21 +125,16 @@ void TrackTile::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse)
-    : engine (engineToUse), pedal (pedalToUse)
+LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse, SongBook& bookToUse)
+    : engine (engineToUse), pedal (pedalToUse), book (bookToUse)
 {
     style::body (songLabel, "Song");
     style::combo (songBox);
     style::combo (firstLoopBox);
     style::combo (outBox);
 
-    for (int i = 0; i < numBuiltInSongs(); ++i)
-    {
-        const auto& s = builtInSong (i);
-        songBox.addItem (s.title() + (s.rcMemory > 0 ? "   (RC-600 memory " + juce::String (s.rcMemory) + ")" : juce::String()), i + 1);
-    }
-
-    songBox.setTooltip ("Each song sets the switches, the tracks' inputs and any preset lengths the way the RC-600 memory does. Changing song clears every loop.");
+    songBox.setTooltip ("Each song sets the switches, the tracks' inputs and any preset lengths the way the RC-600 memory does, and its sounds (see the Songs tab). "
+                        "Changing song clears every loop. A program change from Songbook Pro picks the song with that program number.");
     songBox.onChange = [this] { chooseSong (songBox.getSelectedId() - 1); };
 
     firstLoopBox.addItem ("First loop sets the tempo", 1);
@@ -224,8 +219,10 @@ LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse)
                                                              &trimLabel, &trimSlider, &descriptionHeading, &logHeading, &descriptionView, &logView })
         addAndMakeVisible (c);
 
-    songBox.setSelectedId (1, juce::dontSendNotification);
-    chooseSong (0);
+    // The first song's looper layout only: the effects come back from the app's own memory,
+    // as they were when it was last closed.
+    book.load (0, "the app started", false);
+    songChanged();
     slowUpdate();
     startTimerHz (timerHz);
 }
@@ -237,11 +234,27 @@ LooperPanel::~LooperPanel()
 
 void LooperPanel::chooseSong (int index)
 {
-    if (index < 0 || index >= numBuiltInSongs())
+    if (index >= 0 && index < book.numEntries())
+        book.load (index, "chosen in the Song box");      // comes back through songChanged()
+}
+
+void LooperPanel::songChanged()
+{
+    songBox.clear (juce::dontSendNotification);
+
+    for (int i = 0; i < book.numEntries(); ++i)
+    {
+        const auto& e = book.entry (i);
+        songBox.addItem (e.name + (e.program > 0 ? "   (program " + juce::String (e.program) + ")" : juce::String()), i + 1);
+    }
+
+    songBox.setSelectedId (book.currentIndex() + 1, juce::dontSendNotification);
+
+    // A rescan of the songs folder comes through here too: only a real change of song redraws.
+    if (std::memcmp (&song, &book.song(), sizeof (SongSetup)) == 0)
         return;
 
-    song = builtInSong (index);
-    engine.looper().setSong (song);
+    song = book.song();
     descriptionView.setText (describeSong (song), false);
     descriptionView.setCaretPosition (0);
     shownBank = -1;
@@ -512,7 +525,8 @@ juce::String LooperPanel::reportText()
 
     lines.add ("STAGE 3: LOOPER");
     lines.add ("---------------");
-    lines.add ("Song: " + song.title() + (song.rcMemory > 0 ? " (RC-600 memory " + juce::String (song.rcMemory) + ")" : juce::String()));
+    lines.add ("Song: " + book.currentEntry().name + (song.rcMemory > 0 ? " (RC-600 memory " + juce::String (song.rcMemory) + ")" : juce::String())
+                 + (book.currentEntry().builtIn ? juce::String() : ", using the looper layout of " + builtInSong (book.currentEntry().layout).title()));
     lines.add (juce::String ("First loop: ") + (options.fixedTempo ? "uses the song's saved tempo (" + juce::String (song.savedBpm, 1) + " BPM)"
                                                                    : juce::String ("sets the tempo")));
     lines.add ("Timing correction: " + juce::String (timing.samples) + " samples ("

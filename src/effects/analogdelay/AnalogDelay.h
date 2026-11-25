@@ -17,6 +17,7 @@ class AnalogDelay final : public Effect
 public:
     AnalogDelay();
     std::string typeId() const override         { return "analogdelay"; }
+    bool hasTail() const noexcept override              { return true; }
 
 private:
     void onPrepare (double rate, int maxBlock) override;

@@ -1,5 +1,6 @@
 #include "EffectsRack.h"
 #include "effects/Registry.h"
+#include "effects/amp/NamAmp.h"
 
 #include <juce_events/juce_events.h>
 
@@ -238,6 +239,94 @@ bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
 bool EffectsRack::bendWhammy (int c, bool toeDown)    { return rockPedal (c, "whammy", toeDown); }
 bool EffectsRack::sweepWah (int c, bool toeDown)      { return rockPedal (c, "wah", toeDown); }
 
+juce::StringArray EffectsRack::recipe (int c) const         { return chains[(size_t) juce::jlimit (0, numChains - 1, c)].recipe; }
+juce::StringArray EffectsRack::ampCycle (int c) const       { return chains[(size_t) juce::jlimit (0, numChains - 1, c)].ampCycle; }
+
+const fx::ChainModel& EffectsRack::baseline (int c) const   { return chains[(size_t) juce::jlimit (0, numChains - 1, c)].baseline; }
+
+void EffectsRack::setBaseline (int c, const fx::ChainModel& m)
+{
+    chains[(size_t) juce::jlimit (0, numChains - 1, c)].baseline = m;
+    dirty = true;
+}
+
+void EffectsRack::setRecipe (int c, const juce::StringArray& presets)
+{
+    auto& mine = chains[(size_t) juce::jlimit (0, numChains - 1, c)].recipe;
+
+    if (mine != presets)
+    {
+        mine = presets;
+        dirty = true;
+    }
+}
+
+void EffectsRack::setTailsRingOut (bool shouldRing)
+{
+    tails = shouldRing;
+    dirty = true;
+
+    for (auto& s : chains)
+        s.chain.setTailsRingOut (shouldRing);
+}
+
+int EffectsRack::tailsRinging() const noexcept
+{
+    int n = 0;
+    for (const auto& s : chains)
+        n += s.chain.tailRinging() ? 1 : 0;
+    return n;
+}
+
+void EffectsRack::setAmpCycle (int c, const juce::StringArray& models)
+{
+    chains[(size_t) juce::jlimit (0, numChains - 1, c)].ampCycle = models;
+}
+
+juce::String EffectsRack::nextAmp (int c)
+{
+    c = juce::jlimit (0, numChains - 1, c);
+    auto& ch = chain (c);
+    const juce::String label = "Chain " + juce::String (c + 1) + " amp: ";
+
+    for (int k = 0; k < (int) ch.model().slots.size(); ++k)
+    {
+        if (ch.model().slots[(size_t) k].type != "amp")
+            continue;
+
+        auto* fx = ch.effect (k);
+
+        if (fx == nullptr)
+            break;
+
+        auto list = chains[(size_t) c].ampCycle;
+
+        if (list.isEmpty())
+            for (const auto& f : juce::File (juce::String (fx::NamAmp::modelFolder())).findChildFiles (juce::File::findFiles, false, "*.nam"))
+                list.add (f.getFileNameWithoutExtension());
+
+        if (chains[(size_t) c].ampCycle.isEmpty())
+            list.sort (true);
+
+        if (list.isEmpty())
+            return ampNote = label + "no amp models to step through";
+
+        const auto now = juce::String (fx->getText ("model")).upToLastOccurrenceOf (".nam", false, true);
+        int at = -1;
+
+        for (int i = 0; i < list.size(); ++i)
+            if (list[i].equalsIgnoreCase (now))
+                at = i;
+
+        const auto next = list[(at + 1) % list.size()];
+        ch.setText (k, "model", next.toStdString());
+        dirty = true;
+        return ampNote = label + next + (fx->status().empty() ? juce::String() : "  [" + juce::String (fx->status()) + "]");
+    }
+
+    return ampNote = label + "this chain has no amp";
+}
+
 bool EffectsRack::holdThrow (int c, bool held)
 {
     auto& ch = chain (juce::jlimit (0, numChains - 1, c));
@@ -262,6 +351,8 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         tap (juce::Time::getMillisecondCounterHiRes());
     else if (a.action == 4)
         takeNote = takeStep();
+    else if (a.action == 7)
+        nextAmp (c);
     else if (a.action == 0)
         toggleListen (c);
     else if (a.action == 1)
@@ -299,7 +390,7 @@ juce::String EffectsRack::pedalText() const
         const auto& m = chains[(size_t) a.chain].chain.model();
         juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
                           : a.action == 4 ? "test take: record, then play round and round, then stop"
-                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
@@ -371,6 +462,7 @@ juce::String EffectsRack::stateText() const
     juce::String t;
     t << "# GigRig effects rack: the app's own memory of the Effects tab. Safe to delete (it starts afresh).\n";
     t << "rack.on=" << (enabled.load() ? 1 : 0) << "\n";
+    t << "rack.tails=" << (tails ? 1 : 0) << "\n";
 
     for (int i = 0; i < numPedalAssigns; ++i)
     {
@@ -390,7 +482,16 @@ juce::String EffectsRack::stateText() const
         t << "chain.listen=" << listenWord (r.listen) << "\n";
         t << "chain.reference=" << (r.reference + 1) << "\n";
         t << "chain.trim=" << r.trimDb << "\n";
+        if (! chains[(size_t) c].recipe.isEmpty())
+            t << "chain.recipe=" << chains[(size_t) c].recipe.joinIntoString ("|") << "\n";
         t << chains[(size_t) c].chain.model().toText();
+
+        // The chain as last loaded, for "Update its presets" (see baseline()).
+        if (! chains[(size_t) c].recipe.isEmpty())
+            for (const auto& line : juce::StringArray::fromLines (juce::String (chains[(size_t) c].baseline.toText())))
+                if (line.isNotEmpty() && ! line.startsWithChar ('#'))
+                    t << "base:" << line << "\n";
+
         t << "end=chain\n";
     }
 
@@ -401,22 +502,34 @@ void EffectsRack::loadStateText (const juce::String& text)
 {
     auto lines = juce::StringArray::fromLines (text);
     int c = -1;
-    juce::String chainText;
+    juce::String chainText, baseText;
 
     const auto finishChain = [&]
     {
         if (c >= 0 && c < numChains)
+        {
             chains[(size_t) c].chain.setModel (fx::ChainModel::fromText (chainText.toStdString()));
+            chains[(size_t) c].baseline = fx::ChainModel::fromText (baseText.toStdString());
+        }
         chainText.clear();
+        baseText.clear();
     };
 
     for (auto line : lines)
     {
         line = line.trim();
+
+        if (line.startsWith ("base:"))
+        {
+            baseText << line.substring (5) << "\n";
+            continue;
+        }
+
         const auto key = line.upToFirstOccurrenceOf ("=", false, false);
         const auto value = line.fromFirstOccurrenceOf ("=", false, false);
 
         if (key == "rack.on")       { enabled.store (value == "1"); continue; }
+        if (key == "rack.tails")    { setTailsRingOut (value != "0"); continue; }
 
         if (key.startsWith ("pedal") && c < 0)
         {
@@ -441,6 +554,7 @@ void EffectsRack::loadStateText (const juce::String& text)
         else if (key == "chain.listen")     r.listen = listenFromWord (value);
         else if (key == "chain.reference")  r.reference = juce::jlimit (-1, 31, value.getIntValue() - 1);
         else if (key == "chain.trim")       r.trimDb = juce::jlimit (-36.0f, 24.0f, value.getFloatValue());
+        else if (key == "chain.recipe")     chains[(size_t) c].recipe = juce::StringArray::fromTokens (value, "|", "");
         else                                chainText << line << "\n";
     }
 
@@ -1328,6 +1442,8 @@ juce::String EffectsRack::reportText() const
     t << "--- Effects ---\n";
     t << "Effects tab: " << (enabled.load() ? "ON" : "off") << "\n";
     t << "Tempo for synced delays: " << tempoText() << "\n";
+    t << "When a chain's effects change: delays and reverbs " << (tails ? "ring out" : "are cut in 10 ms")
+      << (tailsRinging() > 0 ? " (" + juce::String (tailsRinging()) + " ringing out now)" : juce::String()) << "\n";
 
     for (int c = 0; c < numChains; ++c)
     {

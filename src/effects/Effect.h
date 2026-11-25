@@ -92,6 +92,11 @@ public:
     /** True for effects meant to make sound on their own (a tail, a tone). */
     virtual bool makesSoundFromSilence() const noexcept     { return false; }
 
+    /** True for an effect whose sound carries on after the playing stops: a delay's repeats, a
+        reverb's tail. When the chain is changed (another song, another preset) the chain lets
+        such an effect ring out instead of cutting it off. See Chain::process. */
+    virtual bool hasTail() const noexcept                   { return false; }
+
     double sampleRate() const noexcept                      { return rate; }
 
     /** The song's tempo in beats per minute (0 = not known yet), for effects that follow it,

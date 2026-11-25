@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "AudioEngine.h"
+#include "ReconnectWatch.h"
 #include "Style.h"
 
 namespace gigrig
@@ -27,6 +28,12 @@ public:
         Remembers the device, rate and buffer, so the next start (on Linux, after a reboot) opens the same way. */
     void openDevice (const DeviceChoice& choice, int bufferSize, double sampleRate = 0.0);
 
+    /** Before the device is closed on purpose (the device check's scan), so the reconnect
+        watch does not take it for the mixer going away. Opening a device starts it again. */
+    void pauseReconnect()                       { if (! reconnect.isLost()) reconnect.arm (false); }
+    /** The device the watch is trying to get back, if any. */
+    DeviceChoice lostDevice() const             { return reconnect.isLost() ? lostChoice : DeviceChoice(); }
+
 private:
     void timerCallback() override;
     void syncToEngine();
@@ -49,6 +56,11 @@ private:
 
     juce::String shownResults;
     bool wasMeasuring = false;
+    ReconnectWatch reconnect;
+    DeviceChoice lostChoice;
+    int lostBuffer = 0;
+    double lostRate = 0.0;
+    juce::String reconnectNote;
     int ticks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPanel)

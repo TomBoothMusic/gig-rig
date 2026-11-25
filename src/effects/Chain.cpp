@@ -236,6 +236,43 @@ void Chain::setModel (const ChainModel& m)
     submit (build (current));
 }
 
+bool Chain::setModelGently (const ChainModel& m)
+{
+    bool same = latest != nullptr && m.slots.size() == current.slots.size() && latest->slots.size() == m.slots.size();
+
+    for (size_t k = 0; same && k < m.slots.size(); ++k)
+        same = m.slots[k].type == current.slots[k].type;
+
+    if (! same)
+    {
+        setModel (m);
+        return false;
+    }
+
+    for (size_t k = 0; k < m.slots.size(); ++k)
+    {
+        const auto& want = m.slots[k];
+        auto* fx = latest->slots[k]->fx.get();
+        setSlotOn ((int) k, want.on);
+
+        for (int p = 0; p < (int) fx->params().size(); ++p)
+        {
+            const auto& info = fx->params()[(size_t) p];
+            const float v = want.param (info.id, info.def);
+
+            if (v != fx->getParam (p))
+                fx->setParam (p, v);
+        }
+
+        for (const auto& key : fx->textKeys())
+            if (const auto v = want.text (key); v != fx->getText (key) && ! (v.empty() && want.texts.empty()))
+                fx->setText (key, v);
+    }
+
+    current = m;
+    return true;
+}
+
 void Chain::setSlotOn (int slot, bool on)
 {
     if (slot < 0 || slot >= (int) current.slots.size())
@@ -295,13 +332,13 @@ int Chain::latencySamples() const
 }
 
 //==============================================================================
-void Chain::runBuilt (Built& b, float* buffer, int n) noexcept
+void Chain::runBuilt (Built& b, float* buffer, int n, int from) noexcept
 {
     const float step = 1.0f / (float) fadeLength;
 
-    for (auto& sp : b.slots)
+    for (size_t k = (size_t) std::max (0, from); k < b.slots.size(); ++k)
     {
-        auto& s = *sp;
+        auto& s = *b.slots[k];
         s.fx->setTempo (tempo);
         const float target = s.on.load (std::memory_order_relaxed) ? 1.0f : 0.0f;
 
@@ -329,6 +366,14 @@ void Chain::runBuilt (Built& b, float* buffer, int n) noexcept
     }
 }
 
+void Chain::retireFading() noexcept
+{
+    retired.store (fading);
+    fading = nullptr;
+    tailFrom = -1;
+    ringing.store (false, std::memory_order_relaxed);
+}
+
 void Chain::process (float* buffer, int n) noexcept
 {
     if (n <= 0 || n > maxBlock)
@@ -342,6 +387,19 @@ void Chain::process (float* buffer, int n) noexcept
             fading = live;
             live = next;
             fadePos = 0;
+            tailFrom = -1;
+
+            // Does the old set have a delay or reverb sounding? Then it rings out.
+            if (fading != nullptr && tailsOn.load (std::memory_order_relaxed))
+                for (size_t k = 0; k < fading->slots.size() && tailFrom < 0; ++k)
+                    if (fading->slots[k]->mix > 0.0f && fading->slots[k]->fx->hasTail())
+                        tailFrom = (int) k;
+
+            tailPos = 0;
+            tailQuiet = 0;
+            tailGain = 1.0f;
+            tailStep = 0.0f;
+            ringing.store (tailFrom >= 0, std::memory_order_relaxed);
         }
     }
 
@@ -354,22 +412,89 @@ void Chain::process (float* buffer, int n) noexcept
         return;
     }
 
-    // Change-over: old set and new set side by side, fading from one to the other.
-    std::memcpy (old.data(), buffer, sizeof (float) * (size_t) n);
-    runBuilt (*fading, old.data(), n);
+    if (tailFrom < 0)
+    {
+        // Change-over: old set and new set side by side, fading from one to the other.
+        std::memcpy (old.data(), buffer, sizeof (float) * (size_t) n);
+        runBuilt (*fading, old.data(), n);
+        runBuilt (*live, buffer, n);
+
+        for (int i = 0; i < n; ++i)
+        {
+            const float t = std::min (1.0f, (float) fadePos++ / (float) fadeLength);
+            buffer[i] = old[(size_t) i] + (buffer[i] - old[(size_t) i]) * t;
+        }
+
+        if (fadePos >= fadeLength)
+            retireFading();
+
+        return;
+    }
+
+    // Ringing out. For the first 10 ms the playing fades out of the old set just in front of
+    // its first delay or reverb (so nothing is cut short inside it) while the new set fades in.
+    // After that the old set hears silence and only what is still sounding inside it comes out.
+    const bool crossing = fadePos < fadeLength;
+    int pos = fadePos;
+
+    if (crossing)
+    {
+        std::memcpy (old.data(), buffer, sizeof (float) * (size_t) n);
+
+        for (size_t k = 0; k < (size_t) tailFrom; ++k)      // what sits in front of the tail, as it was
+        {
+            auto& s = *fading->slots[k];
+            s.fx->setTempo (tempo);
+
+            if (s.mix > 0.0f)
+            {
+                std::memcpy (wet.data(), old.data(), sizeof (float) * (size_t) n);
+                float* w = wet.data();
+                s.fx->process (&w, 1, n);
+
+                for (int i = 0; i < n; ++i)
+                    old[(size_t) i] += (w[i] - old[(size_t) i]) * s.mix;
+            }
+        }
+
+        for (int i = 0; i < n; ++i)
+            old[(size_t) i] *= 1.0f - std::min (1.0f, (float) pos++ / (float) fadeLength);
+    }
+    else
+    {
+        std::memset (old.data(), 0, sizeof (float) * (size_t) n);
+    }
+
+    runBuilt (*fading, old.data(), n, tailFrom);
     runBuilt (*live, buffer, n);
+
+    // Ends: by itself once it has been quiet for 0.3 s; faded over the last second of its
+    // longest time; or faded in 10 ms because another change is waiting for its turn.
+    if (tailStep == 0.0f)
+    {
+        if (pending.load (std::memory_order_relaxed) != nullptr)
+            tailStep = 1.0f / (float) fadeLength;
+        else if ((double) tailPos > (maxTailSeconds - 1.0) * rate)
+            tailStep = (float) (1.0 / rate);
+    }
+
+    float loudest = 0.0f;
 
     for (int i = 0; i < n; ++i)
     {
         const float t = std::min (1.0f, (float) fadePos++ / (float) fadeLength);
-        buffer[i] = old[(size_t) i] + (buffer[i] - old[(size_t) i]) * t;
+        tailGain = std::max (0.0f, tailGain - tailStep);
+        const float o = old[(size_t) i] * tailGain;
+        loudest = std::max (loudest, std::abs (o));
+        buffer[i] = buffer[i] * t + o;
     }
 
-    if (fadePos >= fadeLength)
-    {
-        retired.store (fading);
-        fading = nullptr;
-    }
+    fadePos = std::min (fadePos, fadeLength);
+    tailPos += n;
+    tailQuiet = loudest < 1.0e-4f ? tailQuiet + n : 0;
+
+    if (! crossing && (tailGain <= 0.0f || (double) tailQuiet > 0.3 * rate))
+        retireFading();
 }
 
 void Chain::reset() noexcept

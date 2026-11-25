@@ -109,6 +109,9 @@ target_sources(GigRig PRIVATE
     src/Pedal.cpp
     src/PedalPanel.cpp
     src/SelfTest.cpp
+    src/SongBook.cpp
+    src/SongsPanel.cpp
+    src/SongSelfTest.cpp
     src/Style.cpp
     src/TestSongs.cpp
     # The effects: one folder each (see docs/effects.md). A new effect adds its .cpp files here.

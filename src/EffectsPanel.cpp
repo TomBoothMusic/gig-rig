@@ -1,4 +1,5 @@
 #include "EffectsPanel.h"
+#include "SongBook.h"
 #include "AmpModels.h"
 #include "Responses.h"
 #include "effects/Registry.h"
@@ -117,7 +118,7 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     style::body (levelLabel, "Chain level");
     style::heading (slotsLabel, "EFFECTS IN THIS CHAIN, IN ORDER (CLICK ONE TO SET IT UP)");
     style::heading (presetLabel, "PRESETS");
-    style::heading (pedalLabel, "RC-600 SWITCHES FOR THE EFFECTS");
+    style::heading (pedalLabel, "SWITCHES FOR THE EFFECTS (FIRST 2 OF 6: THE REST ARE ON THE SONGS TAB)");
     style::body (statusLabel, {});
     style::body (descriptionLabel, {});
     dim (descriptionLabel);
@@ -246,7 +247,7 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
         copiedTicks = 2 * timerHz;
     };
 
-    for (auto* b : { &matchButton, &captureButton, &copyButton, &addButton, &leftButton, &rightButton, &removeButton, &loadButton, &addPresetButton, &saveButton, &folderButton })
+    for (auto* b : { &matchButton, &captureButton, &copyButton, &addButton, &leftButton, &rightButton, &removeButton, &loadButton, &addPresetButton, &saveButton, &folderButton, &updateButton })
         addAndMakeVisible (b);
 
     for (const auto& t : fx::effectTypes())
@@ -343,9 +344,12 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
             addPreset (presetFiles[i]);
     };
     saveButton.onClick = [this] { savePreset(); };
+    updateButton.setTooltip ("Saves this chain's settings as they are now back into the presets it was built from (each preset gets its own effects). "
+                             "Every song that names those presets changes with them. A song's own 'set' changes are saved into the presets too.");
+    updateButton.onClick = [this] { captureNote = saveBackToPresets (rack, chainIndex, presetFolder()); refreshPresets(); };
     folderButton.onClick = [] { presetFolder().createDirectory(); presetFolder().startAsProcess(); };
 
-    for (int i = 0; i < EffectsRack::numPedalAssigns; ++i)
+    for (int i = 0; i < shownPedalRows; ++i)
     {
         for (auto* b : { &pedalSwitchBoxes[(size_t) i], &pedalActionBoxes[(size_t) i] })
         {
@@ -684,6 +688,12 @@ void EffectsPanel::savePreset()
     const bool ok = file.replaceWithText ("# GigRig effect preset \"" + name + "\" (build " + juce::String (GIGRIG_BUILD_LABEL) + ")\n"
                                           + juce::String (rack.chain (chainIndex).model().toText()));
     captureNote = ok ? "Saved the preset \"" + name + "\"." : "Could not save " + file.getFullPathName();
+
+    if (ok)
+    {
+        rack.setRecipe (chainIndex, juce::StringArray (name));     // the chain is now exactly this preset
+        rack.setBaseline (chainIndex, rack.chain (chainIndex).model());
+    }
     refreshPresets();
 
     for (int i = 0; i < presetFiles.size(); ++i)
@@ -696,6 +706,8 @@ void EffectsPanel::loadPreset (const juce::File& file)
     std::vector<std::string> skipped;
     const auto m = fx::ChainModel::fromText (file.loadFileAsString().toStdString(), &skipped);
     rack.chain (chainIndex).setModel (m);
+    rack.setRecipe (chainIndex, juce::StringArray (file.getFileNameWithoutExtension()));
+    rack.setBaseline (chainIndex, m);
     rack.markChanged();
     slotIndex = 0;
     captureNote = "Loaded \"" + file.getFileNameWithoutExtension() + "\"" + (skipped.empty() ? juce::String (".") : ", leaving out effects this build does not have.");
@@ -707,8 +719,29 @@ void EffectsPanel::addPreset (const juce::File& file)
     std::vector<std::string> skipped;
     const auto extra = fx::ChainModel::fromText (file.loadFileAsString().toStdString(), &skipped);
     auto m = rack.chain (chainIndex).model();
+    const bool wasEmpty = m.slots.empty();
+
+    // The "as loaded" copy gets the new effects too, keeping knobs turned before this as changes.
+    auto base = rack.baseline (chainIndex);
+    bool baseFits = base.slots.size() == m.slots.size();
+    for (size_t k = 0; baseFits && k < m.slots.size(); ++k)
+        baseFits = base.slots[k].type == m.slots[k].type;
+
     const int added = m.addFrom (extra, fx::Chain::maxSlots);
     rack.chain (chainIndex).setModel (m);
+
+    if (baseFits)
+        base.addFrom (extra, fx::Chain::maxSlots);
+
+    rack.setBaseline (chainIndex, baseFits ? base : m);
+
+    // Remember which presets the chain is made of, so a song can name them. A chain that was
+    // built by hand before this has no such list, and keeps none.
+    if (auto recipe = rack.recipe (chainIndex); wasEmpty || ! recipe.isEmpty())
+    {
+        recipe.add (file.getFileNameWithoutExtension());
+        rack.setRecipe (chainIndex, added == (int) extra.slots.size() ? recipe : juce::StringArray());
+    }
     rack.markChanged();
     const int left = (int) extra.slots.size() - added;
     captureNote = "Added \"" + file.getFileNameWithoutExtension() + "\" to the chain"
@@ -727,53 +760,62 @@ void EffectsPanel::levelMatch()
     matchButton.getProperties().set ("secs", 0.0);
 }
 
-void EffectsPanel::fillPedalBoxes()
+void EffectsPanel::fillPedalRow (EffectsRack& rack, int i, juce::ComboBox& sb, juce::ComboBox& ab)
 {
-    for (int i = 0; i < EffectsRack::numPedalAssigns; ++i)
+    sb.clear (juce::dontSendNotification);
+    ab.clear (juce::dontSendNotification);
+    sb.addItem ("No switch", 1);
+
+    for (int sw = 0; sw < 11; ++sw)
+        sb.addItem (switchName (sw), 10 + sw);
+
+    ab.addItem ("Tap tempo (for synced delays)", 3);
+    ab.addItem ("Test take: record, then play it round, then stop", 5);
+
+    for (int c = 0; c < EffectsRack::numChains; ++c)
     {
-        auto& sb = pedalSwitchBoxes[(size_t) i];
-        auto& ab = pedalActionBoxes[(size_t) i];
-        sb.clear (juce::dontSendNotification);
-        ab.clear (juce::dontSendNotification);
-        sb.addItem ("No switch", 1);
+        const auto r = rack.routing (c);
+        ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): A/B", c * 100 + 1);
+        ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): on/off", c * 100 + 2);
+        ab.addItem ("Chain " + juce::String (c + 1) + ": next amp sound", c * 100 + 8);
+        ab.addItem ("Chain " + juce::String (c + 1) + ": whammy bend while held", c * 100 + 4);
+        ab.addItem ("Chain " + juce::String (c + 1) + ": delay throw while held", c * 100 + 6);
+        ab.addItem ("Chain " + juce::String (c + 1) + ": wah sweep while held", c * 100 + 7);
 
-        for (int sw = 0; sw < 11; ++sw)
-            sb.addItem (switchName (sw), 10 + sw);
-
-        ab.addItem ("Tap tempo (for synced delays)", 3);
-        ab.addItem ("Test take: record, then play it round, then stop", 5);
-
-        for (int c = 0; c < EffectsRack::numChains; ++c)
-        {
-            const auto r = rack.routing (c);
-            ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): A/B", c * 100 + 1);
-            ab.addItem ("Chain " + juce::String (c + 1) + " (" + r.name + "): on/off", c * 100 + 2);
-            ab.addItem ("Chain " + juce::String (c + 1) + ": whammy bend while held", c * 100 + 4);
-            ab.addItem ("Chain " + juce::String (c + 1) + ": delay throw while held", c * 100 + 6);
-            ab.addItem ("Chain " + juce::String (c + 1) + ": wah sweep while held", c * 100 + 7);
-
-            const auto& m = rack.chain (c).model();
-            for (int k = 0; k < (int) m.slots.size(); ++k)
-                ab.addItem ("Chain " + juce::String (c + 1) + ": slot " + juce::String (k + 1) + " ("
-                            + juce::String (fx::findEffectType (m.slots[(size_t) k].type)->name) + ") on/off", c * 100 + 11 + k);
-        }
-
-        const auto a = rack.pedalAssign (i);
-        sb.setSelectedId (a.sw < 0 ? 1 : 10 + a.sw, juce::dontSendNotification);
-        ab.setSelectedId (a.action == 2 ? 3 : a.action == 4 ? 5 : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : a.action == 3 ? 4 : a.action == 5 ? 6 : a.action == 6 ? 7 : 11 + a.action - 10), juce::dontSendNotification);
+        const auto& m = rack.chain (c).model();
+        for (int k = 0; k < (int) m.slots.size(); ++k)
+            ab.addItem ("Chain " + juce::String (c + 1) + ": slot " + juce::String (k + 1) + " ("
+                        + juce::String (fx::findEffectType (m.slots[(size_t) k].type)->name) + ") on/off", c * 100 + 11 + k);
     }
+
+    const auto a = rack.pedalAssign (i);
+    sb.setSelectedId (a.sw < 0 ? 1 : 10 + a.sw, juce::dontSendNotification);
+    ab.setSelectedId (a.action == 2 ? 3 : a.action == 4 ? 5
+                        : a.chain * 100 + (a.action == 0 ? 1 : a.action == 1 ? 2 : a.action == 3 ? 4 : a.action == 5 ? 6 : a.action == 6 ? 7 : a.action == 7 ? 8 : 11 + a.action - 10),
+                      juce::dontSendNotification);
 }
 
-void EffectsPanel::pushPedal (int i)
+void EffectsPanel::pushPedalRow (EffectsRack& rack, int i, const juce::ComboBox& sb, const juce::ComboBox& ab)
 {
-    const auto sid = pedalSwitchBoxes[(size_t) i].getSelectedId();
-    const auto aid = juce::jmax (1, pedalActionBoxes[(size_t) i].getSelectedId());
+    const auto sid = sb.getSelectedId();
+    const auto aid = juce::jmax (1, ab.getSelectedId());
     EffectsRack::PedalAssign a;
     a.sw = sid >= 10 ? sid - 10 : -1;
     a.chain = aid / 100;
     const auto code = aid % 100;
-    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : code == 4 ? 3 : code == 5 ? 4 : code == 6 ? 5 : code == 7 ? 6 : 10 + code - 11;
+    a.action = code == 1 ? 0 : code == 2 ? 1 : code == 3 ? 2 : code == 4 ? 3 : code == 5 ? 4 : code == 6 ? 5 : code == 7 ? 6 : code == 8 ? 7 : 10 + code - 11;
     rack.setPedalAssign (i, a);
+}
+
+void EffectsPanel::fillPedalBoxes()
+{
+    for (int i = 0; i < shownPedalRows; ++i)
+        fillPedalRow (rack, i, pedalSwitchBoxes[(size_t) i], pedalActionBoxes[(size_t) i]);
+}
+
+void EffectsPanel::pushPedal (int i)
+{
+    pushPedalRow (rack, i, pedalSwitchBoxes[(size_t) i], pedalActionBoxes[(size_t) i]);
 }
 
 //==============================================================================
@@ -878,6 +920,9 @@ void EffectsPanel::timerCallback()
         s << "Delay through this chain: " << juce::String (rack.chain (chainIndex).latencySamples() * 1000.0 / rack.sampleRate(), 2)
           << " ms.   Processor: this chain " << juce::String (load.average * 100.0, 1) << "% on average, " << juce::String (load.busiest * 100.0, 1)
           << "% at its busiest; all chains together " << juce::String (loadShown * 100.0, 1) << "% at their busiest.\n";
+
+        if (const auto made = rack.recipe (chainIndex); ! made.isEmpty())
+            s << "This chain was built from: " << made.joinIntoString ("  +  ") << "\n";
 
         if (levelNote.isNotEmpty()) s << levelNote << "\n";
         if (captureNote.isNotEmpty()) s << captureNote << "\n";
@@ -1065,10 +1110,11 @@ void EffectsPanel::resized()
         row = left.removeFromTop (28);
         presetName.setBounds (row.removeFromLeft (200).reduced (0, 2));
         saveButton.setBounds (row.removeFromLeft (80).reduced (2, 2));
+        updateButton.setBounds (row.removeFromLeft (150).reduced (2, 2));
 
         block.removeFromLeft (12);
         pedalLabel.setBounds (block.removeFromTop (20));
-        for (int i = 0; i < EffectsRack::numPedalAssigns; ++i)
+        for (int i = 0; i < shownPedalRows; ++i)
         {
             auto r = block.removeFromTop (28);
             pedalSwitchBoxes[(size_t) i].setBounds (r.removeFromLeft (110).reduced (0, 2));

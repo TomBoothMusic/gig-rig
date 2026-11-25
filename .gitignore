@@ -9,3 +9,4 @@ CMakeUserPresets.json
 
 # Python packages downloaded while working (never commit them)
 *.whl
+fast/

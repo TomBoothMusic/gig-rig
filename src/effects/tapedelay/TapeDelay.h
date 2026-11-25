@@ -16,6 +16,7 @@ class TapeDelay final : public Effect
 public:
     TapeDelay();
     std::string typeId() const override         { return "tapedelay"; }
+    bool hasTail() const noexcept override              { return true; }
 
 private:
     void onPrepare (double rate, int maxBlock) override;
