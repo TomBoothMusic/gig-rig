@@ -595,6 +595,11 @@ comes with the real board; for now Key is the box on screen.
 3. To compare with the real Bass9: set Reference to the Bass9's socket and flip
    **Effects / Reference**. A take makes this easy: both hear the same notes.
 
+The bass was reworked on 25 November after your first test found ticking and static in it.
+Start with **Tracking speed** in the middle (0.6): lower makes chords cleaner but low notes
+slower to speak, higher makes low notes quicker. If you saved a bass preset with Tracking
+speed at 0 to hide the ticks, put it back to the middle and save it again.
+
 In the finished rig the bass chain only sounds while its switch is held or latched. For now
 it is simply on or off with **This chain on** (or put **Chain on/off** on a pedal switch).
 
