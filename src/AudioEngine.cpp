@@ -295,6 +295,16 @@ juce::String AudioEngine::openOnce (const DeviceChoice& newChoice, int bufferSiz
     return {};
 }
 
+juce::String AudioEngine::slowBufferWarning() const
+{
+    if (! isOpen() || currentBufferSize <= 256 || currentSampleRate <= 0.0 || job.active)
+        return {};
+
+    return "The buffer is " + juce::String (currentBufferSize) + " samples, so everything you play comes out about "
+         + juce::String (juce::roundToInt (2.0 * currentBufferSize * 1000.0 / currentSampleRate)) + " ms late (it sounds like a room echo). "
+           "Choose 64 in the Buffer box on the first tab.";
+}
+
 void AudioEngine::close()
 {
     if (job.active)
@@ -334,6 +344,8 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
 
     scratch.assign ((size_t) scratchSize, 0.0f);
     mix.assign ((size_t) scratchSize, 0.0f);
+    kickBuf.assign ((size_t) scratchSize, 0.0f);
+    kickSock.assign ((size_t) scratchSize, 0.0f);
     probe.prepare (rate, ins);
     glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
     loopCore.prepare (rate, simulated ? loopSecondsSimulated : loopSecondsReal);
@@ -775,9 +787,19 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
     // ---- the kick pad test: its kick goes straight onto a pair of returns ------------------
     {
         // A device with no USB stereo channel (anything smaller than the CQ) plays it on its first pair.
-        const auto first = numOuts >= 16 ? kickCore.getReturnPair() * 2 : 0;
-        kickCore.process (output (first), output (first + 1), numSamples, pinging || checking || measuring.load());
+        // Its sound is made here and placed further down: on a socket (looper and mixer) or straight on the returns.
+        juce::FloatVectorOperations::clear (kickBuf.data(), numSamples);
+        kickCore.process (kickBuf.data(), nullptr, numSamples, pinging || checking || measuring.load());
     }
+
+    const auto kickToReturns = [&]
+    {
+        const auto first = numOuts >= 16 ? kickCore.getReturnPair() * 2 : 0;
+
+        for (int side = 0; side < 2; ++side)
+            if (auto* out = output (first + side))
+                juce::FloatVectorOperations::add (out, kickBuf.data(), numSamples);
+    };
 
     // ---- the effects: before the looper, so loops record them ------------------
     const bool quiet = pinging || checking || measuring.load();
@@ -808,6 +830,25 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         // aside while the amp capture plays its test sound, which must reach its return untouched.
         const bool mixing = ! fxRack.isAmpCapturing() && mixCore.startBlock (numSamples);
         const auto* afterEffects = fxRack.looperInputs (inputs, numIns);
+
+        // The kick pad's kick joins its socket here, as a stomp box plugged in there would: after
+        // the effects (the stomp has no chain), before the mixer channel and the looper.
+        const int kickSocket = kickCore.getSocket();
+        const bool kickJoins = kickSocket >= 0 && kickSocket < numIns && numIns <= (int) withKick.size() && peakOf (kickBuf.data(), numSamples) > 0.0f;
+
+        if (kickJoins)
+        {
+            for (int s = 0; s < numIns; ++s)
+                withKick[(size_t) s] = afterEffects[s];
+
+            juce::FloatVectorOperations::copy (kickSock.data(), kickBuf.data(), numSamples);
+
+            if (afterEffects[kickSocket] != nullptr)
+                juce::FloatVectorOperations::add (kickSock.data(), afterEffects[kickSocket], numSamples);
+
+            withKick[(size_t) kickSocket] = kickSock.data();
+            afterEffects = withKick.data();
+        }
         // With the mixer on, the looper hears each channel after that channel's own processing.
         const auto* heard = mixing ? mixCore.stripChannels (afterEffects, numIns, numSamples) : afterEffects;
 
@@ -825,8 +866,19 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
             mixCore.addOutputs (output, numSamples);
         }
         else
+        {
             fxRack.addOutputs (output, numSamples);
+
+            // Nothing plays a bare socket while the mixer is off, so the kick goes to its returns as before.
+            if (kickJoins)
+                kickToReturns();
+        }
+
+        if (! kickJoins)
+            kickToReturns();
     }
+    else
+        kickToReturns();
 
     // ---- meters, clipping and the feedback guard ----------------------------
     float loudest = 0.0f;
@@ -1079,6 +1131,9 @@ juce::String AudioEngine::latencyText() const
         add ("Audio device: " + choice.label() + ", " + juce::String (currentSampleRate, 0) + " Hz, "
                + juce::String (currentBufferSize) + "-sample buffer, "
                + juce::String (currentInputs) + " in / " + juce::String (currentOutputs) + " out");
+
+        if (const auto slow = slowBufferWarning(); slow.isNotEmpty())
+            add ("  WARNING: " + slow);
 
        #if JUCE_LINUX
         if (device != nullptr)

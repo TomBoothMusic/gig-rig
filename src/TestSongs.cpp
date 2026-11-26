@@ -167,6 +167,12 @@ namespace
             auto& tr = song.track[(size_t) t];
             const auto& r = raw.tracks[(size_t) t];
             tr.rcInputs = r[0];
+
+            // Tom's rule, 27 Nov 2026: in his own songs every track that hears the acoustic hears the
+            // stomp too (he stomps through nine loops in ten, and can simply not stomp). With the
+            // stomp on its own socket the two are kept apart as lanes, each back to its own channel.
+            if (raw.memory > 0 && (tr.rcInputs & rcInst1L) != 0)
+                tr.rcInputs |= rcInst1R;
             tr.bars = r[1];
             tr.stopMode = r[2] == 2 ? StopMode::loopEnd : r[2] == 1 ? StopMode::fade : StopMode::immediate;
             tr.level = r[3];

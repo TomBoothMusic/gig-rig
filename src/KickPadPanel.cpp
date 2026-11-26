@@ -148,8 +148,24 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     for (int pair = 0; pair < 4; ++pair)
         returnBox.addItem (returnName (pair * 2) + " and " + returnName (pair * 2 + 1).fromFirstOccurrenceOf ("Return ", false, false), pair + 1);
 
-    returnBox.setTooltip ("Where the kick comes out. Returns 5 and 6 are the mixer's USB stereo channel, where the loops play.");
-    returnBox.onChange = [this] { engine.kick().setReturnPair (returnBox.getSelectedId() - 1); saveSettings(); };
+    returnBox.setTooltip ("Where the kick goes. A socket: it joins that socket like a stomp box plugged in there, so the looper can record it and the mixer channel on that socket plays it (Stomp is on socket 10). A pair of returns: straight out, never looped.");
+    for (int s = 0; s < 16; ++s)
+        returnBox.addItem ("Socket " + juce::String (s + 1) + ": through its mixer channel, and into loops", 101 + s);
+
+    returnBox.onChange = [this]
+    {
+        const int id = returnBox.getSelectedId();
+
+        if (id > 100)
+            engine.kick().setSocket (id - 101);
+        else
+        {
+            engine.kick().setSocket (-1);
+            engine.kick().setReturnPair (id - 1);
+        }
+
+        saveSettings();
+    };
 
     softButton.onClick = [this] { engine.kick().screenHit (softStrength); };
     mediumButton.onClick = [this] { engine.kick().screenHit (mediumStrength); };
@@ -347,6 +363,7 @@ void KickPadPanel::loadSettings()
     if (values.containsKey ("pitch"))   kick.setPitch (values["pitch"].getFloatValue());
     if (values.containsKey ("length"))  kick.setLength (values["length"].getFloatValue());
     if (values.containsKey ("returns")) kick.setReturnPair (values["returns"].getIntValue());
+    if (values.containsKey ("socket"))  kick.setSocket (values["socket"].getIntValue());
 
     if (values["pad"].isNotEmpty())
         kick.setPad (values["pad"], values.containsKey ("note") ? values["note"].getIntValue() : -1);
@@ -358,7 +375,7 @@ void KickPadPanel::loadSettings()
     clickSlider.setValue (kick.getClick(), juce::dontSendNotification);
     pitchSlider.setValue (kick.getPitch(), juce::dontSendNotification);
     lengthSlider.setValue (kick.getLength(), juce::dontSendNotification);
-    returnBox.setSelectedId (kick.getReturnPair() + 1, juce::dontSendNotification);
+    returnBox.setSelectedId (kick.getSocket() >= 0 ? 101 + kick.getSocket() : kick.getReturnPair() + 1, juce::dontSendNotification);
     loading = false;
 
     if (values["sound"].isNotEmpty() && soundFolder().getChildFile (values["sound"]).existsAsFile())
@@ -381,6 +398,7 @@ void KickPadPanel::saveSettings()
     lines.add ("pitch=" + juce::String (kick.getPitch(), 0));
     lines.add ("length=" + juce::String (kick.getLength(), 3));
     lines.add ("returns=" + juce::String (kick.getReturnPair()));
+    lines.add ("socket=" + juce::String (kick.getSocket()));
     lines.add ("sound=" + kick.sampleName());
 
     // A pad found by its name is found again next time; only a learned one is written down.

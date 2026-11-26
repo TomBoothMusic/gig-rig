@@ -53,7 +53,7 @@ still sends the same thing.
 | Pitch | Built-in kick only: the note the drum settles on. 55 Hz sits under the bass guitar. |
 | Length | Built-in kick only: how long the drum rings, from 0.03 to 0.20 seconds. Shorter is tighter. |
 | Sound | The built-in kick, or a recording of your own (below). |
-| Plays on | Which pair of returns the kick comes out of. Returns 5 and 6 are where the loops play. |
+| Plays on | Where the kick goes. **Socket 10** (how it starts): the kick joins that socket as a stomp box plugged in there would, so the mixer's Stomp channel plays it, with its EQ and compressor, and the looper can record it. A pair of returns: straight out, never looped. |
 
 The settings are remembered between runs (`kick-pad.txt` in the app's data folder).
 
@@ -94,18 +94,39 @@ your computer. They are never part of the app's code, which may be public.
 
 ## What this test leaves out, on purpose
 
-- The kick plays straight onto a pair of returns. It does not go into the looper or through
-  the mixer yet, so it cannot be looped. That comes if the test passes.
+- (Changed 27 Nov 2026, once Tom was happy with the sound.) The kick now joins a socket, so it
+  goes through the mixer and into loops. See "Through the mixer and into loops" below.
 - Only one pad, one sound.
 - Nothing here changes the looper, the effects or the songs. With no pad plugged in and no hit
   button pressed, the app plays exactly what it played before.
 
+## Through the mixer and into loops
+
+Tom, 27 Nov 2026: the sound is good, fold it in.
+
+1. On the **Kick pad** tab, **Plays on** is **Socket 10: through its mixer channel, and into
+   loops**. That is how it starts.
+2. On the **Mixer** tab, with **Mixer on**, the **Stomp** channel (socket 10) now carries the
+   kick. Its EQ and compressor shape it, its fader sets its level.
+3. On the **Looper** tab, set the **Stomp** input socket to **10**. Until then loops do not
+   record the kick, and the Looper's report says so in a line starting **NOTE**.
+4. Every track in Tom's songs that hears the acoustic also hears the stomp (his rule). With the
+   two on different sockets a loop keeps them apart, a lane each, and each comes back on its own
+   mixer channel.
+
+With the mixer off, the kick plays on returns 5 and 6 as before, and the looper still hears it
+on its socket.
+
 ## For a future Claude
+
+- The engine makes the kick's sound before the effects and adds it to its socket's feed after
+  them (`AudioEngine::processBlock`, `kickSock`), ahead of `Mixer::stripChannels` and the looper.
+  A hit reaches the looper a few milliseconds earlier than the same stomp would as audio through
+  the interface (no input delay); at a 64-sample buffer that is under 5 ms and is left alone.
 
 - Logic: `src/KickPad.*` (no screen). Screen: `src/KickPadPanel.*`. Checks: `src/KickPadSelfTest.cpp`.
 - MIDI reaches it from `MainComponent` (the same place the pedal gets it). Hits cross to the
   audio thread through a small queue and start on the first sample of the next block.
-- The engine calls `KickPad::process` just before the effects, adding to the chosen returns.
 - Design doc: Effects, "Built-in kick pad" (undecided). The plan is this test first, then one
   piezo disc into a spare mixer socket, then a choice between the SPD::ONE inside the box and a
   bare sensor read by the board's controller.

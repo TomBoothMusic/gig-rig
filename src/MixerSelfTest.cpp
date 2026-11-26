@@ -346,6 +346,56 @@ void runMixerSelfTest (const Check& check)
         check (std::abs (20.0 * std::log10 (after / loop)) < 0.1, "mixer: changing a channel's Trim or compressor afterwards leaves a loop already recorded as it was (" + db (after) + ", was " + db (loop) + ")");
     }
 
+    // ---- the kick pad's kick joins the stomp socket: its channel plays it and the looper records it ----
+    {
+        constexpr int stompSocket = 9;
+        Bench b;
+        b.engine.kick().setOn (true);
+        b.engine.kick().setSocket (stompSocket);
+        auto s = bareSetup();
+        s.channel[2].on = true;
+        s.channel[2].socket = stompSocket;
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+
+        auto options = b.engine.looper().options();
+        options.inputFor[(size_t) LoopSource::stomp] = stompSocket;
+        options.inputFor[(size_t) LoopSource::acoustic] = acousticSocket;
+        b.engine.looper().setOptions (options);
+        auto song = mixerSong();
+        song.track[0].rcInputs = rcInst1L | rcInst1R;
+        b.engine.looper().setSong (song);
+
+        b.run (0.3);
+        const float before = peak (b.last (4, 0.2));
+        b.engine.kick().screenHit (100);
+        b.run (0.3);
+        const float live = peak (b.last (4, 0.3));
+
+        auto muted = s.channel[2];
+        muted.mute = true;
+        b.engine.mixer().setChannel (2, muted);
+        b.run (0.3);
+        b.engine.kick().screenHit (100);
+        b.run (0.3);
+        const float whenMuted = peak (b.last (4, 0.3));
+        b.engine.mixer().setChannel (2, s.channel[2]);
+        b.run (0.3);
+        check (before == 0.0f && live > 0.02f && whenMuted == 0.0f,
+               "mixer: the kick pad's kick comes through the Stomp channel (" + db (live) + " in the main mix) and that channel's mute silences it");
+
+        b.tap (0);
+        b.run (0.25);
+        b.engine.kick().screenHit (100);
+        b.run (0.75);
+        b.tap (0);
+        b.run (1.5);
+        const auto snap = b.engine.looper().snapshot();
+        const float looped = peak (b.last (4, 1.0));
+        check (snap.track[0].state == TrackState::playing && snap.track[0].lanes == 2 && looped > live * 0.7f && looped < live * 1.3f,
+               "mixer: a loop on a track that hears the acoustic and the stomp records the kick pad's kick on a lane of its own, and plays it back as loud as it was (" + db (looped) + ", played " + db (live) + ")");
+    }
+
     // ---- each loop comes back on the channel it was recorded from ----
     {
         // The same performance twice: once the old way (loops on returns 5 and 6), once through the mixer.
