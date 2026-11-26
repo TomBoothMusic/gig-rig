@@ -178,3 +178,11 @@ Wicked Game (program 11)
 ```
 
 And once, at the top: `Default: electric = ..., acoustic = ..., vocal = ..., switches = ...`.
+
+## Checking a whole folder of songs without opening the app
+
+`GigRig --check-songs <songs folder> <presets folder> <result file>` loads every entry in turn
+with no sound card and writes one line per song: `ok` or `PROBLEM`, with the same words the
+Songs tab shows (a missing preset, a line not understood). Add `--every-setting` and it also
+lists every effect in every chain with every setting as the song leaves it. Run it on a folder
+before and after a tidy-up and compare the two files: if they match, every song sounds the same.
