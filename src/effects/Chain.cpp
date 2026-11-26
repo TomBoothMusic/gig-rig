@@ -74,6 +74,11 @@ int ChainModel::addFrom (const ChainModel& other, int maxSlots)
             break;
         }
 
+    // A volume pedal sitting right in front of the amp stays there: on Tom's board the drives
+    // push the pedal and the pedal pushes the amp, so stacked drives go in front of the pedal.
+    while (at > 0 && at < slots.size() && slots[at - 1].type == "volume")
+        --at;
+
     int added = 0;
     for (const auto& s : other.slots)
     {

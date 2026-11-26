@@ -398,9 +398,10 @@ So you can keep "Comp & GE7" as its own preset and stack a drive preset on top:
 1. Choose **Comp & GE7 for Electric** and press **Load**.
 2. Add the **Amp model** if you want it.
 3. Choose a drive preset (for example **Blues Drive + Klon Boost**) and press **Add to chain**.
-   The drives land after the compressor and EQ and in front of the amp.
+   The drives land after the compressor and EQ and in front of the amp. If a **Volume pedal**
+   sits right before the amp, they land in front of the pedal, as on your pedalboard.
 
-A chain holds at most 16 effects.
+A chain holds at most 18 effects.
 
 ### Trying them (about 15 minutes)
 
@@ -462,7 +463,7 @@ Same leads and set-up as before (Chain 2 into the amp model, listening on **Effe
    with Follow tempo ticked while you tap a tempo, and the **Tape delay**.
 4. For the vocal tape delay, a chain on the vocal socket (socket 6) works the same way.
 
-A chain holds 16 effects at most.
+A chain holds 18 effects at most.
 
 ### What to send Claude
 

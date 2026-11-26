@@ -335,6 +335,20 @@ namespace
                    && row.slots[2].type == "bd" && row.slots[2].param ("gain", 0) == 5.2f && row.slots[3].type == "amp",
                    "chain: adding a preset keeps what is there and puts the new effects in front of the amp");
 
+            ChainModel pedalRow;
+            pedalRow.slots.push_back ({ "comp", true, {}, {} });
+            pedalRow.slots.push_back ({ "volume", true, {}, {} });
+            pedalRow.slots.push_back ({ "amp", true, {}, {} });
+            pedalRow.addFrom (drives, Chain::maxSlots);
+            ChainModel pedalFirst;
+            pedalFirst.slots.push_back ({ "volume", true, {}, {} });
+            pedalFirst.slots.push_back ({ "comp", true, {}, {} });
+            pedalFirst.slots.push_back ({ "amp", true, {}, {} });
+            pedalFirst.addFrom (drives, Chain::maxSlots);
+            check (pedalRow.slots.size() == 5 && pedalRow.slots[1].type == "klon" && pedalRow.slots[2].type == "bd" && pedalRow.slots[3].type == "volume" && pedalRow.slots[4].type == "amp"
+                   && pedalFirst.slots[0].type == "volume" && pedalFirst.slots[2].type == "klon" && pedalFirst.slots[4].type == "amp",
+                   "chain: a volume pedal right in front of the amp stays between the added drives and the amp; one elsewhere in the row is left where it is");
+
             ChainModel full;
             for (int k = 0; k < Chain::maxSlots - 1; ++k) full.slots.push_back ({ "boost", true, {}, {} });
             check (full.addFrom (drives, Chain::maxSlots) == 1 && (int) full.slots.size() == Chain::maxSlots,
