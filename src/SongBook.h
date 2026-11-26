@@ -35,6 +35,8 @@ struct SongSounds
 
     int program = 0;                    // 1 to 128 as Songbook Pro and the RC-600 count them, 0 = none
     juce::String looper;                // the looper layout to use (a built-in song's name); empty = its own, or the general one
+    double tempo = 0.0;                 // about how fast the song is played (beats a minute): the looper's guide for how many
+                                        // bars the first loop is. 0 = the layout's own (the tempo saved in the RC-600 memory)
     std::vector<ChainLine> chains;      // in file order; a chain named twice stacks its presets, as "Add to chain" does
     std::vector<Setting> settings;
     bool hasSwitches = false;           // true when the file says anything about switches (even "switches = none")

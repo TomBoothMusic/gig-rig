@@ -105,6 +105,7 @@ struct SongSetup
     char name[24] = {};
     int rcMemory = 0;                       // which RC-600 memory it came from, 0 = none
     double savedBpm = 120.0;
+    bool tempoGuide = false;                // savedBpm guides the first loop's bar count even without an RC-600 memory
     int beatsPerBar = 4;
     bool recThenPlay = true;                // REC ACTION: record, play, overdub (false = record, overdub, play)
     bool quantise = true;                   // QUANTIZE = MEASURE: a new track waits for the next bar

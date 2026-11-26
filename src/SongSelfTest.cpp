@@ -510,6 +510,27 @@ void runSongSelfTest (const Check& check)
                  && songDir.getChildFile ("Default sounds.txt").loadFileAsString().replace ("\r\n", "\n").contains ("set = chain 1 / spring / decay = 8\n"),
                "song book: Keep as the default changes what every song without its own lines gets");
 
+        // A song's own tempo line is the looper's guide for how many bars the first loop is.
+        {
+            const double yellowSaved = selfTestSong ("Yellow").savedBpm;
+            songDir.getChildFile ("Yellow.txt").replaceWithText ("tempo = 92.5\n");
+            songDir.getChildFile ("Under The Bridge.txt").replaceWithText ("program = 3\nlooper = Dirty Slap\ntempo = 84\nset = vocal / harmony / key = 4\n");
+            book.rescanIfChanged();
+            book.load (book.entryNamed ("Yellow"), "test");
+            const bool builtInGuided = std::abs (book.song().savedBpm - 92.5) < 0.01 && book.song().tempoGuide
+                                         && book.reportText().contains ("Tempo guide for the first loop: 92.5");
+            book.keepForCurrent();
+            const bool kept = songDir.getChildFile ("Yellow.txt").loadFileAsString().replace ("\r\n", "\n").contains ("tempo = 92.5\n");
+            book.load (book.entryNamed ("Under The Bridge"), "test");
+            const bool borrowedGuided = std::abs (book.song().savedBpm - 84.0) < 0.01 && book.song().tempoGuide;
+            songDir.getChildFile ("Yellow.txt").deleteFile();
+            book.rescanIfChanged();
+            book.load (book.entryNamed ("Yellow"), "test");
+            check (builtInGuided && kept && borrowedGuided && std::abs (book.song().savedBpm - yellowSaved) < 0.01 && yellowSaved < 120.0,
+                   "song book: a song's \"tempo =\" line guides the first loop's bar count, is kept when the song is kept, and Yellow's own guide is no longer double time");
+            book.load (book.entryNamed ("Cocaine"), "test");
+        }
+
         // A song file with a mistake says so in the report.
         songDir.getChildFile ("Cocaine.txt").replaceWithText ("chain 1 = Not there\nwhat is this\n");
         book.rescanIfChanged();

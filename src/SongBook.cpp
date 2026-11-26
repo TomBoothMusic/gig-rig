@@ -224,6 +224,16 @@ SongSounds SongSounds::fromText (const juce::String& text)
         {
             s.looper = value;
         }
+        else if (low == "tempo")
+        {
+            s.tempo = value.getDoubleValue();
+
+            if (s.tempo < 30.0 || s.tempo > 300.0)
+            {
+                s.tempo = 0.0;
+                s.notUnderstood.add (line + "  (a tempo is 30 to 300 beats a minute)");
+            }
+        }
         else if (low == "switches")
         {
             s.hasSwitches = true;       // "switches = none": this song takes every switch back for the looper
@@ -319,6 +329,7 @@ juce::String SongSounds::toText (const juce::String& title, const juce::StringAr
 
     if (program > 0)            t << "program = " << program << "\n";
     if (looper.isNotEmpty())    t << "looper = " << looper << "\n";
+    if (tempo > 0.0)            t << "tempo = " << juce::String (tempo, 1) << "\n";
 
     for (const auto& c : chains)
     {
@@ -877,6 +888,14 @@ void SongBook::load (int index, const juce::String& why, bool withSounds)
         loadedSong.rcMemory = 0;
     }
 
+    // The song's own "tempo =" line replaces the tempo saved in the RC-600 memory as the
+    // looper's guide (Yellow was saved at double speed, so its first loop counted twice the bars).
+    if (e.sounds.tempo > 0.0)
+    {
+        loadedSong.savedBpm = e.sounds.tempo;
+        loadedSong.tempoGuide = true;
+    }
+
     engine.looper().setSong (loadedSong);
 
     if (withSounds)
@@ -1111,6 +1130,8 @@ juce::String SongBook::keepForCurrent()
     if (! e.builtIn)
         s.looper = builtInSong (e.layout).title();
 
+    s.tempo = e.sounds.tempo;
+
     if (! writeSong (e.name, s))
         return note = "Could not write the song's file in " + songFolder.getFullPathName();
 
@@ -1150,6 +1171,7 @@ juce::String SongBook::forgetCurrent()
 
     SongSounds s;
     s.program = e.sounds.program;
+    s.tempo = e.sounds.tempo;
     s.looper = e.sounds.looper;
     const auto file = songFolder.getChildFile (juce::File::createLegalFileName (e.name) + ".txt");
     const bool ok = e.builtIn && s.program == 0 ? file.deleteFile() : writeSong (e.name, s);
@@ -1227,6 +1249,10 @@ juce::String SongBook::reportText() const
     t << "--- Songs ---\n";
     t << "Song loaded: " << statusLine() << "\n";
     t << "Looper layout: " << builtInSong (e.layout).title() << (e.builtIn ? "" : " (borrowed: this entry has no looper layout of its own)") << "\n";
+    t << "Tempo guide for the first loop: "
+      << (e.sounds.tempo > 0.0 ? juce::String (e.sounds.tempo, 1) + " (the song's own tempo line)"
+                               : e.builtIn && loadedSong.savedBpm > 0.0 ? juce::String (loadedSong.savedBpm, 1) + " (as saved in the RC-600 memory)"
+                                                                         : juce::String ("none (worked out from the loop's length)")) << "\n";
     t << "Songs folder: " << songFolder.getFullPathName() << " (" << (int) std::count_if (entries.begin(), entries.end(), [] (const Entry& x) { return x.hasFile; })
       << " song files, default sounds " << (hasDefault() ? "set" : "not set") << ")\n";
 

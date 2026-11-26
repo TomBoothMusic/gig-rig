@@ -55,6 +55,7 @@ Every line is optional. Lines starting with `#` are notes.
 | --- | --- |
 | `program = 11` | The program number that loads this entry (1 to 128, counted as the RC-600 counts its memories). For a built-in song the number is already known; a line here changes it. |
 | `looper = Wicked Game` | Only for an entry that has no looper layout of its own: borrow this built-in song's layout. Without the line it uses the general set-up (memory 1, "Dirty Slap"). |
+| `tempo = 87` | About how fast the song is played, in beats a minute. The looper uses it to decide how many bars the first loop is (the first loop still sets the exact tempo). Without the line a built-in song uses the tempo saved in its RC-600 memory. Use it when a song counts at double or half speed. Takes effect the next time the song loads. |
 | `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
 | `set = chain 1 / spring / reverb = 3.5` | The song's own change on top: chain, effect, setting, value. |
 | `set = chain 1 / tremolo / off` | Switches one effect off (or `on`) for this song. |
