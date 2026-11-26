@@ -351,6 +351,22 @@ void runMixerSelfTest (const Check& check)
         mixed.engine.mixer().setOutput (1, mon1);
         mixed.engine.mixer().setChannel (0, s.channel[0]);
 
+        // Trim works on the loops as it does on the live sound (Tom, 27 Nov 2026: a loop came back
+        // at the level from before the trim, quieter than the playing it was recorded from).
+        {
+            mixed.run (2.0);
+            const double before = strength (mixed.last (4, 1.0), vocalHz, mixed.rate);
+            auto trimmed = s.channel[0];
+            trimmed.trimDb = 6.0f;
+            mixed.engine.mixer().setChannel (0, trimmed);
+            mixed.run (2.0);
+            const double after = strength (mixed.last (4, 1.0), vocalHz, mixed.rate);
+            check (before > 0.05 && std::abs (20.0 * std::log10 (after / before) - 6.0) < 0.1,
+                   "mixer: a channel's Trim raises its loops by the same amount as its live sound: with Trim at +6 dB the vocal loop comes back " + db (after) + ", from " + db (before));
+            mixed.engine.mixer().setChannel (0, s.channel[0]);
+            mixed.run (0.3);
+        }
+
         // A loop from a socket no channel listens to is still heard, and the mixer says so.
         auto gone = s.channel[1];
         gone.on = false;

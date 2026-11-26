@@ -1418,10 +1418,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         const float* loops = plugged && busPtrs[(size_t) socket] != nullptr ? busPtrs[(size_t) socket] : silence.data();
 
         // The channel's own sound: live, after its effects, and every loop recorded from it.
+        // Trim works on both alike: a loop is recorded before the trim, so it must be trimmed on
+        // its way back or it would return at a different level from the playing it was made from.
         float start, step;
         ch.trimG.advance (ch.trim.load (std::memory_order_relaxed), fastStep * 4.0f, n, start, step);
         for (int i = 0; i < n; ++i)
-            work[(size_t) i] = live[i] * (start + step * (float) i) + loops[i];
+            work[(size_t) i] = (live[i] + loops[i]) * (start + step * (float) i);
 
         if (rec.wants (c))
         {

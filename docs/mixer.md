@@ -99,6 +99,10 @@ then set the mix with the faders and the overall loudness with **Main**. If the 
 Ceiling has to go far down before it does anything, the channels are too quiet: raise the
 Trims, not the Ceiling.
 
+Trim works on a channel's loops as well as its live sound. A loop is recorded before the
+Trim (so the Trim can be changed after a loop is down), and it is trimmed on its way back, so
+a loop always returns at the level of the playing it was made from.
+
 ### Where a monitor takes its sends from
 
 Press **Monitor 1** or **Monitor 2**. **From where in each channel** has three choices:
