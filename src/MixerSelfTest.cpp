@@ -110,6 +110,19 @@ namespace
         return 2.0 * std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (double) x.size();
     }
 
+    /** The strongest tenth of a second of a tone: a loop's join can fall anywhere in a window, and
+        the jump in the tone there would otherwise make a loop read quieter than it is. */
+    double steady (const std::vector<float>& x, double hz, double rate)
+    {
+        const auto step = (size_t) (rate * 0.1);
+        double best = 0.0;
+
+        for (size_t at = 0; at + step <= x.size(); at += step)
+            best = std::max (best, strength ({ x.begin() + (std::ptrdiff_t) at, x.begin() + (std::ptrdiff_t) (at + step) }, hz, rate));
+
+        return best;
+    }
+
     float peak (const std::vector<float>& x)
     {
         float p = 0.0f;
@@ -293,6 +306,46 @@ void runMixerSelfTest (const Check& check)
         b.engine.setPlayThrough (PlayThrough::off);
     }
 
+    // ---- a loop leaves the channel after its processing and rejoins after it (Tom, 27 Nov 2026) ----
+    {
+        Bench b;
+        auto s = bareSetup();
+        auto& ch = s.channel[0];
+        ch.on = true;
+        ch.trimDb = 6.0f;
+        ch.strip.slots[stripComp].on = true;
+        ch.strip.slots[stripComp].setParam ("threshold", -40.0f);
+        ch.strip.slots[stripComp].setParam ("ratio", 8.0f);
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+
+        b.source = band (b.rate);
+        b.run (1.0);
+        const double live = steady (b.last (4, 0.5), vocalHz, b.rate);
+        recordLoops (b);
+        b.run (2.0);
+        const double loop = steady (b.last (4, 1.0), vocalHz, b.rate);
+        check (live > 0.01 && std::abs (20.0 * std::log10 (loop / live)) < 0.3,
+               "mixer: a loop comes back as loud as the playing it was made from, with the channel's Trim and compressor already in it: sung at " + db (live) + ", the loop returns at " + db (loop));
+
+        // Someone sings another note over the loop: the compressor works on the singing alone, so the loop does not duck.
+        b.source = [rate = b.rate] (int socket, juce::int64 t) { return socket == vocalSocket ? tone (1000.0, 0.1, t, rate) : 0.0f; };
+        b.run (2.0);
+        const double under = steady (b.last (4, 1.0), vocalHz, b.rate), over = steady (b.last (4, 1.0), 1000.0, b.rate);
+        check (std::abs (20.0 * std::log10 (under / loop)) < 0.1 && std::abs (20.0 * std::log10 (over / live)) < 0.3,
+               "mixer: loops never pile into a channel's compressor: with singing over it the loop stays at " + db (under) + " (alone " + db (loop) + ") and the singing is squeezed as if alone (" + db (over) + ", alone " + db (live) + ")");
+
+        // The Trim and the channel's processing are in the loop already: changing them later leaves it be.
+        b.source = [] (int, juce::int64) { return 0.0f; };
+        auto later = s.channel[0];
+        later.trimDb = 0.0f;
+        later.strip.slots[stripComp].on = false;
+        b.engine.mixer().setChannel (0, later);
+        b.run (2.0);
+        const double after = steady (b.last (4, 1.0), vocalHz, b.rate);
+        check (std::abs (20.0 * std::log10 (after / loop)) < 0.1, "mixer: changing a channel's Trim or compressor afterwards leaves a loop already recorded as it was (" + db (after) + ", was " + db (loop) + ")");
+    }
+
     // ---- each loop comes back on the channel it was recorded from ----
     {
         // The same performance twice: once the old way (loops on returns 5 and 6), once through the mixer.
@@ -350,22 +403,6 @@ void runMixerSelfTest (const Check& check)
         mon1.preFader = true;
         mixed.engine.mixer().setOutput (1, mon1);
         mixed.engine.mixer().setChannel (0, s.channel[0]);
-
-        // Trim works on the loops as it does on the live sound (Tom, 27 Nov 2026: a loop came back
-        // at the level from before the trim, quieter than the playing it was recorded from).
-        {
-            mixed.run (2.0);
-            const double before = strength (mixed.last (4, 1.0), vocalHz, mixed.rate);
-            auto trimmed = s.channel[0];
-            trimmed.trimDb = 6.0f;
-            mixed.engine.mixer().setChannel (0, trimmed);
-            mixed.run (2.0);
-            const double after = strength (mixed.last (4, 1.0), vocalHz, mixed.rate);
-            check (before > 0.05 && std::abs (20.0 * std::log10 (after / before) - 6.0) < 0.1,
-                   "mixer: a channel's Trim raises its loops by the same amount as its live sound: with Trim at +6 dB the vocal loop comes back " + db (after) + ", from " + db (before));
-            mixed.engine.mixer().setChannel (0, s.channel[0]);
-            mixed.run (0.3);
-        }
 
         // A loop from a socket no channel listens to is still heard, and the mixer says so.
         auto gone = s.channel[1];

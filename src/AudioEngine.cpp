@@ -807,7 +807,9 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         // The mixer, when it is on, takes the chains and the loops in place of the returns. It stands
         // aside while the amp capture plays its test sound, which must reach its return untouched.
         const bool mixing = ! fxRack.isAmpCapturing() && mixCore.startBlock (numSamples);
-        const auto* heard = fxRack.looperInputs (inputs, numIns);
+        const auto* afterEffects = fxRack.looperInputs (inputs, numIns);
+        // With the mixer on, the looper hears each channel after that channel's own processing.
+        const auto* heard = mixing ? mixCore.stripChannels (afterEffects, numIns, numSamples) : afterEffects;
 
         if (mixing)
             loopCore.setLaneBuses (mixCore.laneBuses(), numMixSockets, mixCore.strayBus());
@@ -819,7 +821,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         if (mixing)
         {
             mixCore.setTempo (fxRack.effectsTempo());
-            mixCore.process (inputs, heard, numIns, numSamples);
+            mixCore.process (inputs, afterEffects, numIns, numSamples);
             mixCore.addOutputs (output, numSamples);
         }
         else
