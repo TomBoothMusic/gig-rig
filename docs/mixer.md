@@ -14,11 +14,13 @@ instead; untick it and you are back where you were.
 ## What the sound goes through
 
 ```
-a socket, after its effects chain (the same point the looper hears)
-  + every loop that was recorded from that socket      (each loop comes back on its own channel)
-  -> record point "after the looper", and the direct out for a sound crew
-  -> the channel: gate, source enhancer, warmth, EQ, compressor, 1176-style compressor, LA-2A style compressor
+a socket, after its effects chain
+  -> the channel: Trim, gate, source enhancer, warmth, EQ, compressor, 1176-style compressor, LA-2A style compressor
+  -> out to the looper, which records the channel here, after all of its processing
+  + every loop that was recorded from that socket      (each loop comes back on its own channel, at the same point)
   -> fader, pan, mute -> main mix
+  (the direct out for a sound crew and the record point "after the looper" carry the channel
+   after its Trim and before its processing, plus its loops)
   -> sends: the four reverbs and delays (after everything), and monitor 1 and monitor 2
      (each monitor chooses: before the processing, after the EQ, or after the compressors)
 reverbs and delays -> low cut and high cut on the wet sound -> main mix (and the monitors, if sent)
@@ -27,9 +29,14 @@ main mix and each monitor -> EQ, notches, compressor, bus compressor, tape, limi
 
 What follows from that order:
 
-- **A loop is treated exactly like the live sound of the channel it came from.** The same
-  fader, mute, EQ, monitor sends and reverb. A track that recorded the acoustic and the
-  electric together returns each half to its own channel.
+- **A loop is processed once, as it was played** (Tom, 27 Nov 2026). The channel's Trim, gate,
+  enhancer, warmth, EQ and compressors are in the loop when it is recorded, and the loop comes
+  back after them. So layers never pile into a channel's compressor, and changing the Trim or
+  the EQ later does not change a loop already down. From there a loop shares the live sound's
+  fader, mute, monitor sends and reverb. A track that recorded the acoustic and the electric
+  together returns each half to its own channel.
+- **A loop made while the mixer was off** has no channel processing in it, and one made with
+  it on has. Switch the mixer on before a song, not during one.
 - **The mixer's reverbs and delays are after the looper,** so they are never recorded into a
   loop and never into the "after the looper" recordings.
 - **A volume pedal in an effects chain is before all of it:** before the looper, before the
@@ -99,11 +106,15 @@ then set the mix with the faders and the overall loudness with **Main**. If the 
 Ceiling has to go far down before it does anything, the channels are too quiet: raise the
 Trims, not the Ceiling.
 
+Trim comes first in the channel, before the looper hears it, so a loop is recorded at the
+trimmed level and comes back as loud as the playing it was made from. Set the Trims before a
+song: moving one later does not move loops already recorded.
+
 ### Where a monitor takes its sends from
 
 Press **Monitor 1** or **Monitor 2**. **From where in each channel** has three choices:
 
-- **Before its processing:** the plain channel (live sound and loops), no gate, EQ or compressor.
+- **Before its processing:** the live sound with no gate, EQ or compressor (the loops are as they were recorded).
 - **After its gate and EQ:** the tone, without the squeeze. Good for a wedge, where a
   compressor brings feedback closer.
 - **After its compressors:** everything, as the main mix hears it. This is how it starts.
@@ -272,7 +283,9 @@ file the words are `switch CTL4 = chain 2 / toe switch`.
 | `src/MixerPanel.*` | The Mixer tab. |
 | `src/MixerSelfTest.cpp`, `src/effects/mixer/MixerBlockChecks.cpp` | The checks. |
 
-- `AudioEngine::processBlock` asks `Mixer::startBlock`. When the mixer is mixing, the looper
+- `AudioEngine::processBlock` asks `Mixer::startBlock`. When the mixer is mixing,
+  `Mixer::stripChannels` runs every channel's own processing first and hands the looper each
+  socket as its channel sounds after that processing. The looper then
   adds each lane to the bus of the socket it was recorded from (`Looper::setLaneBuses`)
   instead of to a return, and `Mixer::process` and `Mixer::addOutputs` replace the rack's own
   outputs. Play-through from the first tab stays quiet while the mixer is on.

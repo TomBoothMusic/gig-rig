@@ -246,6 +246,12 @@ public:
     float* strayBus() noexcept                          { return stray.data(); }
 
     /** raw = the sockets themselves; feed = the sockets as the looper hears them (after the effects). */
+    /** Call after startBlock and before the looper. Runs every channel's own processing on its
+        live sound and returns what the looper should hear: for a socket a channel listens to, that
+        channel's sound after its gate, EQ and compressors; for any other socket, feed as it is.
+        So a loop is processed once, as it was played, and layers never pile into a compressor. */
+    const float* const* stripChannels (const float* const* feed, int numIns, int numSamples) noexcept;
+
     void process (const float* const* raw, const float* const* feed, int numIns, int numSamples) noexcept;
 
     /** Adds the mixer's outputs to the returns. outputFor(r) gives return r's buffer or null. */
@@ -381,7 +387,10 @@ private:
     float master = 0.0f;                                // 0..1: the fade when the mixer is switched on or off
     float mainMix = 0.0f;                               // 0 = set 0 .. 1 = set 1
     float fastStep = 0.0f, slowStep = 0.0f, masterStep = 0.0f;
-    std::vector<float> laneData, stray, work, tapPre, tapMid, silence, directData;
+    std::vector<float> laneData, stray, silence, directData;
+    std::vector<float> chanPre, chanMid, chanPost;      // each channel's live sound before, between and after its two strips
+    std::array<const float*, 64> loopFeed {};
+    std::array<bool, numMixChannels> stripped {};
     std::array<bool, 8> directUsed {};
     std::array<float*, numMixSockets> busPtrs {};
     float guardWindowPeak = 0.0f;

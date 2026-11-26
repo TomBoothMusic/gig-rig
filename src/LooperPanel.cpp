@@ -542,6 +542,20 @@ juce::String LooperPanel::reportText()
         sockets.add (loopSourceName (s) + " " + (options.inputFor[(size_t) s] >= 0 ? juce::String (options.inputFor[(size_t) s] + 1) : juce::String ("none")));
 
     lines.add ("Input sockets: " + sockets.joinIntoString (", "));
+
+    if (const int kickSocket = engine.kick().getSocket(); engine.kick().isOn() && kickSocket >= 0)
+    {
+        const int stomp = options.inputFor[(size_t) LoopSource::stomp], acoustic = options.inputFor[(size_t) LoopSource::acoustic];
+
+        if (stomp != kickSocket)
+            lines.add ("  NOTE: the kick pad's kick joins socket " + juce::String (kickSocket + 1) + ", but the looper listens for the stomp on socket "
+                         + (stomp >= 0 ? juce::String (stomp + 1) : juce::String ("none")) + ", so loops will not record the kick. Set Stomp to socket "
+                         + juce::String (kickSocket + 1) + " in the Looper tab's input sockets.");
+        else if (stomp == acoustic)
+            lines.add ("  NOTE: the stomp and the acoustic are on the same socket, so a loop keeps them as one sound, not a lane each.");
+        else
+            lines.add ("  The kick pad's kick is on the stomp's socket: loops record it on a lane of its own.");
+    }
     lines.add ("Double-press window: " + juce::String (options.doubleWindowMs) + " ms");
     lines.add ("Late press allowance: a new track pressed up to " + juce::String (options.lateStartBeats, 2) + " of a beat after a bar line starts from that bar line");
     lines.add ("First loop lead-in: the first loop starts " + juce::String (options.firstLoopLeadMs) + " ms before the press, to keep the attack of a note struck with the switch");

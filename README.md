@@ -818,6 +818,26 @@ Added after Tom's first test of the mixer.
 3. Try **Time** at A and at F: A closes quickly after each phrase, F slowly.
 4. Click **Warmth**, switch it on with **Drive** high, and move **Mix** between 0 and 100.
 
+### Part L: loops after the channel, the kick pad through the mixer, the stomp lane (15 minutes)
+
+Added after Tom's test of build 103.
+
+1. First tab: check **Buffer** says **64**. If the buffer is ever big enough to hear, a red line
+   on that tab now says so. The app also asks the CQ for the buffer you last chose every time
+   it starts, instead of leaving it to the CQ's driver.
+2. **Mixer** tab, **Mixer on**. Raise the Vocal channel's **Trim** until your singing sits in
+   the lighter band. Record a vocal loop and stop singing: the loop should sit in the same band.
+3. Switch the Vocal channel's compressor on and make it squeeze hard. Record three layers on
+   one track: the amber bar should move with your live singing only, not with the loops.
+4. **Kick pad** tab: **Plays on** should say **Socket 10: through its mixer channel, and into
+   loops**. Stomp the pad: on the Mixer tab the **Stomp** channel's meter moves. Shape it with
+   that channel's EQ and compressor.
+5. **Looper** tab: set the **Stomp** input socket to **10** (once; it is remembered).
+6. Load a song and record track 1 while playing the acoustic and stomping. The track tile says
+   **(kept apart)**. On playback, pull the Mixer's **Stomp** fader down: the looped kick goes,
+   the looped guitar stays.
+7. Wicked Game: track 2 records bass and stomp. Livin: track 1 records bass, acoustic and stomp.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.

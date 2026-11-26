@@ -110,6 +110,19 @@ namespace
         return 2.0 * std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (double) x.size();
     }
 
+    /** The strongest tenth of a second of a tone: a loop's join can fall anywhere in a window, and
+        the jump in the tone there would otherwise make a loop read quieter than it is. */
+    double steady (const std::vector<float>& x, double hz, double rate)
+    {
+        const auto step = (size_t) (rate * 0.1);
+        double best = 0.0;
+
+        for (size_t at = 0; at + step <= x.size(); at += step)
+            best = std::max (best, strength ({ x.begin() + (std::ptrdiff_t) at, x.begin() + (std::ptrdiff_t) (at + step) }, hz, rate));
+
+        return best;
+    }
+
     float peak (const std::vector<float>& x)
     {
         float p = 0.0f;
@@ -291,6 +304,96 @@ void runMixerSelfTest (const Check& check)
         const double once = strength (b.last (4, 0.1), 220.0, b.rate);
         check (std::abs (once - 0.25) < 0.01, "mixer: while it is on, play-through stays quiet, so nothing is heard twice (the note comes out at " + db (once) + ", it went in at " + db (0.25) + ")");
         b.engine.setPlayThrough (PlayThrough::off);
+    }
+
+    // ---- a loop leaves the channel after its processing and rejoins after it (Tom, 27 Nov 2026) ----
+    {
+        Bench b;
+        auto s = bareSetup();
+        auto& ch = s.channel[0];
+        ch.on = true;
+        ch.trimDb = 6.0f;
+        ch.strip.slots[stripComp].on = true;
+        ch.strip.slots[stripComp].setParam ("threshold", -40.0f);
+        ch.strip.slots[stripComp].setParam ("ratio", 8.0f);
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+
+        b.source = band (b.rate);
+        b.run (1.0);
+        const double live = steady (b.last (4, 0.5), vocalHz, b.rate);
+        recordLoops (b);
+        b.run (2.0);
+        const double loop = steady (b.last (4, 1.0), vocalHz, b.rate);
+        check (live > 0.01 && std::abs (20.0 * std::log10 (loop / live)) < 0.3,
+               "mixer: a loop comes back as loud as the playing it was made from, with the channel's Trim and compressor already in it: sung at " + db (live) + ", the loop returns at " + db (loop));
+
+        // Someone sings another note over the loop: the compressor works on the singing alone, so the loop does not duck.
+        b.source = [rate = b.rate] (int socket, juce::int64 t) { return socket == vocalSocket ? tone (1000.0, 0.1, t, rate) : 0.0f; };
+        b.run (2.0);
+        const double under = steady (b.last (4, 1.0), vocalHz, b.rate), over = steady (b.last (4, 1.0), 1000.0, b.rate);
+        check (std::abs (20.0 * std::log10 (under / loop)) < 0.1 && std::abs (20.0 * std::log10 (over / live)) < 0.3,
+               "mixer: loops never pile into a channel's compressor: with singing over it the loop stays at " + db (under) + " (alone " + db (loop) + ") and the singing is squeezed as if alone (" + db (over) + ", alone " + db (live) + ")");
+
+        // The Trim and the channel's processing are in the loop already: changing them later leaves it be.
+        b.source = [] (int, juce::int64) { return 0.0f; };
+        auto later = s.channel[0];
+        later.trimDb = 0.0f;
+        later.strip.slots[stripComp].on = false;
+        b.engine.mixer().setChannel (0, later);
+        b.run (2.0);
+        const double after = steady (b.last (4, 1.0), vocalHz, b.rate);
+        check (std::abs (20.0 * std::log10 (after / loop)) < 0.1, "mixer: changing a channel's Trim or compressor afterwards leaves a loop already recorded as it was (" + db (after) + ", was " + db (loop) + ")");
+    }
+
+    // ---- the kick pad's kick joins the stomp socket: its channel plays it and the looper records it ----
+    {
+        constexpr int stompSocket = 9;
+        Bench b;
+        b.engine.kick().setOn (true);
+        b.engine.kick().setSocket (stompSocket);
+        auto s = bareSetup();
+        s.channel[2].on = true;
+        s.channel[2].socket = stompSocket;
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+
+        auto options = b.engine.looper().options();
+        options.inputFor[(size_t) LoopSource::stomp] = stompSocket;
+        options.inputFor[(size_t) LoopSource::acoustic] = acousticSocket;
+        b.engine.looper().setOptions (options);
+        auto song = mixerSong();
+        song.track[0].rcInputs = rcInst1L | rcInst1R;
+        b.engine.looper().setSong (song);
+
+        b.run (0.3);
+        const float before = peak (b.last (4, 0.2));
+        b.engine.kick().screenHit (100);
+        b.run (0.3);
+        const float live = peak (b.last (4, 0.3));
+
+        auto muted = s.channel[2];
+        muted.mute = true;
+        b.engine.mixer().setChannel (2, muted);
+        b.run (0.3);
+        b.engine.kick().screenHit (100);
+        b.run (0.3);
+        const float whenMuted = peak (b.last (4, 0.3));
+        b.engine.mixer().setChannel (2, s.channel[2]);
+        b.run (0.3);
+        check (before == 0.0f && live > 0.02f && whenMuted == 0.0f,
+               "mixer: the kick pad's kick comes through the Stomp channel (" + db (live) + " in the main mix) and that channel's mute silences it");
+
+        b.tap (0);
+        b.run (0.25);
+        b.engine.kick().screenHit (100);
+        b.run (0.75);
+        b.tap (0);
+        b.run (1.5);
+        const auto snap = b.engine.looper().snapshot();
+        const float looped = peak (b.last (4, 1.0));
+        check (snap.track[0].state == TrackState::playing && snap.track[0].lanes == 2 && looped > live * 0.7f && looped < live * 1.3f,
+               "mixer: a loop on a track that hears the acoustic and the stomp records the kick pad's kick on a lane of its own, and plays it back as loud as it was (" + db (looped) + ", played " + db (live) + ")");
     }
 
     // ---- each loop comes back on the channel it was recorded from ----
