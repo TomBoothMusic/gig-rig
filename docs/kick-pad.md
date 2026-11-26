@@ -51,7 +51,7 @@ still sends the same thing.
 | Touch | How much quieter a soft hit is than a hard one. 1 is even steps. Higher makes soft hits softer still. |
 | Click | How much beater click the kick has. A soft hit always has less than a hard one. |
 | Pitch | Built-in kick only: the note the drum settles on. 55 Hz sits under the bass guitar. |
-| Length | Built-in kick only: how long the drum rings. Shorter is tighter. |
+| Length | Built-in kick only: how long the drum rings, from 0.03 to 0.20 seconds. Shorter is tighter. |
 | Sound | The built-in kick, or a recording of your own (below). |
 | Plays on | Which pair of returns the kick comes out of. Returns 5 and 6 are where the loops play. |
 
@@ -63,6 +63,27 @@ It is made by the app from scratch, not taken from anyone's recording, to Tom's 
 the kick he uses: a real-drum kind of kick, strongest around 55 Hz so it stays under the bass
 guitar, very little in the middle, and a click on top so it still tells on speakers with no
 bass. A harder hit is louder, has more click, a brighter click, and a slightly deeper thump.
+
+It was reworked on the night of 26 Nov 2026, after Tom played the first one from the SPD::ONE
+and found the click "like a wooden block" and the body "like an 808":
+
+- **The beater** is now a soft slap, a few thousandths of a second of hiss with no note of its
+  own. The first one rang at one pitch, which is what a wooden block does.
+- **The drum** now makes more than one note, as a real drum head does: two higher notes sound
+  with the hit and die away quickly, and the main note starts a little sharp and settles as
+  the stretched head relaxes. The first moment of the hit is louder than the ring after it.
+- **Length** runs from 0.03 to 0.20 seconds (it was 0.05 to 0.40, and only the bottom third
+  was any use).
+
+It is still built from how drums are known to behave, not copied from a recording. If it is
+not yet right, the best next step is a recording of the kick sound Tom likes (soft, medium and
+hard hits), so the built-in kick can be matched to it by measurement.
+
+## One stomp counted twice
+
+A stomp sometimes reaches the app as two hits a few thousandths of a second apart (9 times in
+Tom's first 370). When two hits from the pad arrive less than 30 ms apart, the app plays only
+the stronger one. Both are still counted, and the report says how many were not played.
 
 ## Using your own kick recording
 

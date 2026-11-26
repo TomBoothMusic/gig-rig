@@ -176,11 +176,38 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
         const auto higher = oneHit (pad, 127);
         check (level (higher, 75.0, 0.4) > level (higher, 55.0, 0.4) && level (hard, 55.0, 0.4) > level (hard, 75.0, 0.4), "kick pad: the Pitch setting moves where the body sits");
         pad.setPitch (55.0f);
-        pad.setLength (0.08f);
+        pad.setLength (0.04f);
         const auto tight = oneHit (pad, 127);
         check (peak (tight, (size_t) (0.3 * rate)) < 0.2f * peak (hard, (size_t) (0.3 * rate)) && peak (tight, (size_t) (0.5 * rate)) == 0.0f,
                "kick pad: a shorter Length setting makes a tighter kick");
-        pad.setLength (0.17f);
+        pad.setLength (0.10f);
+
+        // Tom, 26 Nov 2026: he only ever used the bottom third of the old 0.05 to 0.40 s slider.
+        pad.setLength (5.0f);
+        const auto longest = pad.getLength();
+        pad.setLength (0.0f);
+        check (std::abs (longest - 0.2f) < 1.0e-6f && std::abs (pad.getLength() - 0.03f) < 1.0e-6f, "kick pad: the Length setting runs from 0.03 to 0.20 seconds");
+        pad.setLength (0.10f);
+
+        // The beater is a slap, not a note (the first one rang at 3.2 kHz and Tom heard a wooden block):
+        // no one pitch in it stands far above its neighbours.
+        double loudestNote = 0.0, sum = 0.0;
+        int count = 0;
+
+        for (double hz = 1500.0; hz <= 6000.0; hz += 125.0, ++count)
+        {
+            const auto l = level (hard, hz, 0.008);
+            loudestNote = juce::jmax (loudestNote, l);
+            sum += l;
+        }
+
+        check (loudestNote < 3.0 * sum / count, "kick pad: the beater is a slap with no note of its own (its loudest pitch is "
+                                                  + juce::String (loudestNote * count / juce::jmax (1.0e-12, sum), 2) + " times the average)");
+
+        // A drum head makes more than one note: while the hit is fresh there is a second one above the body, and it is gone soon after.
+        const std::vector<float> early (hard.begin(), hard.begin() + (int) (0.03 * rate)), late (hard.begin() + (int) (0.15 * rate), hard.begin() + (int) (0.3 * rate));
+        check (level (early, 55.0 * 1.59, 0.03) > 0.1 * level (early, 55.0, 0.03) && level (late, 55.0 * 1.59, 0.15) < 0.25 * level (late, 55.0, 0.15),
+               "kick pad: the head's second note sounds with the hit and dies before the body does");
 
         pad.setClick (0.0f);
         const auto noClick = oneHit (pad, 127);
@@ -295,6 +322,26 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
 
         check (p.reportText().contains ("EVERY HIT HAD THE SAME STRENGTH"), "kick pad: a pad that sends one strength for every hit is called out");
         check (p.reportText().contains ("one stomp counted twice?): 5"),    "kick pad: hits a few milliseconds apart are counted as possible double triggers");
+
+        // One stomp that reaches the pad twice: the weaker of the pair is not played, whichever came first.
+        p.resetCounts();
+        run (p, 1.0);
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 100));
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 40));
+        const auto withBounce = run (p, 0.3);
+        check (p.reportText().contains ("the weaker of the pair: 1") && withBounce == oneHit (p, 100, 0.3),
+               "kick pad: a weaker second hit a few milliseconds after the first is a bounce, and is not played");
+        juce::Thread::sleep (KickPad::doubleHitMs + 20);
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 40));
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 100));
+        check (p.reportText().contains ("the weaker of the pair: 1") && peak (run (p, 0.3)) > 0.9f * peak (withBounce),
+               "kick pad: a stronger second hit is played");
+        juce::Thread::sleep (KickPad::doubleHitMs + 20);
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 40));
+        juce::Thread::sleep (KickPad::doubleHitMs + 20);
+        p.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) 30));
+        check (p.reportText().contains ("the weaker of the pair: 1"), "kick pad: two soft stomps a normal time apart are both played");
+        run (p, 1.0);
 
         // Learn pad: the next note from anything becomes the pad, and only that note.
         p.resetCounts();

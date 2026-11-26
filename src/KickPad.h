@@ -69,10 +69,10 @@ public:
     void setClick (float v) noexcept                { click.store (juce::jlimit (0.0f, 2.0f, v)); }
     float getClick() const noexcept                 { return click.load(); }
 
-    /** The built-in kick only: the note its body settles on (40 to 90 Hz), and how long the body rings (0.05 to 0.40 s). */
+    /** The built-in kick only: the note its body settles on (40 to 90 Hz), and how long the body rings (0.03 to 0.20 s). */
     void setPitch (float hz) noexcept               { pitch.store (juce::jlimit (40.0f, 90.0f, hz)); }
     float getPitch() const noexcept                 { return pitch.load(); }
-    void setLength (float seconds) noexcept         { length.store (juce::jlimit (0.05f, 0.4f, seconds)); }
+    void setLength (float seconds) noexcept         { length.store (juce::jlimit (0.03f, 0.2f, seconds)); }
     float getLength() const noexcept                { return length.load(); }
 
     /** Which pair of returns the kick plays on: 0 = returns 1 and 2 ... 3 = returns 7 and 8. */
@@ -107,7 +107,7 @@ public:
 
     //==============================================================================
     static constexpr int maxRecent = 32;
-    static constexpr int doubleHitMs = 30;      // two hits closer than this are counted as a possible double trigger
+    static constexpr int doubleHitMs = 30;      // two hits closer than this are one stomp: the weaker one is not played
 
 private:
     struct Queued { int strength = 0; juce::int64 ticks = 0; };
@@ -120,12 +120,14 @@ private:
         double position = 0.0;      // samples at the device rate (built-in) or at the file's rate (recording)
         float gain = 0.0f;          // from the strength of the hit and the Touch setting
         float clickAmount = 0.0f;   // how much of the click a hit this hard gets: a soft hit is duller as well as quieter
-        float clickTone = 1.0f;     // one-pole coefficient: the click of a soft hit is also darker
+        float clickTone = 1.0f;     // one-pole coefficient: the beater of a soft hit is also darker
         float bodyHz = 55.0f, bodyDecay = 0.0f;
         int lengthSamples = 0;
-        float sweepHz = 0.0f, sweepEnv = 0.0f, bodyEnv = 0.0f, clickEnv = 0.0f, noiseEnv = 0.0f;
-        double bodyPhase = 0.0, clickPhase = 0.0;
-        float noiseLow = 0.0f, clickLow = 0.0f, splitLow = 0.0f;
+        float sweepHz = 0.0f, sweepEnv = 0.0f, bend = 0.0f, bendEnv = 0.0f, bodyEnv = 0.0f, punchEnv = 0.0f;
+        float overtones = 0.0f, overtone1Env = 0.0f, overtone2Env = 0.0f, squash = 0.0f;
+        float slapEnv = 0.0f, slapGate = 0.0f;
+        double bodyPhase = 0.0, overtone1Phase = 0.0, overtone2Phase = 0.0;
+        float noiseLow = 0.0f, clickLow = 0.0f, clickLow2 = 0.0f, splitLow = 0.0f;
         juce::uint32 noiseSeed = 1;
         int fadeLeft = -1;          // samples of fade-out still to go, or -1 when not fading
         bool usesSample = false;
@@ -142,7 +144,7 @@ private:
 
     // ---- settings, read by the audio thread ----
     std::atomic<bool> on { true }, learning { false };
-    std::atomic<float> level { 0.8f }, touch { 1.5f }, click { 1.0f }, pitch { 55.0f }, length { 0.17f };
+    std::atomic<float> level { 0.8f }, touch { 1.5f }, click { 1.0f }, pitch { 55.0f }, length { 0.10f };
     std::atomic<int> returnPair { 2 };
 
     // ---- hits on their way to the audio thread ----
@@ -153,7 +155,8 @@ private:
     // ---- audio thread ----
     double rate = 48000.0;
     int fadeSamples = 240, tailSamples = 1920;
-    float sweepDecay = 0.0f, clickDecay = 0.0f, noiseDecay = 0.0f, noiseSplit = 0.0f, sampleSplit = 0.0f;
+    float sweepDecay = 0.0f, bendDecay = 0.0f, punchDecay = 0.0f, overtone1Decay = 0.0f, overtone2Decay = 0.0f;
+    float slapDecay = 0.0f, slapRise = 0.0f, noiseSplit = 0.0f, sampleSplit = 0.0f;
     std::array<Voice, 2> voices {};
     std::shared_ptr<const Sample> playing;      // the recording the audio thread is using now
     juce::SpinLock sampleLock;                  // held only to swap 'playing' for 'waiting'
@@ -171,7 +174,7 @@ private:
     bool foundByName = false, learned = false;
     juce::String sampleLabel;
     std::vector<Hit> recent;
-    int hits = 0, screenHits = 0, softest = 0, hardest = 0, doubles = 0, closestGapMs = -1;
+    int hits = 0, screenHits = 0, softest = 0, hardest = 0, doubles = 0, bounces = 0, lastHitStrength = 0, closestGapMs = -1;
     std::array<int, 128> strengthCounts {};
     int noteOffs = 0, otherMessages = 0, otherNotes = 0;
     juce::StringArray otherKinds;       // each different kind of other message from the pad, once
