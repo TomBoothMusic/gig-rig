@@ -121,7 +121,7 @@ namespace
         return "it has no setting called \"" + setting + "\"";
     }
 
-    constexpr const char* actionWords[] = { "compare", "chain on off", "tap tempo", "whammy", "test take", "delay throw", "wah", "next amp", "harmony" };
+    constexpr const char* actionWords[] = { "compare", "chain on off", "tap tempo", "whammy", "test take", "delay throw", "wah", "next amp", "harmony", "toe switch" };
 }
 
 //==============================================================================
@@ -279,6 +279,21 @@ SongSounds SongSounds::fromText (const juce::String& text)
 
             s.settings.push_back (set);
         }
+        else if (low == "send")
+        {
+            // "send = Vocal / Vocal plate = -6" or "... = off"
+            const auto level = parts.size() == 2 ? parts[1].fromLastOccurrenceOf ("=", false, false).trim() : juce::String();
+
+            if (parts.size() != 2 || ! parts[1].containsChar ('=') || parts[0].isEmpty()
+                || ! (level.equalsIgnoreCase ("off") || level.containsAnyOf ("0123456789")))
+            {
+                s.notUnderstood.add (line + "  (a send line reads: send = channel / reverb or delay = level in dB, or off)");
+                continue;
+            }
+
+            s.sends.push_back ({ parts[0], parts[1].upToLastOccurrenceOf ("=", false, false).trim(),
+                                 level.equalsIgnoreCase ("off") ? mixOffDb : juce::jlimit (mixOffDb, 10.0f, level.getFloatValue()) });
+        }
         else if (low == "amps")
         {
             if (parts.size() < 2)
@@ -353,7 +368,67 @@ juce::String SongSounds::toText (const juce::String& title, const juce::StringAr
     for (const auto& a : amps)
         t << "amps = " << a.chain << " / " << a.models.joinIntoString (" / ") << "\n";
 
+    for (const auto& x : sends)
+        t << "send = " << x.channel << " / " << x.effect << " = " << (x.db <= mixOffDb ? juce::String ("off") : juce::String (x.db, 1)) << "\n";
+
     return t;
+}
+
+//==============================================================================
+std::vector<Mixer::SongSend> resolveSends (const SongSounds& song, const SongSounds* fallback, const MixerSetup& mixer, juce::StringArray& problems)
+{
+    const auto numbered = [] (const juce::String& words, const juce::StringArray& starts, int count)
+    {
+        auto w = words.trim().toLowerCase();
+
+        for (const auto& start : starts)
+            if (w.startsWith (start))
+                w = w.substring (start.length()).trim();
+
+        return w.containsOnly ("0123456789") && w.isNotEmpty() && w.getIntValue() >= 1 && w.getIntValue() <= count ? w.getIntValue() - 1 : -1;
+    };
+    const auto channelOf = [&] (const juce::String& words)
+    {
+        for (int c = 0; c < numMixChannels; ++c)
+            if (mixer.channel[(size_t) c].name.trim().equalsIgnoreCase (words.trim()))
+                return c;
+
+        return numbered (words, { "channel", "ch" }, numMixChannels);
+    };
+    const auto effectOf = [&] (const juce::String& words)
+    {
+        for (int f = 0; f < numMixFx; ++f)
+            if (mixer.fx[(size_t) f].name.trim().equalsIgnoreCase (words.trim()))
+                return f;
+
+        return numbered (words, { "effect", "fx" }, numMixFx);
+    };
+
+    std::vector<Mixer::SongSend> sends;
+    const auto add = [&] (const SongSounds& from, const char* whose)
+    {
+        for (const auto& x : from.sends)
+        {
+            const int c = channelOf (x.channel), f = effectOf (x.effect);
+
+            if (c < 0 || f < 0)
+            {
+                problems.add (juce::String (whose) + " \"send = " + x.channel + " / " + x.effect + "\": the mixer has no "
+                              + (c < 0 ? "channel called \"" + x.channel + "\"" : "reverb or delay called \"" + x.effect + "\"") + " in the act that is loaded, so the line was left out.");
+                continue;
+            }
+
+            if (std::none_of (sends.begin(), sends.end(), [c, f] (const Mixer::SongSend& s) { return s.channel == c && s.fx == f; }))
+                sends.push_back ({ c, f, x.db });
+        }
+    };
+
+    add (song, "The song's line");
+
+    if (fallback != nullptr)
+        add (*fallback, "The Default sounds line");
+
+    return sends;
 }
 
 //==============================================================================
@@ -940,6 +1015,10 @@ void SongBook::applySounds (const juce::String& why)
     rack.markChanged();
     problems = r.problems;
 
+    // The song's sends to the mixer's reverbs and delays: on top of the act, gone with the next
+    // song, and never a change to the venue (the reverbs and delays themselves).
+    engine.mixer().setSongSends (resolveSends (e.sounds, hasDefault() ? &defaultSounds : nullptr, engine.mixer().setup(), problems));
+
     for (const auto& line : e.sounds.notUnderstood)
         problems.add ("Line not understood in the song's file: " + line);
 
@@ -1048,6 +1127,24 @@ SongSounds SongBook::capture (const juce::String& songName, juce::StringArray& n
 
         if (const auto amps = rack.ampCycle (c); ! amps.isEmpty())
             s.amps.push_back ({ words, amps });
+    }
+
+    {
+        // The mixer sends that belong to the song, by the channel's and the effect's names
+        // (by number where a name is empty or used twice).
+        const auto& mix = engine.mixer().setup();
+        const auto unique = [] (const juce::String& name, const auto& list)
+        {
+            return name.trim().isNotEmpty() && ! name.containsAnyOf ("/=") && std::count_if (list.begin(), list.end(), [&name] (const auto& x) { return x.name.trim().equalsIgnoreCase (name.trim()); }) == 1;
+        };
+
+        for (const auto& x : engine.mixer().songSends())
+        {
+            const auto& ch = mix.channel[(size_t) x.channel].name;
+            const auto& fxName = mix.fx[(size_t) x.fx].name;
+            s.sends.push_back ({ unique (ch, mix.channel) ? ch.trim() : "channel " + juce::String (x.channel + 1),
+                                 unique (fxName, mix.fx) ? fxName.trim() : "fx " + juce::String (x.fx + 1), x.db });
+        }
     }
 
     s.hasSwitches = true;

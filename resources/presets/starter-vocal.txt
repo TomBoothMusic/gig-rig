@@ -1,7 +1,8 @@
 # GigRig effect preset "Starter - Vocal": a place to start the vocal chain from.
 # The harmony is the effect that belongs here for good (before the looper, so it is in the loops).
-# The flanger is for Come As You Are. The delays and the plate reverb stand in for the mixer's
-# own delay and reverb until the mixer stage is built: that is where they will live.
+# The flanger is for Come As You Are. The delay is only for the delay throw (a held switch).
+# The voice's everyday reverb and delays are in the mixer now, after the looper (Mixer tab:
+# the channel's sends to "Vocal plate" and "Vocal delay"), so they are not here any more.
 # GigRig effect chain. One effect per 'slot=' line, its settings below it.
 slot=peq
 on=1
@@ -29,25 +30,10 @@ mix=50
 slot=digitaldelay
 on=0
 follow=1
-division=0
+division=5
+throw=1
 feedback=27
-mix=17
+mix=30
 tone=6.95
 mod=2.55
 modrate=1.1
-slot=tapedelay
-on=0
-follow=0
-time=121.3
-feedback=19.6
-mix=19.6
-wow=3.15
-flutter=2.35
-age=4.1
-slot=plate
-on=1
-reverb=3
-decay=5
-predelay=30
-tone=6
-lowcut=180

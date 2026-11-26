@@ -1,0 +1,34 @@
+# GigRig effect preset "Vocal - for the mixer": the vocal chain for when the Mixer tab is on.
+# Tom's vocal EQ and compressor (from his "Vocal Baseline 1" of 26 Nov 2026), the harmony, and the
+# delay for the delay throw. No reverb and no everyday delay: with the mixer on those are the
+# mixer's "Vocal plate" and "Vocal delay", after the looper, set by the vocal channel's sends.
+# GigRig effect chain. One effect per 'slot=' line, its settings below it.
+slot=peq
+on=1
+lowcut=127.3
+lmg=-4.2
+lmf=370.6
+hmg=4.5
+hmf=4093.3
+highcut=17735.8
+high=4.9
+low=-1.8
+width=5.5
+slot=comp
+on=1
+input=-2
+output=2
+attack=5.25
+release=5.65
+ratio=0
+mix=100
+slot=harmony
+on=0
+key=11
+voice=6
+level=-7.6
+slot=digitaldelay
+on=0
+division=5
+throw=1
+mix=30.8

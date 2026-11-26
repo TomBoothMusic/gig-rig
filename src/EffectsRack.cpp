@@ -271,6 +271,77 @@ int EffectsRack::moveVolumePedals (float position)
     return moved;
 }
 
+namespace
+{
+    /** The first wah or whammy in a row: the effect a toe switch engages. -1 if none. */
+    int expressionSlot (const fx::ChainModel& m)
+    {
+        for (int k = 0; k < (int) m.slots.size(); ++k)
+            if (m.slots[(size_t) k].type == "wah" || m.slots[(size_t) k].type == "whammy")
+                return k;
+
+        return -1;
+    }
+}
+
+void EffectsRack::moveExpressionPedal (float position)
+{
+    position = juce::jlimit (0.0f, 100.0f, position);
+
+    if (toeOn)
+    {
+        auto& ch = chain (toeChain);
+
+        if (const int k = expressionSlot (ch.model()); k >= 0)
+            if (auto* fx = ch.effect (k))
+            {
+                ch.setParam (k, fx->paramIndex ("pedal"), position);
+                dirty = true;
+                return;
+            }
+
+        toeOn = false;      // the song changed and that effect has gone: the pedal is the blend again
+    }
+
+    blendPosition = position;
+    moveVolumePedals (position);
+}
+
+bool EffectsRack::toeSwitch (int c)
+{
+    c = juce::jlimit (0, numChains - 1, c);
+    auto& ch = chain (toeOn ? toeChain : c);
+    const int k = expressionSlot (ch.model());
+
+    if (toeOn)
+    {
+        if (k >= 0)
+            ch.setSlotOn (k, false);
+
+        toeOn = false;
+        moveVolumePedals (blendPosition);
+    }
+    else
+    {
+        // Where the blend is now, to come back to: the first volume pedal that is not reversed.
+        for (auto& slot : chains)
+            for (const auto& sm : slot.chain.model().slots)
+                if (sm.type == "volume" && sm.param ("reverse", 0.0f) < 0.5f)
+                    blendPosition = sm.param ("pedal", blendPosition);
+
+        moveVolumePedals (100.0f);      // electric full, the reversed acoustic silent
+
+        if (k >= 0)
+            ch.setSlotOn (k, true);
+
+        toeOn = true;
+        toeChain = c;
+    }
+
+    dirty = true;
+    return toeOn;
+}
+
 bool EffectsRack::bendWhammy (int c, bool toeDown)    { return rockPedal (c, "whammy", toeDown); }
 bool EffectsRack::sweepWah (int c, bool toeDown)      { return rockPedal (c, "wah", toeDown); }
 
@@ -409,6 +480,8 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         takeNote = takeStep();
     else if (a.action == 7)
         nextAmp (c);
+    else if (a.action == 9)
+        toeSwitch (c);
     else if (a.action == 0)
         toggleListen (c);
     else if (a.action == 1)
@@ -446,7 +519,7 @@ juce::String EffectsRack::pedalText() const
         const auto& m = chains[(size_t) a.chain].chain.model();
         juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
                           : a.action == 4 ? "test take: record, then play round and round, then stop"
-                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held" : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held" : a.action == 9 ? (toeOn ? "toe switch (ON: electric full, acoustic off, the pedal works the wah or whammy)" : "toe switch (off: the pedal is the acoustic and electric blend)") : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
                           : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
                                 ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))

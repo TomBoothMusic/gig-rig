@@ -77,7 +77,8 @@ juce_add_binary_data(GigRigData SOURCES
     resources/amp-models/dream65-driven.nam
     resources/presets/starter-acoustic.txt
     resources/presets/starter-vocal.txt
-    resources/presets/starter-bass.txt)
+    resources/presets/starter-bass.txt
+    resources/presets/vocal-for-the-mixer.txt)
 
 # ---------------------------------------------------------------------------
 # The app. Stage 0 was a device check; stage 1 adds the audio engine with
@@ -156,6 +157,10 @@ target_sources(GigRig PRIVATE
     src/effects/whammy/Whammy.cpp
     src/effects/wah/Wah.cpp
     src/effects/volume/VolumePedal.cpp
+    src/effects/la2a/OptoComp.cpp
+    src/effects/warmth/Warmth.cpp
+    src/effects/tape/TapeMachine.cpp
+    src/effects/buscomp/BusComp.cpp
     src/effects/mixer/MixerBlocks.cpp
     src/effects/mixer/MixerBlockChecks.cpp
     src/effects/amp/NamAmp.cpp

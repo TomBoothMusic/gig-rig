@@ -79,6 +79,7 @@ namespace
 
     const char* const outputKeys[numMixOutputs] { "main", "monitor 1", "monitor 2" };
     const char* const recordWords[] { "none", "raw", "effects", "looper" };
+    const char* const tapWords[] { "pre", "eq", "all" };
 
     juce::String num (float v)              { return juce::String (v, 2); }
 
@@ -104,6 +105,7 @@ namespace
             t << "fx" << (f + 1) << "=" << num (s.fxDb[(size_t) f]) << "\n";
         t << "record=" << recordWords[(int) s.record] << "\n";
         t << "direct=" << (s.directReturn + 1) << "\n";
+        t << "link=" << (s.link ? 1 : 0) << "\n";
         t << "[channel " << (c + 1) << " processing]\n" << juce::String (s.strip.toText());
     }
 
@@ -128,7 +130,10 @@ namespace
         t << "mute=" << (s.mute ? 1 : 0) << "\n";
         t << "mono=" << (s.mono ? 1 : 0) << "\n";
         if (o > 0)
+        {
             t << "prefader=" << (s.preFader ? 1 : 0) << "\n";
+            t << "tap=" << tapWords[(int) s.tap] << "\n";
+        }
         if (withSockets)
         {
             t << "return=" << (s.firstReturn + 1) << "\n";
@@ -213,6 +218,7 @@ namespace
                 for (int k = 0; k < numMixFx; ++k)
                     if (const auto key = "fx" + juce::String (k + 1); sec.values.containsKey (key))
                         ch.fxDb[(size_t) k] = juce::jlimit (mixOffDb, 10.0f, sec.values[key].getFloatValue());
+                if (has ("link"))    ch.link = b ("link") && c + 1 < numMixChannels;
                 if (has ("direct"))  ch.directReturn = juce::jlimit (-1, 7, sec.values["direct"].getIntValue() - 1);
                 if (has ("record"))
                     for (int r = 0; r < 4; ++r)
@@ -270,6 +276,10 @@ namespace
                 if (has ("mute"))     out.mute = b ("mute");
                 if (has ("mono"))     out.mono = b ("mono");
                 if (has ("prefader")) out.preFader = b ("prefader");
+                if (has ("tap"))
+                    for (int k = 0; k < 3; ++k)
+                        if (sec.values["tap"] == tapWords[k])
+                            out.tap = (TapPoint) k;
 
                 if ((wanted & socketParts) != 0 || o > 0)
                 {
@@ -302,12 +312,14 @@ namespace
 fx::ChainModel defaultStripModel()
 {
     fx::ChainModel m;
-    // Gate, EQ, compressor, then one analog-style insert (the 1176-style compressor from the
-    // effects list). The gate and the insert start switched off.
+    // Gate, warmth (valve preamp) and EQ are the tone; then the clean compressor and two
+    // analog-style ones (1176 style, LA-2A style). Only the EQ starts switched on.
     m.slots.push_back (slot ("gate", false));
+    m.slots.push_back (slot ("warmth", false));
     m.slots.push_back (slot ("mixeq", true));
     m.slots.push_back (slot ("mixcomp", false));
     m.slots.push_back (slot ("comp", false));
+    m.slots.push_back (slot ("la2a", false));
     return m;
 }
 
@@ -317,6 +329,8 @@ fx::ChainModel defaultOutputModel()
     m.slots.push_back (slot ("mixeq", true));
     m.slots.push_back (slot ("notches", true));
     m.slots.push_back (slot ("mixcomp", false));
+    m.slots.push_back (slot ("buscomp", false));
+    m.slots.push_back (slot ("tape", false));
     m.slots.push_back (slot ("limiter", true));
     m.slots.push_back (slot ("linedelay", true));
     return m;
@@ -338,12 +352,11 @@ MixerSetup defaultMixerSetup()
     MixerSetup s;
 
     // The design doc's channel order, on the sockets Tom's CQ12T test wiring uses (the looper's
-    // own defaults: vocal 6, acoustic 7, electric 8, bass 9). The stomp box has no socket of its
-    // own yet, so its channel waits on socket 10, switched off.
+    // own defaults: vocal 6, acoustic 7, electric 8, bass 9), and the stomp box on socket 10 (Tom, 26 Nov 2026).
     static const struct { const char* name; int socket; bool on; float lowCut; } start[numMixChannels] {
         { "Vocal",           5, true,  90.0f },
         { "Acoustic",        6, true,  70.0f },
-        { "Stomp",           9, false, 20.0f },
+        { "Stomp",           9, true,  20.0f },
         { "Electric",        7, true,  70.0f },
         { "Bass",            8, true,  20.0f },
         { "Duo vocal",       0, false, 90.0f },
@@ -425,11 +438,15 @@ void Mixer::pushChannel (int c, bool first)
     a.pan.store (s.pan);
     a.mute.store (s.mute);
     for (int m = 0; m < numMixMonitors; ++m)   a.mon[(size_t) m].store (gainOf (s.monDb[(size_t) m]));
-    for (int f = 0; f < numMixFx; ++f)         a.fx[(size_t) f].store (gainOf (s.fxDb[(size_t) f]));
+    for (int f = 0; f < numMixFx; ++f)         a.fx[(size_t) f].store (gainOf (sendDb (c, f)));
     a.on.store (s.on);
 
-    if (first)  a.strip.setModel (s.strip);
-    else        a.strip.setModelGently (s.strip);
+    fx::ChainModel tone, squeeze;
+    tone.slots.assign (s.strip.slots.begin(), s.strip.slots.begin() + stripSplit);
+    squeeze.slots.assign (s.strip.slots.begin() + stripSplit, s.strip.slots.end());
+
+    if (first)  { a.strip.setModel (tone);        a.strip2.setModel (squeeze); }
+    else        { a.strip.setModelGently (tone);  a.strip2.setModelGently (squeeze); }
 
     int mask = 0;
     for (const auto& ch : now.channel)
@@ -464,6 +481,7 @@ void Mixer::pushOutput (int o, bool first)
     a.mute.store (s.mute);
     a.mono.store (s.mono);
     a.preFader.store (s.preFader);
+    a.tap.store ((int) s.tap);
     a.pair.store (s.pair);
     a.firstReturn.store (s.firstReturn);
 
@@ -480,15 +498,126 @@ void Mixer::pushOutput (int o, bool first)
             side.setModel (s.chain);
 }
 
+void Mixer::followLinks()
+{
+    // A linked pair is one stereo channel: the right side takes every setting from the left
+    // except its name and socket; the left pans left and the right pans right.
+    for (int c = 0; c + 1 < numMixChannels; ++c)
+    {
+        auto& left = now.channel[(size_t) c];
+
+        if (c > 0 && now.channel[(size_t) c - 1].link)
+            left.link = false;                              // a right side cannot start a pair of its own
+
+        if (! left.link)
+            continue;
+
+        auto& right = now.channel[(size_t) c + 1];
+        const auto name = right.name;
+        const int socket = right.socket;
+        left.pan = -1.0f;
+        right = left;
+        right.name = name;
+        right.socket = socket;
+        right.link = false;
+        right.pan = 1.0f;
+    }
+
+    now.channel[(size_t) numMixChannels - 1].link = false;
+}
+
 void Mixer::setChannel (int c, const MixChannelSetup& s)
 {
     if (c < 0 || c >= numMixChannels)
         return;
 
-    now.channel[(size_t) c] = s;
+    const bool wasPaired = now.channel[(size_t) c].link || (c > 0 && now.channel[(size_t) c - 1].link);
+
+    if (c > 0 && now.channel[(size_t) c - 1].link)
+    {
+        // A change made on the right side of a stereo pair is a change to the pair.
+        auto& left = now.channel[(size_t) c - 1];
+        const auto name = left.name;
+        const int socket = left.socket;
+        left = s;
+        left.name = name;
+        left.socket = socket;
+        left.link = true;
+        now.channel[(size_t) c].name = s.name;
+        now.channel[(size_t) c].socket = s.socket;
+    }
+    else
+    {
+        // Unlinking leaves both sides in the middle again, not hard left and right.
+        if (now.channel[(size_t) c].link && ! s.link && c + 1 < numMixChannels)
+            now.channel[(size_t) c + 1].pan = 0.0f;
+
+        now.channel[(size_t) c] = s;
+
+        if (wasPaired && ! s.link)
+            now.channel[(size_t) c].pan = 0.0f;
+    }
+
+    followLinks();
+
+    if (c > 0)                      pushChannel (c - 1);
+    if (c + 1 < numMixChannels)     pushChannel (c + 1);
     pushChannel (c);
     actDirty = true;
     markChanged();
+}
+
+float Mixer::sendDb (int c, int f) const noexcept
+{
+    // The right side of a stereo pair follows the left in this too.
+    const int from = c > 0 && now.channel[(size_t) c - 1].link ? c - 1 : c;
+    return songHas[(size_t) from][(size_t) f] ? songDb[(size_t) from][(size_t) f] : now.channel[(size_t) c].fxDb[(size_t) f];
+}
+
+void Mixer::setSongSends (const std::vector<SongSend>& sends)
+{
+    for (auto& row : songHas)
+        row.fill (false);
+
+    for (const auto& s : sends)
+        if (s.channel >= 0 && s.channel < numMixChannels && s.fx >= 0 && s.fx < numMixFx)
+        {
+            songHas[(size_t) s.channel][(size_t) s.fx] = true;
+            songDb[(size_t) s.channel][(size_t) s.fx] = juce::jlimit (mixOffDb, 10.0f, s.db);
+        }
+
+    for (int c = 0; c < numMixChannels; ++c)
+        for (int f = 0; f < numMixFx; ++f)
+            chans[(size_t) c].fx[(size_t) f].store (gainOf (sendDb (c, f)));
+
+    markChanged();
+}
+
+std::vector<Mixer::SongSend> Mixer::songSends() const
+{
+    std::vector<SongSend> sends;
+
+    for (int c = 0; c < numMixChannels; ++c)
+        for (int f = 0; f < numMixFx; ++f)
+            if (songHas[(size_t) c][(size_t) f])
+                sends.push_back ({ c, f, songDb[(size_t) c][(size_t) f] });
+
+    return sends;
+}
+
+void Mixer::setSongSend (int c, int f, float db)
+{
+    auto sends = songSends();
+    sends.erase (std::remove_if (sends.begin(), sends.end(), [c, f] (const SongSend& s) { return s.channel == c && s.fx == f; }), sends.end());
+    sends.push_back ({ c, f, db });
+    setSongSends (sends);
+}
+
+void Mixer::clearSongSend (int c, int f)
+{
+    auto sends = songSends();
+    sends.erase (std::remove_if (sends.begin(), sends.end(), [c, f] (const SongSend& s) { return s.channel == c && s.fx == f; }), sends.end());
+    setSongSends (sends);
 }
 
 void Mixer::setFx (int f, const MixFxSetup& s)
@@ -527,6 +656,7 @@ void Mixer::setOutput (int o, const MixOutputSetup& s)
 void Mixer::setAll (const MixerSetup& s)
 {
     now = s;
+    followLinks();
     for (int c = 0; c < numMixChannels; ++c)   pushChannel (c);
     for (int f = 0; f < numMixFx; ++f)         pushFx (f);
     for (int o = 0; o < numMixOutputs; ++o)    pushOutput (o);
@@ -866,8 +996,8 @@ float Mixer::channelCompDb (int c) const
     // The compressor and the 1176-style insert together.
     float down = 0.0f;
 
-    for (int k : { stripComp, stripInsert })
-        if (const auto* e = chans[(size_t) c].strip.effect (k); e != nullptr && now.channel[(size_t) c].strip.slots[(size_t) k].on)
+    for (int k : { stripComp, stripInsert, stripOpto })
+        if (const auto* e = chans[(size_t) c].strip2.effect (k - stripSplit); e != nullptr && now.channel[(size_t) c].strip.slots[(size_t) k].on)
             down += std::abs (e->meterValue());
 
     return down;
@@ -875,19 +1005,25 @@ float Mixer::channelCompDb (int c) const
 
 float Mixer::outputCompDb (int o) const
 {
-    const auto* e = outs[(size_t) o].chain[(size_t) (o == 0 ? mainSet.load() : 0)][0].effect (2);
-    return e != nullptr && now.output[(size_t) o].chain.slots[2].on ? e->meterValue() : 0.0f;
+    // The compressor and the bus compressor together.
+    float down = 0.0f;
+
+    for (int k : { outComp, outBus })
+        if (const auto* e = outs[(size_t) o].chain[(size_t) (o == 0 ? mainSet.load() : 0)][0].effect (k); e != nullptr && now.output[(size_t) o].chain.slots[(size_t) k].on)
+            down += std::abs (e->meterValue());
+
+    return down;
 }
 
 float Mixer::outputLimiterDb (int o) const
 {
-    const auto* e = outs[(size_t) o].chain[(size_t) (o == 0 ? mainSet.load() : 0)][0].effect (3);
-    return e != nullptr && now.output[(size_t) o].chain.slots[3].on ? e->meterValue() : 0.0f;
+    const auto* e = outs[(size_t) o].chain[(size_t) (o == 0 ? mainSet.load() : 0)][0].effect (outLimiter);
+    return e != nullptr && now.output[(size_t) o].chain.slots[outLimiter].on ? e->meterValue() : 0.0f;
 }
 
 void Mixer::tick()
 {
-    for (auto& c : chans)   c.strip.collectGarbage();
+    for (auto& c : chans)   { c.strip.collectGarbage(); c.strip2.collectGarbage(); }
     for (auto& f : fxs)     f.chain.collectGarbage();
     for (auto& o : outs)
         for (auto& set : o.chain)
@@ -926,6 +1062,11 @@ juce::String Mixer::stateText() const
     for (int c = 0; c < numMixChannels; ++c)   writeChannel (t, c, now.channel[(size_t) c]);
     for (int f = 0; f < numMixFx; ++f)         writeFx (t, f, now.fx[(size_t) f]);
     for (int o = 0; o < numMixOutputs; ++o)    writeOutput (t, o, now.output[(size_t) o], true);
+
+    t << "[song sends]\n";
+    for (const auto& s : songSends())
+        t << "channel " << (s.channel + 1) << " fx " << (s.fx + 1) << "=" << num (s.db) << "\n";
+
     return t;
 }
 
@@ -934,6 +1075,19 @@ void Mixer::loadStateText (const juce::String& text)
     auto next = now;
     readInto (next, text, channelParts | fxParts | mainPart | monitorParts | socketParts);
     setAll (next);
+
+    std::vector<SongSend> sends;
+
+    for (const auto& sec : parseSections (text))
+        if (sec.name == "song sends")
+            for (const auto& key : sec.values.getAllKeys())
+            {
+                const auto words = juce::StringArray::fromTokens (key, " ", {});
+                if (words.size() == 4 && words[0] == "channel" && words[2] == "fx")
+                    sends.push_back ({ words[1].getIntValue() - 1, words[3].getIntValue() - 1, sec.values[key].getFloatValue() });
+            }
+
+    setSongSends (sends);
 
     for (const auto& sec : parseSections (text))
         if (sec.name == "mixer")
@@ -990,8 +1144,8 @@ int Mixer::writeStarterPresets()
 
     // A small powered PA whose own limiter acts early and sounds bad: this one catches the peaks first.
     now = defaultMixerSetup();
-    now.output[0].chain.slots[0].setParam ("lowcut", 50.0f);
-    now.output[0].chain.slots[3].setParam ("ceiling", -6.0f);
+    now.output[0].chain.slots[outEq].setParam ("lowcut", 50.0f);
+    now.output[0].chain.slots[outLimiter].setParam ("ceiling", -6.0f);
     now.output[0].levelDb = -6.0f;
     write (Preset::venue, "Own PA (limiter catches peaks first)", venueText());
 
@@ -1087,11 +1241,13 @@ juce::String Mixer::reportText() const
         for (int m = 0; m < numMixMonitors; ++m)
             t << ", monitor " << (m + 1) << " " << dbText (ch.monDb[(size_t) m]);
         for (int f = 0; f < numMixFx; ++f)
-            if (ch.fxDb[(size_t) f] > mixOffDb)
-                t << ", to " << now.fx[(size_t) f].name << " " << dbText (ch.fxDb[(size_t) f]);
+            if (sendDb (c, f) > mixOffDb || hasSongSend (c, f))
+                t << ", to " << now.fx[(size_t) f].name << " " << dbText (sendDb (c, f)) << (hasSongSend (c, f) ? " (this song's own; the act says " + dbText (ch.fxDb[(size_t) f]) + ")" : juce::String());
         t << ", gate " << (ch.strip.slots[stripGate].on ? "on" : "off")
           << ", EQ " << (ch.strip.slots[stripEq].on ? "on" : "off") << " (low cut " << juce::String (ch.strip.slots[stripEq].param ("lowcut", 20.0f), 0) << " Hz)"
-          << ", compressor " << (ch.strip.slots[stripComp].on ? "on" : "off") << ", 1176-style insert " << (ch.strip.slots[stripInsert].on ? "on" : "off")
+          << ", warmth " << (ch.strip.slots[stripWarmth].on ? "on" : "off")
+          << ", compressor " << (ch.strip.slots[stripComp].on ? "on" : "off") << ", 1176 style " << (ch.strip.slots[stripInsert].on ? "on" : "off")
+          << ", LA-2A style " << (ch.strip.slots[stripOpto].on ? "on" : "off") << (ch.link ? ", STEREO with the next channel" : "")
           << ", records " << recordWords[(int) ch.record];
         if (ch.directReturn >= 0)
             t << ", direct out on return " << (ch.directReturn + 1);
@@ -1119,10 +1275,13 @@ juce::String Mixer::reportText() const
         t << ", " << (s.mono ? "mono" : "stereo") << ", level " << (s.mute ? juce::String ("MUTED") : dbText (s.levelDb));
         if (o > 0)
             t << ", sends taken " << (s.preFader ? "before" : "after") << " the faders";
-        t << ", EQ " << (s.chain.slots[0].on ? "on" : "off") << ", notches " << (s.chain.slots[1].on ? "on" : "off")
-          << ", compressor " << (s.chain.slots[2].on ? "on" : "off")
-          << ", limiter " << (s.chain.slots[3].on ? "on at " + juce::String (s.chain.slots[3].param ("ceiling", -1.0f), 1) + " dB" : juce::String ("off"))
-          << ", delay " << juce::String (s.chain.slots[4].on ? s.chain.slots[4].param ("ms", 0.0f) : 0.0f, 1) << " ms\n";
+        if (o > 0)
+            t << " and " << (s.tap == TapPoint::beforeProcessing ? "before each channel's processing" : s.tap == TapPoint::afterEq ? "after each channel's EQ (before its compressors)" : "after each channel's compressors");
+        t << ", EQ " << (s.chain.slots[outEq].on ? "on" : "off") << ", notches " << (s.chain.slots[outNotches].on ? "on" : "off")
+          << ", compressor " << (s.chain.slots[outComp].on ? "on" : "off") << ", bus compressor " << (s.chain.slots[outBus].on ? "on" : "off")
+          << ", tape " << (s.chain.slots[outTape].on ? "on" : "off")
+          << ", limiter " << (s.chain.slots[outLimiter].on ? "on at " + juce::String (s.chain.slots[outLimiter].param ("ceiling", -1.0f), 1) + " dB" : juce::String ("off"))
+          << ", delay " << juce::String (s.chain.slots[outDelay].on ? s.chain.slots[outDelay].param ("ms", 0.0f) : 0.0f, 1) << " ms\n";
     }
 
     const auto l = load();
@@ -1145,6 +1304,8 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     laneData.assign ((size_t) numMixSockets * (size_t) capacity, 0.0f);
     stray.assign ((size_t) capacity, 0.0f);
     work.assign ((size_t) capacity, 0.0f);
+    tapPre.assign ((size_t) capacity, 0.0f);
+    tapMid.assign ((size_t) capacity, 0.0f);
     silence.assign ((size_t) capacity, 0.0f);
     directData.assign ((size_t) 8 * (size_t) capacity, 0.0f);
     directUsed.fill (false);
@@ -1152,6 +1313,7 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     for (auto& c : chans)
     {
         c.strip.prepare (rate, capacity);
+        c.strip2.prepare (rate, capacity);
         c.wasOn = false;
         c.trimG = c.mainL = c.mainR = c.directG = {};
         c.monL = {}; c.monR = {}; c.fxG = {};
@@ -1285,7 +1447,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
             addGliding (to, work.data(), start2, step2, n);
         }
 
+        // A monitor can take its sends before the processing, after the tone blocks (gate,
+        // warmth, EQ) or after the compressors, so a wedge need not hear the squeeze.
+        juce::FloatVectorOperations::copy (tapPre.data(), work.data(), n);
         ch.strip.process (work.data(), n);
+        juce::FloatVectorOperations::copy (tapMid.data(), work.data(), n);
+        ch.strip2.process (work.data(), n);
         raise (ch.peak, peakOf (work.data(), n));
 
         const float fader = on && ! ch.mute.load (std::memory_order_relaxed) ? ch.fader.load (std::memory_order_relaxed) : 0.0f;
@@ -1304,10 +1471,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         {
             auto& out = outs[(size_t) (m + 1)];
             const float send = ! on ? 0.0f : ch.mon[(size_t) m].load (std::memory_order_relaxed) * (out.preFader.load (std::memory_order_relaxed) ? 1.0f : fader);
+            const int tap = out.tap.load (std::memory_order_relaxed);
+            const float* from = tap == 0 ? tapPre.data() : tap == 1 ? tapMid.data() : work.data();
             ch.monL[(size_t) m].advance (send * left, fastStep, n, start, step);
-            addGliding (out.bus[0].data(), work.data(), start, step, n);
+            addGliding (out.bus[0].data(), from, start, step, n);
             ch.monR[(size_t) m].advance (send * right, fastStep, n, start, step);
-            addGliding (out.bus[1].data(), work.data(), start, step, n);
+            addGliding (out.bus[1].data(), from, start, step, n);
             sounding = sounding || ch.monL[(size_t) m].now != 0.0f || ch.monR[(size_t) m].now != 0.0f;
         }
 

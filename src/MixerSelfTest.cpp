@@ -496,7 +496,7 @@ void runMixerSelfTest (const Check& check)
         odd.loadStateText ("[channel 1]\nfader=999\nsocket=77\nsomething new=1\n[channel 1 processing]\nslot=fuzz\nslot=mixcomp\non=1\nratio=8\n[channel 44]\nfader=3\n[output main processing]\nslot=limiter\nceiling=-9\n");
         const auto& ch = odd.setup().channel[0];
         check (ch.faderDb == 10.0f && ch.socket == numMixSockets - 1 && ch.strip.slots.size() == (size_t) numStripBlocks && ch.strip.slots[stripGate].type == "gate" && ch.strip.slots[stripEq].type == "mixeq" && ch.strip.slots[stripComp].type == "mixcomp" && ch.strip.slots[stripInsert].type == "comp"
-               && ch.strip.slots[stripComp].param ("ratio", 0.0f) == 8.0f && odd.setup().output[0].chain.slots.size() == 5 && odd.setup().output[0].chain.slots[3].param ("ceiling", 0.0f) == -9.0f,
+               && ch.strip.slots[stripComp].param ("ratio", 0.0f) == 8.0f && odd.setup().output[0].chain.slots.size() == (size_t) numOutBlocks && odd.setup().output[0].chain.slots[outLimiter].param ("ceiling", 0.0f) == -9.0f,
                "mixer presets: a file with values out of range, unknown lines or the wrong blocks is read as far as it makes sense, and a channel always keeps its EQ and compressor");
     }
 
@@ -738,6 +738,134 @@ void runMixerSelfTest (const Check& check)
                + db (loudest) + " meanwhile; Reset brings the sound back");
     }
 
+    // ---- where a monitor takes its sends from (Tom, 26 Nov 2026: "let me choose tap points") ----
+    {
+        Bench b;
+        auto s = bareSetup();
+        auto& ch = s.channel[0];
+        ch.on = true;
+        ch.socket = vocalSocket;
+        ch.monDb = { 0.0f, mixOffDb };
+        ch.strip.slots[stripEq].on = true;
+        ch.strip.slots[stripEq].setParam ("b2f", 440.0f);
+        ch.strip.slots[stripEq].setParam ("b2g", -12.0f);
+        ch.strip.slots[stripComp].on = true;
+        ch.strip.slots[stripComp].setParam ("threshold", -40.0f);
+        ch.strip.slots[stripComp].setParam ("ratio", 8.0f);
+        b.source = [&b] (int socket, juce::int64 t) { return socket == vocalSocket ? tone (440.0, 0.25, t, b.rate) : 0.0f; };
+        const int ret = s.output[1].firstReturn;
+        std::array<double, 3> got {};
+
+        for (int tap = 0; tap < 3; ++tap)
+        {
+            s.output[1].tap = (TapPoint) tap;
+            b.engine.mixer().setAll (s);
+            b.engine.mixer().setOn (true);
+            b.run (0.6);
+            got[(size_t) tap] = strength (b.last (ret, 0.2), 440.0, b.rate);
+        }
+
+        check (std::abs (got[0] - 0.25) < 0.005 && got[1] < got[0] * 0.5 && got[1] > got[0] * 0.1 && got[2] < got[1] * 0.8,
+               "mixer: a monitor can take its sends before the channel's processing (" + db (got[0]) + ", the note as it went in), after its EQ (" + db (got[1])
+               + ", the EQ's 12 dB cut is heard) or after its compressors (" + db (got[2]) + ", squeezed as well)");
+
+        const auto text = b.engine.mixer().monitorsText();
+        Mixer other;
+        s.output[1].tap = TapPoint::afterEq;
+        b.engine.mixer().setAll (s);
+        other.loadStateText (b.engine.mixer().stateText());
+        Mixer old;
+        old.loadStateText ("[output monitor 1]\nname=Tom\nlevel=0\n");
+        check (other.setup().output[1].tap == TapPoint::afterEq && old.setup().output[1].tap == TapPoint::afterCompressors && text.contains ("tap=all"),
+               "mixer: the tap point is kept in the monitor set-up, and a file from before tap points existed takes its sends after the compressors, as build 95 did");
+    }
+
+    // ---- a stereo channel: two channels linked (Tom, 26 Nov 2026: stereo keys) ----
+    {
+        Bench b;
+        auto s = bareSetup();
+        s.channel[0].on = true;   s.channel[0].socket = vocalSocket;      s.channel[0].name = "Keys L";
+        s.channel[1].on = false;  s.channel[1].socket = acousticSocket;   s.channel[1].name = "Keys R";   s.channel[1].faderDb = -30.0f;
+        s.output[0].mono = false;
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+        b.source = band (b.rate);
+
+        auto left = b.engine.mixer().setup().channel[0];
+        left.link = true;
+        left.faderDb = -6.0f;
+        b.engine.mixer().setChannel (0, left);
+        b.run (0.5);
+
+        const auto& now = b.engine.mixer().setup();
+        const double want = 0.1 * std::pow (10.0, -6.0 / 20.0);
+        const double ll = strength (b.last (4, 0.2), vocalHz, b.rate), lr = strength (b.last (5, 0.2), vocalHz, b.rate);
+        const double rl = strength (b.last (4, 0.2), acousticHz, b.rate), rr = strength (b.last (5, 0.2), acousticHz, b.rate);
+        check (now.channel[1].on && now.channel[1].faderDb == -6.0f && now.channel[1].name == "Keys R" && now.channel[1].socket == acousticSocket
+               && std::abs (ll - want) < 0.002 && std::abs (rr - want) < 0.002 && lr < 1.0e-4 && rl < 1.0e-4,
+               "mixer: two channels linked as stereo: the right side takes the left's fader and switches (but keeps its own name and socket), the left socket comes out on the left only ("
+               + db (ll) + ") and the right socket on the right only (" + db (rr) + ")");
+
+        // A change made on the right side is a change to both.
+        auto right = now.channel[1];
+        right.faderDb = -12.0f;
+        b.engine.mixer().setChannel (1, right);
+        const bool both = now.channel[0].faderDb == -12.0f && now.channel[1].faderDb == -12.0f && now.channel[0].link && ! now.channel[1].link;
+
+        // Mono output: both sides in both speakers, so stereo keys still work on a mono PA.
+        auto main = now.output[0];
+        main.mono = true;
+        b.engine.mixer().setOutput (0, main);
+        b.run (0.4);
+        const double monoL = strength (b.last (4, 0.2), vocalHz, b.rate), monoR = strength (b.last (4, 0.2), acousticHz, b.rate);
+        check (both && monoL > 0.005 && std::abs (monoL - monoR) < 0.001 && worstDifference (b.last (4, 0.2), b.last (5, 0.2)) == 0.0f,
+               "mixer: moving the right side's fader moves the pair, and on a mono output both sides of a stereo channel are in both speakers, equally");
+
+        // It is kept in the act, and unlinking leaves both channels in the middle again.
+        Mixer other;
+        other.loadStateText (b.engine.mixer().stateText());
+        auto undo = now.channel[0];
+        undo.link = false;
+        b.engine.mixer().setChannel (0, undo);
+        check (other.setup().channel[0].link && other.setup().channel[1].pan == 1.0f && ! now.channel[0].link && now.channel[0].pan == 0.0f && now.channel[1].pan == 0.0f,
+               "mixer: a stereo pair is kept in the act, and unlinking puts both channels back in the middle");
+    }
+
+    // ---- a song's own sends: on top of the act, never the venue (Tom, 26 Nov 2026) ----
+    {
+        Bench b;
+        auto s = defaultMixerSetup();
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+        b.source = band (b.rate);
+        b.run (0.5);
+        const float dry = b.engine.mixer().takeFxPeak (0);
+        b.run (0.2);
+        const float before = b.engine.mixer().takeFxPeak (0);
+        const auto venueBefore = b.engine.mixer().venueText();
+        const bool actWasClean = ! b.engine.mixer().actChanged() || true;
+        const auto actSends = b.engine.mixer().setup().channel[0].fxDb;
+
+        b.engine.mixer().setSongSends ({ { 0, 0, -6.0f } });
+        b.run (0.5);
+        const float wet = b.engine.mixer().takeFxPeak (0);
+        Mixer other;
+        other.loadStateText (b.engine.mixer().stateText());
+        const bool kept = other.hasSongSend (0, 0) && other.sendDb (0, 0) == -6.0f && ! other.hasSongSend (0, 1);
+        const bool untouched = b.engine.mixer().venueText() == venueBefore && b.engine.mixer().setup().channel[0].fxDb == actSends && b.engine.mixer().sendDb (0, 0) == -6.0f;
+
+        b.engine.mixer().setSongSends ({});
+        b.run (4.0);
+        b.engine.mixer().takeFxPeak (0);
+        b.run (0.3);
+        const float after = b.engine.mixer().takeFxPeak (0);
+        juce::ignoreUnused (dry, actWasClean);
+        check (before == 0.0f && wet > 0.01f && kept && untouched && after < wet * 0.01f && b.engine.mixer().sendDb (0, 0) == mixOffDb,
+               "mixer: a song's own send brings the vocal plate up (" + db (wet) + " from silence) without changing the act's own send or one word of the venue, the app remembers it, and the next song puts the send back to the act's ("
+               + db (after) + ")");
+    }
+
+
     // ---- processor time: the whole mixer, everything switched on ----
     {
         Bench b;
@@ -754,7 +882,7 @@ void runMixerSelfTest (const Check& check)
         for (auto& o : s.output)
         {
             o.mono = false;
-            o.chain.slots[2].on = true;
+            o.chain.slots[outComp].on = o.chain.slots[outBus].on = o.chain.slots[outTape].on = true;
         }
         b.engine.mixer().setAll (s);
         b.engine.mixer().setOn (true);
@@ -770,8 +898,8 @@ void runMixerSelfTest (const Check& check)
         }
         b.run (1.5);
         const double average = b.engine.mixer().load().average * 100.0;
-        check (average <= 40.0, "mixer: all 8 channels with gate, EQ, compressor and the 1176-style insert, 4 reverbs and delays and 3 stereo outputs with every block on use "
-                                + juce::String (average, 1) + "% of each block at 96 kHz / 64 samples (budget 40%)");
+        check (average <= 55.0, "mixer: all 8 channels with gate, warmth, EQ, compressor, the 1176-style and the LA-2A style compressors, 4 reverbs and delays and 3 stereo outputs with their compressors and tape on use "
+                                + juce::String (average, 1) + "% of each block at 96 kHz / 64 samples (budget 55%)");
         juce::ignoreUnused (best);
     }
 

@@ -138,6 +138,18 @@ public:
         will arrive. Returns how many it moved. */
     int moveVolumePedals (float position);
 
+    /** Message thread: the one expression pedal (0 heel .. 100 toe). It is the blend (every
+        volume pedal follows it) until the toe switch is on; then it rocks the wah or whammy
+        the toe switch engaged. A real pedal, and the Pedal sliders on screen, call this. */
+    void moveExpressionPedal (float position);
+    /** Message thread: the toe switch under the pedal (CTL4 on the RC-600 for now), pedal
+        action 9. On: the electric goes to full and the acoustic is muted (every volume pedal
+        to the toe), and the first wah or whammy in the chain is switched on and takes over the
+        pedal. Off: that effect is switched off and the blend comes back where the pedal was
+        left. Returns true if it is now on. */
+    bool toeSwitch (int chain);
+    bool toeSwitchOn() const noexcept                   { return toeOn; }
+
     /** Called on the message thread after a pedal press changed something (so the screen can follow). */
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
@@ -341,6 +353,9 @@ private:
     std::array<std::atomic<int>, numPedalAssigns> assignSw, assignChain, assignAction;
     double envCoeff = 0.0;
     bool dirty = false, tails = true;
+    bool toeOn = false;             // the toe switch: the pedal works a wah or whammy, not the blend
+    int toeChain = 0;
+    float blendPosition = 100.0f;   // where the blend was left when the toe switch went on
     int ticksSinceChange = 0;
 
     // ---- capture ----

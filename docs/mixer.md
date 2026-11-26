@@ -1,7 +1,10 @@
 # The mixer
 
-Built 26 November 2026. This is the first build of the rig's own mixer: the part that will
-replace the CQ12T. It lives on the **Mixer** tab, the last tab in the app.
+Built 26 November 2026. This is the rig's own mixer: the part that will replace the CQ12T.
+It lives on the **Mixer** tab, the last tab in the app. The second build, the same day, added
+what Tom asked for after reading the first: the studio-style blocks (warmth, an LA-2A style
+compressor, a bus compressor, a tape machine), tap points for the monitors, stereo channels,
+songs that set sends, the blend pedal's even-loudness travel and the toe switch.
 
 **It starts switched off, and switched off it changes nothing.** Effect chains and loops go
 straight to their returns and the CQ12T does the mixing, exactly as in every build before.
@@ -14,11 +17,12 @@ instead; untick it and you are back where you were.
 a socket, after its effects chain (the same point the looper hears)
   + every loop that was recorded from that socket      (each loop comes back on its own channel)
   -> record point "after the looper", and the direct out for a sound crew
-  -> the channel: gate, EQ, compressor, 1176-style insert
+  -> the channel: gate, warmth, EQ, compressor, 1176-style compressor, LA-2A style compressor
   -> fader, pan, mute -> main mix
-  -> sends: monitor 1, monitor 2, and the four reverbs and delays
+  -> sends: the four reverbs and delays (after everything), and monitor 1 and monitor 2
+     (each monitor chooses: before the processing, after the EQ, or after the compressors)
 reverbs and delays -> low cut and high cut on the wet sound -> main mix (and the monitors, if sent)
-main mix and each monitor -> EQ, notches, compressor, limiter, speaker delay, level -> a return
+main mix and each monitor -> EQ, notches, compressor, bus compressor, tape, limiter, speaker delay, level -> a return
 ```
 
 What follows from that order:
@@ -42,19 +46,83 @@ The thin amber bar beside a meter shows how far the compressor (or limiter) is t
 **Press a strip's name** and everything about it appears underneath:
 
 - **A channel:** its name, which socket it comes from, trim, pan, what it records, a direct
-  out, its sends to each monitor and each reverb or delay, and four blocks of processing:
-  **Gate**, **EQ**, **Compressor** and **1176 style**. Press a block's button to see its
-  sliders; **This block on** switches it in and out. Double-click a slider for its starting point.
+  out, its sends to each monitor and each reverb or delay, and six blocks of processing:
+  **Gate**, **Warmth**, **EQ**, **Compressor**, **1176 style** and **LA-2A style**. Press a
+  block's button to see its sliders; **This block on** switches it in and out. Double-click a
+  slider for its starting point. Under the sends are two switches: **Stereo with channel N**
+  and **Belong to this song, not the act** (both explained below).
 - **A reverb or delay:** which effect it is, a **low cut and high cut on its wet sound**
   (so an obvious reverb on a voice stays clean), how much goes into each monitor, and the
   effect's own sliders. The strip's fader is how loud it comes back.
 - **An output:** which return it goes out on, mono or stereo, and its blocks: **EQ**,
-  **Notches** (six narrow cuts for feedback and room booms), **Compressor**, **Limiter** and
-  **Speaker delay**. Monitors also choose whether their sends are taken before or after the
-  channel faders.
+  **Notches** (six narrow cuts for feedback and room booms), **Compressor**, **Bus comp**,
+  **Tape**, **Limiter** and **Speaker delay**. Monitors also choose whether their sends are
+  taken before or after the channel faders, and **from where in each channel**.
 
 The channel EQ is fully parametric: a low cut, a low shelf, **four bells** (each with where,
 how much and how wide), a high shelf and a high cut.
+
+### The studio-style blocks
+
+All four start switched off, and all are in the Effects tab's list too (under **Studio**), so
+they can go in an effects chain as well.
+
+- **Warmth** (every channel, before the EQ): a touch of valve-desk colour. **Drive** adds the
+  harmonics, **Colour** leans it dark or bright, **Level** trims. The loudness stays about
+  where it was as Drive goes up.
+- **LA-2A style** (every channel, last): the slow, smooth studio leveller with two knobs,
+  **Peak reduction** and **Gain**, and a Compress or Limit switch. Kind to a voice or a bass.
+- **Bus comp** (main and both monitors): the desk-style compressor that glues a mix together.
+  Threshold, ratio (2, 4 or 10), attack, release, make-up, a low cut on what it listens to (so
+  the stomp does not pump the mix) and **Mix** to blend the untouched sound back in.
+- **Tape** (main and both monitors): a tape machine across the mix. **Drive** pushes the tape,
+  **Tape speed** chooses 7.5, 15 or 30 inches a second (slower is fatter and softer on top),
+  **Level** trims.
+
+The amber bar beside a strip's meter adds up every compressor on that strip.
+
+### Where a monitor takes its sends from
+
+Press **Monitor 1** or **Monitor 2**. **From where in each channel** has three choices:
+
+- **Before its processing:** the plain channel (live sound and loops), no gate, EQ or compressor.
+- **After its gate and EQ:** the tone, without the squeeze. Good for a wedge, where a
+  compressor brings feedback closer.
+- **After its compressors:** everything, as the main mix hears it. This is how it starts.
+
+It is separate from **Before the faders**, which decides whether the channel's fader and mute
+change the monitor. The choice is saved in the monitor set-up.
+
+### Stereo channels (keys, a backing track)
+
+Press the left channel of the two, then tick **Stereo with channel N** (the next channel
+along). From then on the pair is one stereo channel: the left one pans hard left, the right
+one hard right, and every fader, mute, send, EQ and compressor setting made on either is made
+on both. Each keeps its own name and its own socket. On a mono output both sides are in both
+speakers, so stereo keys still work on a mono PA. Untick it and both go back to the middle.
+The two compressors work each side on its own (they are not tied together), which is the one
+thing a true stereo channel would do differently.
+
+In-ears in stereo use four returns: the starter monitor set-up **Two in-ears (stereo)** puts
+Monitor 1 on returns 1 and 2 and Monitor 2 on returns 3 and 4.
+
+### Sends that belong to a song
+
+A song can set how much of a channel goes to a reverb or a delay, and nothing else in the
+mixer. It **never changes the venue**: not the reverbs and delays themselves, not the main output.
+
+1. Load the song. On the **Mixer** tab press the channel's name (say **Vocal**).
+2. Tick **Belong to this song, not the act**. The four reverb and delay sends are now marked
+   **(song)**.
+3. Set them.
+4. On the **Songs** tab press **Keep these sounds for this song**. The song's file gets a line for each,
+   such as `send = Vocal / Vocal plate = -6.0`.
+
+When another song loads, the sends go back to what the act says, unless that song has lines
+of its own. The **Default sounds** file may have send lines too: they apply to every song
+that does not name that channel and effect itself. By hand, a line reads
+`send = channel / reverb or delay = level in dB` (or `off`), with the channel and the effect by
+name or by number (`channel 1`, `fx 2`).
 
 ### How it starts
 
@@ -62,7 +130,7 @@ how much and how wide), a high shelf and a high cut.
 |---|---|---|
 | Vocal | 6 | on |
 | Acoustic | 7 | on |
-| Stomp | 10 | off (no socket of its own yet); compressor ready |
+| Stomp | 10 | on; compressor on |
 | Electric | 8 | on |
 | Bass | 9 | on |
 | Duo vocal | 1 | off |
@@ -92,7 +160,8 @@ To save: type a name in the box and press **Save**. A star beside **Act**, **Ven
 **Monitors** means it has changed since it was loaded or saved; pressing **Save** with the
 same name puts tonight's changes back into the preset in one step.
 
-Changing songs never touches any of them.
+Changing songs never touches any of them. A song's own sends (above) sit on top of the act
+and are not saved in it.
 
 The app writes a few starters the first time (it never overwrites a file that is there):
 acts **Solo** and **Duo (partner sings and plays)**, venues **Starting point (flat)** and
@@ -146,17 +215,30 @@ the amp up as it turns down. Its settings are **Pedal** (heel 0, toe 100), **Hee
 
 The blend: put a Volume pedal in the electric chain as it is, and one in the acoustic chain
 with **Reversed** on. Both follow the one pedal, so toe down is all electric, heel down is
-all acoustic, and between is a blend. Until a real pedal is wired in, moving the **Pedal**
-slider of either one moves both (`EffectsRack::moveVolumePedals`, which is where a real
-expression pedal will arrive).
+all acoustic, and between is a blend. Set **Travel** to **Blend (even loudness)** on both and
+the two follow matching curves, so the overall loudness stays about the same all the way
+through the travel (in the middle each is 3 dB down). Until a real pedal is wired in, moving
+the **Pedal** slider of either one moves both (`EffectsRack::moveExpressionPedal`, which is
+where a real expression pedal will arrive).
+
+### The toe switch
+
+On the Effects tab, give a switch the action **toe switch** (Tom's choice for now: **CTL4**)
+on the electric chain. One press does what the pedal's toe switch will do: the electric goes
+to full, every other chain's volume pedal goes silent (the acoustic is muted), and the first
+**wah** or **whammy** in the electric chain switches on and follows the pedal. Press again:
+the wah or whammy goes off and the pedal is the blend again, from where it sits. In a song
+file the words are `switch CTL4 = chain 2 / toe switch`.
 
 ## Not built yet
 
-- The toe switch: electric to full, acoustic muted, and the song's wah or whammy engaged.
-- A song nudging the venue's delay time or reverb length.
+- A real expression pedal and its real toe switch (they need the board; CTL4 stands in).
 - Partial recall (only a venue's room EQ, say), and backing presets up.
 - Virtual soundcheck and the Recordings tab (copy to USB, delete).
-- More than two monitor mixes, spare sends for delay speakers, linked stereo channels (keys).
+- More than two monitor mixes (Tom: two is enough), spare sends for delay speakers, stereo
+  channels whose compressors are tied together, a stereo main mix by default (mono for now).
+- Looping a duo partner (Tom wants the option later): today a loop returns to the channel of
+  the socket it was recorded from, so it already works for any socket a track records.
 - Remote preamp gain: that needs the real interface.
 - The tablet's simple everyday view. This tab is the workstation view.
 
@@ -168,6 +250,7 @@ expression pedal will arrive).
 | `src/MixRecorder.h/.cpp` | Writes the WAV files off the audio thread. |
 | `src/effects/mixer/MixerBlocks.*` | The mixer's own blocks: `mixeq`, `mixcomp`, `notches`, `limiter`, `linedelay`, `wetfilter`. They follow the Effect interface, so the standard effect checks run on them, but they are listed apart (`mixerEffectTypes()`) so the Effects tab does not offer them. |
 | `src/effects/volume/` | The volume pedal effect. |
+| `src/effects/la2a/`, `warmth/`, `tape/`, `buscomp/` | The studio-style blocks (ordinary effects, group "Studio"). |
 | `src/MixerPanel.*` | The Mixer tab. |
 | `src/MixerSelfTest.cpp`, `src/effects/mixer/MixerBlockChecks.cpp` | The checks. |
 
@@ -185,7 +268,13 @@ expression pedal will arrive).
 - **The words in preset files are on Tom's disk: never rename them, only add.** That is the
   section names (`[channel 1]`, `[fx 1 effect]`, `[output main processing]` and so on), the
   keys (`name`, `on`, `socket`, `trim`, `fader`, `mute`, `pan`, `monitor1`, `fx1`, `record`,
-  `direct`, `lowcut`, `highcut`, `return`, `level`, `mono`, `prefader`, `pair`), the record
-  words (`none`, `raw`, `effects`, `looper`), and the block and setting ids.
+  `direct`, `link`, `lowcut`, `highcut`, `return`, `level`, `mono`, `prefader`, `tap`, `pair`),
+  the record words (`none`, `raw`, `effects`, `looper`), the tap words (`pre`, `eq`, `all`),
+  the `[song sends]` section of `mixer.txt`, and the block and setting ids.
+- A channel's blocks run as two chains (`Chan::strip`, the tone blocks up to `stripSplit`, and
+  `Chan::strip2`, the compressors) so a monitor can tap between them. The block order in the
+  files is one list all the same.
+- A song's sends are `Mixer::setSongSends` (from `resolveSends` in `src/SongBook.cpp`): an
+  overlay read through `Mixer::sendDb`, never written into the act.
 - Screenshots in the cloud: `GIGRIG_TAB=7` opens on the Mixer tab and `GIGRIG_MIXER_STRIP=12.3`
   chooses strip 12 (the main output) with its fourth block shown.

@@ -89,6 +89,7 @@ std::vector<std::pair<juce::String, juce::String>> all()
         { "starteracoustic_txt", "Starter - Acoustic" },
         { "startervocal_txt",    "Starter - Vocal" },
         { "starterbass_txt",     "Starter - Bass (Bass9 copy)" },
+        { "vocalforthemixer_txt", "Vocal - for the mixer" },
     };
 
     std::vector<std::pair<juce::String, juce::String>> list;

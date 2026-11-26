@@ -102,6 +102,21 @@ namespace
 
 void runSongSelfTest (const Check& check)
 {
+    // ---- a song's sends to the mixer's reverbs and delays (26 Nov 2026) ----
+    {
+        const auto song = SongSounds::fromText ("send = Vocal / Vocal plate = -6\nsend = channel 2 / fx 3 = off\nsend = Nobody / Vocal plate = -3\nsend = Vocal / plate\nsend = Vocal / Vocal delay = loud\n");
+        const auto fallback = SongSounds::fromText ("send = vocal / vocal plate = -20\nsend = Electric / Instrument room = -9.5\n");
+        juce::StringArray problems;
+        const auto sends = resolveSends (song, &fallback, defaultMixerSetup(), problems);
+        const auto again = SongSounds::fromText (song.toText ("x"));
+        check (song.sends.size() == 3 && song.notUnderstood.size() == 2 && sends.size() == 3 && problems.size() == 1
+               && sends[0].channel == 0 && sends[0].fx == 0 && sends[0].db == -6.0f
+               && sends[1].channel == 1 && sends[1].fx == 2 && sends[1].db == mixOffDb
+               && sends[2].channel == 3 && sends[2].fx == 2 && sends[2].db == -9.5f
+               && again.sends.size() == 3 && again.sends[1].db == mixOffDb && again.sends[0].effect == "Vocal plate",
+               "songs: a 'send' line sets a mixer channel's send to a reverb or delay by name or by number; the song's line wins over the default's, a name the mixer does not have is reported, and the lines come back from the file as they were written");
+    }
+
     // ---- delays and reverbs ring out when a chain's effects are changed ----
     {
         // Playing through a delay, then the chain changes to one without it and the playing stops.

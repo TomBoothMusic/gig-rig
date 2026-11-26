@@ -16,12 +16,19 @@ VolumePedal::VolumePedal()
     pPedal = addParam ("pedal", "Pedal", "", 0.0f, 100.0f, 100.0f, 30.0f);
     pHeel  = addParam ("heel", "Heel level", "dB", (float) heelSilentDb, 0.0f, (float) heelSilentDb);
     pReverse = addToggle ("reverse", "Reversed (heel is loud)", false);
+    pCurve = addChoice ("curve", "Travel", { "Volume pedal", "Blend (even loudness)" }, 0);
 }
 
-double VolumePedal::gainFor (double pedal, double heelDb) noexcept
+double VolumePedal::gainFor (double pedal, double heelDb, bool blend) noexcept
 {
     const double heel = heelDb <= heelSilentDb + 0.5 ? 0.0 : std::pow (10.0, heelDb / 20.0);
     const double p = std::clamp (pedal / 100.0, 0.0, 1.0);
+
+    // Blend: a quarter turn of a circle, so this pedal and a reversed one always add up to the
+    // same loudness (half way each is 3 dB down, and the two together sound as loud as one alone).
+    if (blend)
+        return heel + (1.0 - heel) * std::sin (p * 1.5707963267948966);
+
     return heel + (1.0 - heel) * std::pow (p, 2.5);        // half way is about -15 dB, as an audio-taper pot
 }
 
@@ -31,7 +38,7 @@ void VolumePedal::onReset() noexcept        { primed = false; }
 void VolumePedal::processChunk (float* const* ch, int numCh, int n) noexcept
 {
     const float pedal = value (pReverse) >= 0.5f ? 100.0f - value (pPedal) : value (pPedal);
-    const float target = (float) gainFor (pedal, value (pHeel));
+    const float target = (float) gainFor (pedal, value (pHeel), value (pCurve) >= 0.5f);
 
     if (! primed)
     {
@@ -108,6 +115,20 @@ void volumeChecks (const Check& check)
         }
         check (std::abs (atHeel - 0.5f) < 1.0e-4f && std::abs (y.back()) < 1.0e-6f,
                "volume: reversed, heel down is full level and toe down is silence, so one pedal can fade the acoustic out as it fades the electric in");
+    }
+
+    // The blend travel: this pedal and a reversed one keep the same loudness all the way.
+    {
+        double worstDb = 0.0;
+        for (int pos = 0; pos <= 100; pos += 5)
+        {
+            const double e = VolumePedal::gainFor (pos, -80.0, true), a = VolumePedal::gainFor (100.0 - pos, -80.0, true);
+            worstDb = std::max (worstDb, std::abs (10.0 * std::log10 (e * e + a * a)));
+        }
+        const double half = 20.0 * std::log10 (VolumePedal::gainFor (50.0, -80.0, true));
+        check (worstDb < 0.01 && std::abs (half + 3.01) < 0.05 && VolumePedal::gainFor (100.0, -80.0, true) > 0.9999 && VolumePedal::gainFor (0.0, -80.0, true) < 1.0e-9,
+               "volume: on the Blend travel the electric and the reversed acoustic together stay the same loudness all the way (within " + std::to_string (worstDb).substr (0, 5)
+               + " dB), each 3 dB down half way, full at its own end and silent at the other");
     }
 
     // A fast swell: the level never steps.

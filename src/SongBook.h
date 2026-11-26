@@ -22,6 +22,7 @@ namespace gigrig
         switch CTL4 = chain 1 / next amp
         switch CTL3 = chain 3 / delay throw
         amps = chain 1 / Dream 65 - Clean / Dream 65 - Break Up
+        send = Vocal / Vocal plate = -6
 
     A song NAMES presets (the files in Documents/GigRig/Effect presets); it does not copy them.
     So editing a preset changes every song that names it. 'set' lines are the song's own
@@ -32,6 +33,7 @@ struct SongSounds
     struct Setting      { juce::String chain, effect, setting, value; };     // setting "on": value "1" or "0"
     struct Switch       { int sw = -1; juce::String chain, action; };
     struct AmpList      { juce::String chain; juce::StringArray models; };
+    struct Send         { juce::String channel, effect; float db = 0.0f; };      // a mixer channel's send to a mixer reverb or delay
 
     int program = 0;                    // 1 to 128 as Songbook Pro and the RC-600 count them, 0 = none
     juce::String looper;                // the looper layout to use (a built-in song's name); empty = its own, or the general one
@@ -42,9 +44,10 @@ struct SongSounds
     bool hasSwitches = false;           // true when the file says anything about switches (even "switches = none")
     std::vector<Switch> switches;
     std::vector<AmpList> amps;
+    std::vector<Send> sends;            // on top of the act while this song is loaded; never changes the venue
     juce::StringArray notUnderstood;    // lines the reader could not use, for the report
 
-    bool saysAnything() const noexcept  { return ! chains.empty() || ! settings.empty() || hasSwitches || ! amps.empty(); }
+    bool saysAnything() const noexcept  { return ! chains.empty() || ! settings.empty() || hasSwitches || ! amps.empty() || ! sends.empty(); }
 
     juce::String toText (const juce::String& title, const juce::StringArray& chainNames = {}) const;
     static SongSounds fromText (const juce::String& text);
@@ -63,6 +66,11 @@ struct ResolvedSounds
     std::vector<EffectsRack::PedalAssign> switches;
     juce::StringArray problems;                                         // a preset that is missing, a setting no effect has...
 };
+
+/** The mixer sends a song asks for, worked out against the mixer as it is: "Vocal" or "channel 2"
+    for the channel, "Vocal plate" or "fx 1" for the reverb or delay. The song's lines win; the
+    fallback's (the default sounds) fill in the pairs the song does not name. Pure. */
+std::vector<Mixer::SongSend> resolveSends (const SongSounds& song, const SongSounds* fallback, const MixerSetup&, juce::StringArray& problems);
 
 using PresetLoader = std::function<bool (const juce::String& name, fx::ChainModel&)>;
 

@@ -748,6 +748,63 @@ changed**: use the app exactly as before until you want to try it.
 2. Move the **Pedal** slider of either one: both move. At 100 you should hear only the
    electric, at 0 only the acoustic, and a blend between.
 
+## The mixer, second build
+
+Built from Tom's answers after the first build. Set up as above (**Mixer on**), then:
+
+### Part F: the pedal as an even blend, and the toe switch on CTL4 (10 minutes, Effects tab)
+
+1. With the two Volume pedals from Part E in place, set **Travel** to **Blend (even
+   loudness)** on both.
+2. Strum the acoustic and the electric in turn while moving a **Pedal** slider slowly from 0
+   to 100. The overall loudness should stay about the same, with no dip in the middle.
+3. Put a **Wah** (or the **Whammy**) in the electric chain, switched off.
+4. In the switches area of the Effects tab, give **CTL4** the action **toe switch** on the
+   electric chain.
+5. Press CTL4 on the RC-600. The electric should jump to full, the acoustic should go silent,
+   and the wah should come on. Move the **Pedal** slider: it now sweeps the wah.
+6. Press CTL4 again: the wah goes off and the blend is back where it was.
+
+### Part G: the studio-style blocks (15 minutes, Mixer tab)
+
+1. Click **Vocal**. Click **LA-2A style: off** and tick **This block on**. Raise **Peak
+   reduction** until the amber bar moves when you sing, then bring the level back with **Gain**.
+2. Click **Warmth: off**, tick **This block on**, and raise **Drive**. It should get thicker,
+   not louder. Try it on the acoustic and the bass too.
+3. Click the **Main** strip. Switch on **Bus comp** and lower **Threshold** until the amber
+   bar moves a little on the loud parts. Try **Mix** at 50.
+4. Still on Main: switch on **Tape**, raise **Drive**, and try the three **Tape speed** choices.
+
+### Part H: where a monitor takes its sends from (5 minutes)
+
+1. Click **Monitor 1**. Under **From where in each channel** choose **Before its processing**,
+   then **After its gate and EQ**, then **After its compressors**, listening to that monitor
+   with a compressor working hard on the vocal. You should hear the EQ and the squeeze come
+   and go in the monitor while the main mix stays the same.
+
+### Part I: a stereo channel (5 minutes)
+
+1. Plug something stereo (keys, or a phone playing music) into two sockets.
+2. Click **Duo vocal**, tick **On** under In use, and choose the left socket under **Comes
+   from**. Click **Duo instrument** and choose the right socket.
+3. Click **Duo vocal** again and tick **Stereo with channel 7**. Move either fader: both move.
+4. Click **Main** and untick **Mono** to hear it left and right; tick it again and both sides
+   should be in both speakers.
+
+### Part J: a song with its own reverb and delay sends (10 minutes)
+
+1. On the **Effects** tab, load the preset **Vocal - for the mixer** on the vocal chain. It is
+   your vocal EQ and compressor, the harmony and the delay throw, with no reverb and no
+   everyday delay: those are the mixer's job now.
+2. On the **Mixer** tab click **Vocal** and raise **To Vocal plate** to taste. That is the
+   act's everyday reverb.
+3. Load a song in the Song box. Click **Vocal**, tick **Belong to this song, not the act**,
+   and raise **To Vocal delay (song)**.
+4. On the **Songs** tab press **Keep these sounds for this song**.
+5. Load another song: the delay send should drop back. Load the first again: it comes back.
+6. Check the **Vocal delay** strip itself (its time, its feedback) is the same for both songs:
+   a song only changes how much of a channel goes to it.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.
