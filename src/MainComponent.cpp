@@ -9,12 +9,12 @@ MainComponent::MainComponent()
     title.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
     title.setColour (juce::Label::textColourId, style::textMain);
 
-    subtitle.setText ("Audio through the CQ, the RC-600 as the pedal, the looper and the first effects.   Build " + juce::String (GIGRIG_BUILD_LABEL),
+    subtitle.setText ("The looper, effects and mixer, with the RC-600 as the pedal.   Build " + juce::String (GIGRIG_BUILD_LABEL),
                       juce::dontSendNotification);
     subtitle.setFont (juce::Font (juce::FontOptions (14.0f)));
     subtitle.setColour (juce::Label::textColourId, style::textDim);
 
-    copyButton.setTooltip ("Copies the latency results and the device list, ready to paste to Claude");
+    copyButton.setTooltip ("Copies the whole report (every tab's part: devices, audio, pedal, looper, songs, effects, mixer and kick pad), ready to paste to Claude");
     copyButton.onClick = [this]
     {
         juce::SystemClipboard::copyTextToClipboard (devicePanel.reportText() + "\n" + engine.reportText());
@@ -98,7 +98,7 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer).
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 

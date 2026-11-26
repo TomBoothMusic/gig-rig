@@ -1107,7 +1107,7 @@ void runLooperSelfTest (const Check& check)
     }
 
     // =========================================================================
-    // Linked actions (Dreams) and stopping at the end of the loop (Songbird)
+    // Linked actions (Dreams) and stopping at the end of the loop (the "loop-end stops" fixture, once Songbird)
     // =========================================================================
     {
         Rig rig (48000.0, 64, 150, 250, "Dreams");
@@ -1159,18 +1159,18 @@ void runLooperSelfTest (const Check& check)
         const auto start = rig.tap (0);
         rig.run (bar - (rig.time - start));
         rig.tap (0);                                    // track 1: 1 preset bar, sets the tempo
-        check (rig.bar() == bar, "Songbird: track 1's single preset bar sets the tempo");
+        check (rig.bar() == bar, "loop-end stops: track 1's single preset bar sets the tempo");
 
         rig.runSeconds (0.25);
         rig.tap (2);                                    // track 3: 17 preset bars, stops at the end of its loop
         rig.run ((start + 2 * bar + 64) - rig.time);
-        check (rig.track (2).state == TrackState::recording, "Songbird: track 3 starts on the bar");
+        check (rig.track (2).state == TrackState::recording, "loop-end stops: track 3 starts on the bar");
         rig.run ((start + 19 * bar + 64) - rig.time);
-        check (rig.track (2).state == TrackState::playing && rig.length (2) == 17 * bar, "Songbird: and closes itself after 17 bars");
+        check (rig.track (2).state == TrackState::playing && rig.length (2) == 17 * bar, "loop-end stops: and closes itself after 17 bars");
 
         rig.runSeconds (3.0);
         rig.doubleTap (2);                              // double-press = stop; this track's stop mode is "end of the loop"
-        check (rig.track (2).state == TrackState::stopping, "Songbird: stop on track 3 waits for the end of its loop");
+        check (rig.track (2).state == TrackState::stopping, "loop-end stops: stop on track 3 waits for the end of its loop");
         rig.run ((start + 36 * bar - 9600) - rig.time);
         check (rig.track (2).state == TrackState::stopping, "still playing just before the loop ends");
         rig.run (9600 + 640);

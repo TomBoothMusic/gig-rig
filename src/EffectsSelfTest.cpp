@@ -189,8 +189,14 @@ void runEffectsSelfTest (const Check& check)
         // Pedal switches.
         rack.setPedalAssign (0, { 10, 0, 0 });
         check (rack.takePedal (10, true) && ! rack.takePedal (3, true), "effects: CTL4 goes to the effects when chosen, other switches stay with the looper");
+        check (rack.pedalUse (10) == "chain 1 A/B" && rack.pedalUse (3).isEmpty(),
+               "effects: the Looper tab is told what the effects do with CTL4 (\"" + rack.pedalUse (10) + "\"), and nothing for a switch the looper still has");
+        rack.setPedalAssign (1, { 8, 2, 6 });
+        check (rack.pedalUse (8) == "chain 3 wah sweep while held" && rack.takePedal (8, true) && rack.takePedal (8, false),
+               "effects: a switch on a second row is named too, and it is the same switch the effects really take");
+        rack.setPedalAssign (1, { -1, 0, 0 });
         rack.setEnabled (false);
-        check (! rack.takePedal (10, true), "effects: with the effects off, CTL4 goes back to the looper");
+        check (! rack.takePedal (10, true) && rack.pedalUse (10).isEmpty(), "effects: with the effects off, CTL4 goes back to the looper and its tile says so");
         rack.setEnabled (true);
         rack.setPedalAssign (0, { -1, 0, 0 });
 

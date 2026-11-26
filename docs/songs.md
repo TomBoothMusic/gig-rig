@@ -94,7 +94,9 @@ set again.
 - **Forget this song's own sounds**: removes the sound lines. The program number stays.
 - **Set this song's sounds again**: back to what the file says.
 - **New entry**: a new song with the loaded song's looper layout and the sounds as they stand.
-- **Switches**: six rows. What they show is saved by the **Keep** buttons.
+- **Switches**: six rows. What they show is saved by the **Keep** buttons. On the **Looper** tab,
+  the tile of a switch the effects have taken says **Effects:** and what it does (for example
+  "Effects: chain 2 next amp sound") in place of its looper job (`EffectsRack::pedalUse`).
 - **Delays and reverbs ring out when the sound changes**: see below.
 - **Open in its own window**: lifts the Songs tab out into its own window (for a second screen,
   with the Effects tab open in the main window). Closing it, or **Put back as a tab**, returns it.

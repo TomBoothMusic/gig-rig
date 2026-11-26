@@ -154,6 +154,10 @@ public:
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
     juce::String pedalText() const;
+    /** What the effects do with one pedal switch, in a few words ("chain 2 wah sweep while held"),
+        or nothing when the looper has it: the effects are off, or no row names the switch.
+        The Looper tab shows it on the switch's tile, so a switch that no longer loops says so. */
+    juce::String pedalUse (int sw) const;
 
     /** Loudest peak on an input since the last call (every input, whether a chain uses it or not). */
     float takeSocketMax (int input) noexcept            { return input >= 0 && input < 16 ? socketMax[(size_t) input].exchange (0.0f) : 0.0f; }
@@ -304,6 +308,7 @@ public:
     void bypassBlock (const float* const* inputs, int numIns, int numSamples) noexcept;
 
 private:
+    juce::String pedalAssignText (const PedalAssign&, bool brief) const;
     bool rockPedal (int chain, const char* type, bool toeDown);
     std::atomic<double> tempoNow { 0.0 }, tappedBpm { 0.0 };
     std::atomic<bool> tempoFromLoop { false };
