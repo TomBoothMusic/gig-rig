@@ -750,6 +750,14 @@ void MixerPanel::rebuildDetail()
             later();
         });
 
+        for (const bool asDefault : { false, true })
+            addButton (2, asDefault ? 130 : 140, asDefault ? "Save as default" : "Save to this song", [this, index, asDefault, later]
+            {
+                note = onKeepEffect != nullptr ? onKeepEffect (index, asDefault) : juce::String();
+                noteTicks = 0;
+                later();
+            });
+
         auto* low = addSlider (0, 150, "Low cut on the wet sound", 20.0, 1000.0, 1.0, " Hz", f.lowCutHz, 20.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.lowCutHz = v; }); });
         low->setSkewFactorFromMidPoint (140.0);
         auto* high = addSlider (0, 150, "High cut on the wet sound", 1000.0, 20000.0, 10.0, " Hz", f.highCutHz, 20000.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.highCutHz = v; }); });

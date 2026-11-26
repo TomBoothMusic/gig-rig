@@ -138,6 +138,98 @@ void runSongSelfTest (const Check& check)
                + juce::String (list.size()) + " set, " + juce::String (problems.size()) + " reported)");
     }
 
+    // ---- moving a song's vocal reverb and delay and the acoustic's room into the mixer ----
+    {
+        const PresetLoader load = [] (const juce::String& name, fx::ChainModel& m)
+        {
+            const char* text = name == "Vocal"    ? "slot=comp\non=1\nslot=digitaldelay\non=0\nthrow=1\nmix=30\nslot=tapedelay\non=0\ntime=124.5\nmix=27\nslot=analogdelay\non=1\ntime=52.8\nmix=31\nslot=plate\non=1\nreverb=1.05\ndecay=3.55\n"
+                             : name == "Acoustic" ? "slot=comp\non=1\nslot=analogdelay\non=1\ntime=80\nslot=room\non=1\nreverb=1.65\ndecay=4\n"
+                             : name == "Electric" ? "slot=amp\non=1\nslot=digitaldelay\non=1\ntime=300\nslot=spring\non=1\n"
+                                                  : nullptr;
+            if (text == nullptr)
+                return false;
+
+            m = fx::ChainModel::fromText (text);
+            return true;
+        };
+        const juce::StringArray names { "Acoustic", "Electric", "Bass", "Vocal" };
+        const std::array<int, EffectsRack::numChains> feeds { 1, 3, 4, 0 };       // the default mixer: Vocal, Acoustic, Stomp, Electric, Bass
+        const auto mixer = defaultMixerSetup();
+        const auto valueOf = [] (const SongSounds::MixerEffect& e, const char* id)
+        {
+            for (const auto& v : e.values)
+                if (v.first == id)
+                    return v.second;
+            return -1.0f;
+        };
+        const auto offLine = [] (const SongSounds& s, const char* chain, const char* effect)
+        {
+            return std::count_if (s.settings.begin(), s.settings.end(), [&] (const auto& x) { return x.chain == chain && x.effect == effect && x.setting == "on" && x.value == "0"; }) == 1;
+        };
+
+        // A song with a tape echo of its own on the vocal (the slapback switched off), and the acoustic and electric as the presets have them.
+        const auto song = SongSounds::fromText ("program = 7\nchain 1 = Acoustic\nchain 2 = Electric\nchain 4 = Vocal\nset = chain 4 / tapedelay / on\nset = chain 4 / tapedelay / time = 140\n"
+                                                "set = chain 4 / analogdelay / off\nset = chain 4 / plate / reverb = 2.5\nswitch CTL4 = chain 4 / delay throw\n");
+        const auto m = moveToMixer (song, names, feeds, mixer, load);
+        const auto& fxs = m.song.mixerEffects;
+        const bool three = m.changed && fxs.size() == 3 && m.song.sends.empty();
+        check (three && fxs[0].effect == "Instrument room" && fxs[0].type == "room" && valueOf (fxs[0], "reverb") == 1.65f && valueOf (fxs[0], "decay") == 4.0f
+               && fxs[1].effect == "Vocal plate" && fxs[1].type == "plate" && valueOf (fxs[1], "reverb") == 2.5f && valueOf (fxs[1], "decay") == 3.55f
+               && fxs[2].effect == "Vocal delay" && fxs[2].type == "tapedelay" && valueOf (fxs[2], "time") == 140.0f && valueOf (fxs[2], "mix") == 27.0f,
+               "move to the mixer: the acoustic's room, the vocal's plate and the vocal's own tape echo each become a 'mixer effect' line with the settings the song had "
+               "(the song's own changes on top of the preset's), and no send line is written: the send level is the venue's (" + juce::String (fxs.size()) + " lines)");
+        check (three && offLine (m.song, "chain 1", "room") && offLine (m.song, "chain 4", "plate") && offLine (m.song, "chain 4", "tapedelay")
+               && offLine (m.song, "chain 4", "analogdelay") && ! offLine (m.song, "chain 4", "digitaldelay") && ! offLine (m.song, "chain 1", "analogdelay"),
+               "move to the mixer: the copies in the chains are switched off by the song's own lines, and the acoustic's delay and the delay throw are not touched");
+        check (std::none_of (m.song.settings.begin(), m.song.settings.end(), [] (const auto& x) { return x.chain == "chain 2"; })
+               && std::none_of (fxs.begin(), fxs.end(), [] (const auto& x) { return x.type == "spring" || x.type == "digitaldelay"; })
+               && m.song.program == 7 && m.song.chains.size() == 3 && m.song.switches.size() == 1,
+               "move to the mixer: a chain with an amp in it is left alone (electric delays and reverbs stay in the chain), and the song's program, presets and switches are as they were");
+        check (m.sends.size() == 3 && m.sends[0] == std::pair<int, int> { 1, 2 } && m.sends[1] == std::pair<int, int> { 0, 0 } && m.sends[2] == std::pair<int, int> { 0, 1 },
+               "move to the mixer: it says which sends must be open for the moved sounds to be heard (Acoustic to the room, Vocal to the plate and the delay)");
+
+        // The moved song, resolved: the chains no longer have them on, the mixer has them.
+        const std::array<fx::ChainModel, EffectsRack::numChains> nothing;
+        const auto after = resolveSounds (m.song, nullptr, names, nothing, load);
+        juce::StringArray problems;
+        const auto inMixer = resolveMixerEffects (m.song, nullptr, mixer, problems);
+        const auto onIn = [&after] (int chain, const char* type)
+        {
+            for (const auto& s : after.model[(size_t) chain].slots)
+                if (s.type == type)
+                    return s.on;
+            return false;
+        };
+        check (after.problems.isEmpty() && problems.isEmpty() && inMixer.size() == 3 && ! onIn (3, "plate") && ! onIn (3, "tapedelay") && ! onIn (0, "room") && onIn (0, "analogdelay") && onIn (1, "spring"),
+               "move to the mixer: the moved song loads without a problem, with those three off in the chains and set in the mixer");
+
+        // A second go changes nothing, and neither does the file's round trip.
+        const auto twice = moveToMixer (SongSounds::fromText (m.song.toText ("x", names)), names, feeds, mixer, load);
+        check (! twice.changed && twice.song.toText ("x", names) == m.song.toText ("x", names), "move to the mixer: pressing it a second time changes nothing");
+
+        // A song with the vocal's delays all off says so with the delay's level at nothing, so the venue's send does not give it one.
+        const auto dry = moveToMixer (SongSounds::fromText ("chain 4 = Vocal\nset = chain 4 / analogdelay / off\n"), names, feeds, mixer, load);
+        check (dry.changed && dry.song.mixerEffects.size() == 2 && dry.song.mixerEffects[1].effect == "Vocal delay" && valueOf (dry.song.mixerEffects[1], "mix") == 0.0f
+               && valueOf (dry.song.mixerEffects[0], "reverb") == 1.05f,
+               "move to the mixer: a song with no vocal delay switched on gets the mixer's delay with its level at nothing, so it stays dry whatever the venue's send is");
+
+        // A song that names no chain follows the default sounds and is not written to; lines the app could not read stop the move.
+        const auto follows = moveToMixer (SongSounds::fromText ("program = 9\nlooper = Dreams\n"), names, feeds, mixer, load);
+        const auto odd = moveToMixer (SongSounds::fromText ("chain 4 = Vocal\nsend = Vocal\n"), names, feeds, mixer, load);
+        check (! follows.changed && ! odd.changed && odd.notes.size() == 1, "move to the mixer: a song with no chains of its own is left to follow the default sounds, and a file with a line the app cannot read is left alone");
+
+        // Saving one mixer effect into a song replaces the line for that effect only.
+        auto kept = m.song;
+        fx::ChainModel echo;
+        echo.slots.resize (1);
+        echo.slots[0].type = "analogdelay";
+        echo.slots[0].setParam ("time", 99.0f);
+        putMixerEffect (kept, mixerEffectLine (1, echo, mixer), mixer);
+        check (kept.mixerEffects.size() == 3 && kept.mixerEffects[2].type == "analogdelay" && valueOf (kept.mixerEffects[2], "time") == 99.0f && kept.mixerEffects[1].type == "plate"
+               && kept.settings.size() == m.song.settings.size() && mixerEffectFromWords ("fx 2", mixer) == 1 && mixerEffectFromWords ("vocal delay", mixer) == 1,
+               "save to this song: one mixer reverb or delay saved into a song replaces that effect's line and nothing else in the file");
+    }
+
     // ---- delays and reverbs ring out when a chain's effects are changed ----
     {
         // Playing through a delay, then the chain changes to one without it and the playing stops.

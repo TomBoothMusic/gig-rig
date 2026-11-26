@@ -175,6 +175,36 @@ own. The **Default sounds** file may have these lines too. By hand a line reads
 or number (`fx 2`); a setting left out takes the effect's own starting value. The ids the
 mixer has are `plate`, `room`, `spring`, `tapedelay`, `analogdelay` and `digitaldelay`.
 
+**Save to this song** and **Save as default**, under the tick box, do steps 2 to 4 for that one
+effect in one press: the effect as it is now is written into the loaded song's file (or the
+Default sounds file) and nothing else in the file changes.
+
+Tom's split, 27 Nov 2026: **the song carries the effect's own settings** (which delay, its time,
+how much reverb), and **the send level is the venue's choice**, set on the channel and saved
+with the act. A song with no vocal delay has the mixer's delay with its **Mix** at 0, so it
+stays dry whatever the send is. (`send =` lines in a song still work for a song that needs one.)
+
+### Moving songs made before the mixer
+
+**Move reverbs and delays to the mixer** on the Songs tab does it for every song file at once.
+It first copies the whole songs folder to a folder beside it called **Songs backup** with the
+date and time. Then, for each song that names its own presets for the vocal or the acoustic:
+
+- the vocal's reverb that is on becomes that song's **Vocal plate** line, with the same settings;
+- the vocal's delay that is on (not a delay throw) becomes that song's **Vocal delay** line;
+- the acoustic's reverb that is on becomes that song's **Instrument room** line;
+- the copies in the effects chains are switched off by `set` lines in the song. Presets are not changed.
+
+A send that was off is opened at 0 dB, where the sound is what it was in the chain; save the
+act to keep it. Chains with an amp or the bass in them are left alone, so electric delays stay
+in their chain. Songs that follow the Default sounds follow it here too. Pressing it twice
+changes nothing the second time. **Put the songs back** copies the newest backup back. The
+report lists what moved, song by song, on lines starting **Moved to the mixer**.
+
+Which mixer effect is which is worked out from names: a channel with "vocal" in its name goes
+to the reverb and the delay with "vocal" in their names, any other channel to the reverb
+without. With the mixer off the moved effects are not heard.
+
 An effect set the same way in an effects chain and in the mixer sounds the same: send 0 dB,
 return 0 dB, and the effect's own **Mix** does the same job in both places.
 

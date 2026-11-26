@@ -84,6 +84,8 @@ channel's sends to the mixer's reverbs and delays (`send =` lines, an overlay on
 which reverb or delay each of the mixer's four effects is and its settings (`mixer effect =`
 lines, an overlay on the venue; Tom's decision, 27 Nov 2026), and nothing else in the mixer:
 **a song never changes the venue itself** (each effect's EQ, cuts and levels, the main output).
+Tom's split (27 Nov 2026): the song carries a reverb's or delay's own settings, the send level is
+the venue's choice. `moveToMixer` in `src/SongBook.cpp` (the Songs tab button) moves old songs over.
 
 ## Adding an effect
 

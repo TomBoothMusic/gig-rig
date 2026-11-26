@@ -22,6 +22,9 @@ class MixerPanel final : public juce::Component,
 {
 public:
     explicit MixerPanel (AudioEngine&);
+
+    /** "Save to this song" and "Save as default" on a mixer reverb or delay: writes it into the song's file (or the default sounds) and returns a line for the screen. */
+    std::function<juce::String (int fx, bool asDefault)> onKeepEffect;
     ~MixerPanel() override;
 
     void paint (juce::Graphics&) override;

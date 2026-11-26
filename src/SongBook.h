@@ -83,6 +83,34 @@ std::vector<Mixer::SongFx> resolveMixerEffects (const SongSounds& song, const So
 
 using PresetLoader = std::function<bool (const juce::String& name, fx::ChainModel&)>;
 
+/** Which of the mixer's reverbs and delays a file means by "Vocal delay" or "fx 2". -1 = none. */
+int mixerEffectFromWords (const juce::String& words, const MixerSetup&);
+
+/** A mixer reverb or delay as a song file's line: its name (or "fx 2" when the name will not do), what it is, every setting. */
+SongSounds::MixerEffect mixerEffectLine (int fx, const fx::ChainModel& effect, const MixerSetup&);
+
+/** Puts a mixer effect line into a song's sounds in place of any line for the same reverb or delay. */
+void putMixerEffect (SongSounds&, const SongSounds::MixerEffect&, const MixerSetup&);
+
+/** Moves one song's vocal reverb, vocal delay and acoustic room out of its effects chains and into
+    the mixer (Tom, 27 Nov 2026): for each chain the song names itself that feeds a mixer channel,
+    the reverb that is on (and, on a vocal channel, the delay that is on and is not a delay throw)
+    becomes a 'mixer effect' line with the same settings, and the copy in the chain is switched
+    off with a 'set' line. A song with none switched on gets the line with its level at nothing.
+    The send level is the venue's choice, so no 'send' line is written: 'sends' lists the channel
+    and effect pairs whose send must be open for the moved sounds to be heard. A chain with an amp or the bass in it is left
+    alone (electric delays stay where they are), so are delay throws, presets, and anything the
+    song already has mixer lines for (so a second go changes nothing). chainChannel: the mixer channel each chain feeds, -1 = none. Pure. */
+struct MovedToMixer
+{
+    SongSounds song;
+    bool changed = false;
+    juce::StringArray notes;
+    std::vector<std::pair<int, int>> sends;     // mixer channel, mixer effect
+};
+MovedToMixer moveToMixer (const SongSounds& song, const juce::StringArray& chainNames,
+                          const std::array<int, EffectsRack::numChains>& chainChannel, const MixerSetup&, const PresetLoader& loadPreset);
+
 /** Which chain a file means by "chain 2", "2" or a chain's own name. -1 = none. */
 int chainFromWords (const juce::String& words, const juce::StringArray& chainNames);
 
@@ -186,6 +214,16 @@ public:
         name and program number (0 = none). Returns an error, or an empty string. */
     juce::String addEntry (const juce::String& name, int program);
 
+    /** Writes one mixer reverb or delay as it is now (which it is, every setting) into the loaded
+        song's file, or into the default sounds, and nothing else: the chains are not touched. */
+    juce::String keepMixerEffect (int fx, bool asDefault);
+    /** Moves every song's vocal reverb, vocal delay and acoustic room into the mixer (moveToMixer),
+        after copying the whole songs folder to a backup folder beside it. */
+    juce::String moveSoundsToMixer();
+    /** Puts the song files back from the newest backup moveSoundsToMixer made. */
+    juce::String restoreSongsBackup();
+    juce::File newestBackup() const;
+
     /** One line for the screen: "Wicked Game (program 11): its own sounds on chains 1 and 3, default on chain 2." */
     juce::String statusLine() const;
     juce::String lastNote() const                   { return note; }
@@ -214,7 +252,7 @@ private:
     int current = 0;
     SongSetup loadedSong;
     juce::String note, soundsFrom, folderStamp;
-    juce::StringArray problems, programLog;
+    juce::StringArray problems, programLog, moveLog;
     std::array<int, EffectsRack::numChains> chainFrom {};   // 0 = left alone, 1 = the song's own lines, 2 = the default sounds
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongBook)
