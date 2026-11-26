@@ -51,6 +51,7 @@ namespace
         if (type == "comp")         return "1176 style";
         if (type == "la2a")         return "LA-2A style";
         if (type == "warmth")       return "Warmth";
+        if (type == "enhancer")     return "Enhancer";
         if (type == "buscomp")      return "Bus comp";
         if (type == "tape")         return "Tape";
         if (type == "mixeq")        return "EQ";
@@ -70,6 +71,7 @@ namespace
         if (type == "gate")         return "Shuts the channel when nothing is played, so a quiet stage stays quiet. Threshold is how loud a sound must be to open it.";
         if (type == "comp")         return "An analog-style insert after the EQ and compressor: the 1176-style compressor from the effects list, for a voice or a bass that should sound pressed and forward.";
         if (type == "la2a")         return "A slow, smooth valve-studio leveller with two knobs, kind to a voice or a bass. Turn Peak reduction up until the amber bar moves, then make the level up with Gain.";
+        if (type == "enhancer")     return "The gentle gate for a voice: untouched while you sing, turned down by Depth between phrases, never shut. Set Threshold just under your quietest singing; Time is how slowly it closes.";
         if (type == "warmth")       return "A touch of valve-desk colour before the EQ: Drive adds the harmonics, Colour leans it dark or bright, and the loudness stays about where it was.";
         if (type == "buscomp")      return "The desk-style compressor that glues a whole mix together. A few dB of movement on the amber bar is plenty; Mix blends the untouched sound back in.";
         if (type == "tape")         return "A tape machine across the whole mix: gentle squeeze on the peaks, a low bump and a softer top. Drive pushes the tape harder.";
@@ -1012,6 +1014,18 @@ void MixerPanel::paint (juce::Graphics& g)
             const float frac = juce::jlimit (0.0f, 1.0f, (dbNow + 60.0f) / 66.0f);
             g.setColour (dbNow > -3.0f ? style::red : dbNow > -12.0f ? style::amber : style::green);
             g.fillRect (bar.withTop (bar.getBottom() - bar.getHeight() * frac));
+        }
+
+        if (s.kind == Kind::channel)
+        {
+            // The level guide: with Trim right, loud playing peaks between the two marks
+            // (-18 and -9 dB), which is where the compressors, tape and limiter are made to work.
+            const auto y = [&s] (float dbAt) { return (float) s.meter.getBottom() - (float) s.meter.getHeight() * (dbAt + 60.0f) / 66.0f; };
+            g.setColour (juce::Colours::white.withAlpha (0.22f));
+            g.fillRect (juce::Rectangle<float> ((float) s.meter.getX(), y (-9.0f), (float) s.meter.getWidth() - 4.0f, y (-18.0f) - y (-9.0f)));
+            g.setColour (juce::Colours::white.withAlpha (0.7f));
+            g.fillRect ((float) s.meter.getX(), y (-9.0f), (float) s.meter.getWidth() - 4.0f, 1.0f);
+            g.fillRect ((float) s.meter.getX(), y (-18.0f), (float) s.meter.getWidth() - 4.0f, 1.0f);
         }
 
         if (s.kind != Kind::fx)

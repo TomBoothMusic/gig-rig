@@ -898,7 +898,7 @@ void runMixerSelfTest (const Check& check)
         }
         b.run (1.5);
         const double average = b.engine.mixer().load().average * 100.0;
-        check (average <= 55.0, "mixer: all 8 channels with gate, warmth, EQ, compressor, the 1176-style and the LA-2A style compressors, 4 reverbs and delays and 3 stereo outputs with their compressors and tape on use "
+        check (average <= 55.0, "mixer: all 8 channels with gate, source enhancer, warmth, EQ, compressor, the 1176-style and the LA-2A style compressors, 4 reverbs and delays and 3 stereo outputs with their compressors and tape on use "
                                 + juce::String (average, 1) + "% of each block at 96 kHz / 64 samples (budget 55%)");
         juce::ignoreUnused (best);
     }

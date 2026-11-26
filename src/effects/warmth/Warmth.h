@@ -24,10 +24,10 @@ private:
     void processChunk (float* const* ch, int numCh, int n) noexcept override;
     void update();
 
-    int pDrive, pColour, pLevel;
+    int pDrive, pColour, pLevel, pMix;
     Biquad low, high;
     OnePole dc;
-    double k = 0.5, bias = 0.0, offset = 0.0, norm = 1.0, out = 1.0;
+    double k = 0.5, bias = 0.0, offset = 0.0, norm = 1.0, out = 1.0, mix = 1.0;
 };
 
 } // namespace gigrig::fx

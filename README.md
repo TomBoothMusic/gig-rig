@@ -745,7 +745,7 @@ changed**: use the app exactly as before until you want to try it.
 
 1. On the **Effects** tab, in the electric chain, add **Volume pedal** and move it to sit
    between the drives and the amp. In the acoustic chain add another and switch its **Reversed (heel is loud)** on.
-2. Move the **Pedal** slider of either one: both move. At 100 you should hear only the
+2. Move the **Pedal position** slider of either one: both move. At 100 you should hear only the
    electric, at 0 only the acoustic, and a blend between.
 
 ## The mixer, second build
@@ -756,13 +756,13 @@ Built from Tom's answers after the first build. Set up as above (**Mixer on**), 
 
 1. With the two Volume pedals from Part E in place, set **Travel** to **Blend (even
    loudness)** on both.
-2. Strum the acoustic and the electric in turn while moving a **Pedal** slider slowly from 0
+2. Strum the acoustic and the electric in turn while moving a **Pedal position** slider slowly from 0
    to 100. The overall loudness should stay about the same, with no dip in the middle.
 3. Put a **Wah** (or the **Whammy**) in the electric chain, switched off.
 4. In the switches area of the Effects tab, give **CTL4** the action **toe switch** on the
    electric chain.
 5. Press CTL4 on the RC-600. The electric should jump to full, the acoustic should go silent,
-   and the wah should come on. Move the **Pedal** slider: it now sweeps the wah.
+   and the wah should come on. Move the **Pedal position** slider: it now sweeps the wah.
 6. Press CTL4 again: the wah goes off and the blend is back where it was.
 
 ### Part G: the studio-style blocks (15 minutes, Mixer tab)
@@ -804,6 +804,19 @@ Built from Tom's answers after the first build. Set up as above (**Mixer on**), 
 5. Load another song: the delay send should drop back. Load the first again: it comes back.
 6. Check the **Vocal delay** strip itself (its time, its feedback) is the same for both songs:
    a song only changes how much of a channel goes to it.
+
+### Part K: the source enhancer, Warmth's Mix and the level marks (10 minutes)
+
+Added after Tom's first test of the mixer.
+
+1. Each channel's meter now has a lighter band between two marks. Sing your loudest and raise
+   the Vocal channel's **Trim** until the peaks land inside the band. Do the same for each
+   instrument. The limiter, tape and compressors should now work without extreme settings.
+2. Click **Vocal**, click **Enhancer: off** and tick **This block on**. Stop singing and lower
+   or raise **Threshold** until the room noise and spill drop when you are quiet but your
+   quietest singing still comes through whole. **Depth** is how far it turns down in the gaps.
+3. Try **Time** at A and at F: A closes quickly after each phrase, F slowly.
+4. Click **Warmth**, switch it on with **Drive** high, and move **Mix** between 0 and 100.
 
 ### What to send Claude
 

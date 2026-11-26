@@ -23,7 +23,7 @@ namespace gigrig
         socket, after its effects chain (the same point the looper hears)
           + every loop that was recorded from that socket          <- each loop returns to its own channel
           -> record point "after looper"
-          -> channel gate, warmth, EQ, then compressor, 1176-style and LA-2A style compressors
+          -> channel gate, source enhancer, warmth, EQ, then compressor, 1176-style and LA-2A style compressors
           -> fader, pan, mute -> main mix
           -> sends: monitor 1, monitor 2, and the four mixer effects (reverbs and delays)
         mixer effects -> wet low cut and high cut -> main mix and monitors
@@ -49,9 +49,9 @@ constexpr int numMixSockets = 16;
 constexpr float mixOffDb = -90.0f;      // a fader or send at or below this is off
 
 /** Where each block sits in a channel's processing (MixChannelSetup::strip). */
-constexpr int stripGate = 0, stripWarmth = 1, stripEq = 2, stripComp = 3, stripInsert = 4, stripOpto = 5, numStripBlocks = 6;
-/** The first blocks (gate, warmth, EQ) are the channel's tone; from here on it is the compressors. A monitor can take its sends between the two. */
-constexpr int stripSplit = 3;
+constexpr int stripGate = 0, stripEnhancer = 1, stripWarmth = 2, stripEq = 3, stripComp = 4, stripInsert = 5, stripOpto = 6, numStripBlocks = 7;
+/** The first blocks (gate, source enhancer, warmth, EQ) are the channel's tone; from here on it is the compressors. A monitor can take its sends between the two. */
+constexpr int stripSplit = 4;
 /** Where each block sits in an output's processing (MixOutputSetup::chain). */
 constexpr int outEq = 0, outNotches = 1, outComp = 2, outBus = 3, outTape = 4, outLimiter = 5, outDelay = 6, numOutBlocks = 7;
 
@@ -75,7 +75,7 @@ struct MixChannelSetup
     RecordPoint record = RecordPoint::afterLooper;
     int directReturn = -1;              // sound-crew direct out: this channel alone (live and looped, before its EQ) on a return; -1 = none
     bool link = false;                  // stereo: the next channel is this one's right side and follows every setting (this one pans left, that one right)
-    fx::ChainModel strip;               // gate, warmth, mixeq | mixcomp, the 1176-style compressor (comp), the LA-2A style one (la2a)
+    fx::ChainModel strip;               // gate, enhancer, warmth, mixeq | mixcomp, the 1176-style compressor (comp), the LA-2A style one (la2a)
 };
 
 struct MixFxSetup

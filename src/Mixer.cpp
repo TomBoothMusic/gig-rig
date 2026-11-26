@@ -315,6 +315,7 @@ fx::ChainModel defaultStripModel()
     // Gate, warmth (valve preamp) and EQ are the tone; then the clean compressor and two
     // analog-style ones (1176 style, LA-2A style). Only the EQ starts switched on.
     m.slots.push_back (slot ("gate", false));
+    m.slots.push_back (slot ("enhancer", false));       // the gentle gate for a voice (Tom, 27 Nov 2026)
     m.slots.push_back (slot ("warmth", false));
     m.slots.push_back (slot ("mixeq", true));
     m.slots.push_back (slot ("mixcomp", false));
@@ -1243,7 +1244,7 @@ juce::String Mixer::reportText() const
         for (int f = 0; f < numMixFx; ++f)
             if (sendDb (c, f) > mixOffDb || hasSongSend (c, f))
                 t << ", to " << now.fx[(size_t) f].name << " " << dbText (sendDb (c, f)) << (hasSongSend (c, f) ? " (this song's own; the act says " + dbText (ch.fxDb[(size_t) f]) + ")" : juce::String());
-        t << ", gate " << (ch.strip.slots[stripGate].on ? "on" : "off")
+        t << ", gate " << (ch.strip.slots[stripGate].on ? "on" : "off") << ", source enhancer " << (ch.strip.slots[stripEnhancer].on ? "on" : "off")
           << ", EQ " << (ch.strip.slots[stripEq].on ? "on" : "off") << " (low cut " << juce::String (ch.strip.slots[stripEq].param ("lowcut", 20.0f), 0) << " Hz)"
           << ", warmth " << (ch.strip.slots[stripWarmth].on ? "on" : "off")
           << ", compressor " << (ch.strip.slots[stripComp].on ? "on" : "off") << ", 1176 style " << (ch.strip.slots[stripInsert].on ? "on" : "off")

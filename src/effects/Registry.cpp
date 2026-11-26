@@ -11,6 +11,7 @@
 #include "wah/Wah.h"
 #include "volume/VolumePedal.h"
 #include "la2a/OptoComp.h"
+#include "enhancer/SourceEnhancer.h"
 #include "warmth/Warmth.h"
 #include "tape/TapeMachine.h"
 #include "buscomp/BusComp.h"
@@ -61,6 +62,7 @@ void wahChecks (const Check&);
 void volumeChecks (const Check&);
 void optoCompChecks (const Check&);
 void warmthChecks (const Check&);
+void sourceEnhancerChecks (const Check&);
 void tapeChecks (const Check&);
 void busCompChecks (const Check&);
 void mixerBlockChecks (const Check&);
@@ -123,10 +125,12 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "wah",          "Wah pedal",             "Filter", "A Cry Baby style wah. Rock it with the Pedal slider or a held switch; set where the sweep starts and ends, how narrow the peak is (Q) and how deep.",
           [] { return std::make_unique<Wah>(); }, wahChecks },
-        { "volume",       "Volume pedal",          "Utility", "A volume pedal you can place anywhere: between the drives and the amp it cleans the amp up as it turns down. Heel level sets how quiet the heel is.",
+        { "volume",       "Volume pedal",          "Utility", "A volume pedal you can place anywhere: between the drives and the amp it cleans the amp up as it turns down. Slide Pedal position to work it (it moves the volume pedal in every chain at once). Quietest level sets how quiet it gets when backed right off.",
           [] { return std::make_unique<VolumePedal>(); }, volumeChecks },
         { "la2a",         "LA-2A style compressor", "Studio", "The slow, smooth optical compressor for voices and bass: Peak reduction and Gain, Compress or Limit. On every mixer channel, and here for a chain.",
           [] { return std::make_unique<OptoComp>(); }, optoCompChecks },
+        { "enhancer",     "Source enhancer",        "Studio", "The gentle alternative to a gate on a microphone, in the style of the Portico 5045: untouched while you sing, turned down a few dB between phrases, never shut. On every mixer channel, and here for a chain.",
+          [] { return std::make_unique<SourceEnhancer>(); }, sourceEnhancerChecks },
         { "warmth",       "Warmth (valve preamp)",  "Studio", "A valve preamp's colour: clean when quiet, rounder and richer as Drive comes up. On every mixer channel, and here for a chain.",
           [] { return std::make_unique<Warmth>(); }, warmthChecks },
         { "tape",         "Tape machine",           "Studio", "A mix printed to reel-to-reel tape: soft squash on the peaks, the top tamed first, a bass bump set by the tape speed. On the mixer's outputs, and here for a chain.",
