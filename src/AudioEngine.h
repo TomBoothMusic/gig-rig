@@ -4,6 +4,7 @@
 
 #include "EffectsRack.h"
 #include "GlitchWatch.h"
+#include "KickPad.h"
 #include "LatencyProbe.h"
 #include "Looper.h"
 
@@ -221,6 +222,9 @@ public:
     void setLoopTrimMs (double ms)                  { loopTrimMs = ms; updateLoopTiming(); }
     double getLoopTrimMs() const noexcept           { return loopTrimMs; }
 
+    /** The kick pad test (docs/kick-pad.md): a pad's hits play a kick made in here, straight onto a pair of returns. */
+    KickPad& kick() noexcept                        { return kickCore; }
+
     //==============================================================================
     /** The audio thread's work. Public so the self-test can drive it. */
     void processBlock (const float* const* inputs, int numIns, float* const* outputs, int numOuts, int numSamples) noexcept;
@@ -299,6 +303,7 @@ private:
     std::vector<LatencyRow> rows;
     Looper loopCore;
     double loopTrimMs = 0.0;
+    KickPad kickCore;
 
     // Measured corrections from this and earlier runs, kept in a small file so the latency
     // test need not be repeated every time the app is opened. One line per setting:

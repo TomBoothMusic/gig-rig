@@ -101,6 +101,9 @@ target_sources(GigRig PRIVATE
     src/Responses.cpp
     src/EffectsSelfTest.cpp
     src/GlitchWatch.cpp
+    src/KickPad.cpp
+    src/KickPadPanel.cpp
+    src/KickPadSelfTest.cpp
     src/LatencyProbe.cpp
     src/Looper.cpp
     src/LooperPanel.cpp

@@ -7,6 +7,7 @@
 namespace gigrig
 {
 
+void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runLooperSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runEffectsSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runSongSelfTest (const std::function<void (bool, const juce::String&)>& check);
@@ -526,6 +527,7 @@ juce::String runSelfTest (bool& passed)
         check (engine.looper().snapshot().track[0].state == TrackState::playing, "a glitch check pauses the looper without losing the loop");
     }
 
+    runKickPadSelfTest (check);
     runLooperSelfTest (check);
     runEffectsSelfTest (check);
     runSongSelfTest (check);

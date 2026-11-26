@@ -6,6 +6,7 @@
 #include "AudioPanel.h"
 #include "DeviceCheckPanel.h"
 #include "EffectsPanel.h"
+#include "KickPadPanel.h"
 #include "LooperPanel.h"
 #include "PedalPanel.h"
 #include "SongBook.h"
@@ -40,6 +41,7 @@ private:
     AudioPanel audioPanel { engine };
     DeviceCheckPanel devicePanel;
     PedalPanel pedalPanel { pedal };
+    KickPadPanel kickPanel { engine };
     LooperPanel looperPanel { engine, pedal, songBook };
     SongsPanel songsPanel { engine, songBook };
     EffectsPanel effectsPanel { engine };

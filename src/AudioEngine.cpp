@@ -341,6 +341,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     updateLoopTiming();
     tonePhase = 0.0;
     hotSamples = 0;
+    kickCore.prepare (rate);
     resetDropoutStats();
 }
 
@@ -767,6 +768,13 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 
             tonePhase = std::fmod (tonePhase, juce::MathConstants<double>::twoPi);
         }
+    }
+
+    // ---- the kick pad test: its kick goes straight onto a pair of returns ------------------
+    {
+        // A device with no USB stereo channel (anything smaller than the CQ) plays it on its first pair.
+        const auto first = numOuts >= 16 ? kickCore.getReturnPair() * 2 : 0;
+        kickCore.process (output (first), output (first + 1), numSamples, pinging || checking || measuring.load());
     }
 
     // ---- the effects: before the looper, so loops record them ------------------

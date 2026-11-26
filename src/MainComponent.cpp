@@ -48,6 +48,7 @@ MainComponent::MainComponent()
     devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message)
     {
         pedal.handleMidi (deviceName, message);
+        engine.kick().handleMidi (deviceName, message);     // the kick pad test: a note from the SPD::ONE plays the kick
 
         if (message.isProgramChange())
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), deviceName, program = message.getProgramChangeNumber() + 1]
@@ -64,6 +65,9 @@ MainComponent::MainComponent()
         songsPanel.refresh();
     };
     devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
+
+    // The kick pad test gets its own tab and its own part of the report.
+    tabs.addTab ("Kick pad", style::background, &kickPanel, false);
 
     // The pedal and the looper add their parts to the report, and a glitch check
     // starts a fresh count of what the RC-600 sent while it ran.
@@ -104,6 +108,8 @@ MainComponent::MainComponent()
             if (safe != nullptr)
                 safe->songBook.programChange (program, "GIGRIG_PROGRAM");
         });
+
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + kickPanel.reportText(); };
 
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
