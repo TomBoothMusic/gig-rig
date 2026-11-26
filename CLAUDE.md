@@ -70,14 +70,6 @@ Logic in `src/SongBook.*` (no screen, checked by `src/SongSelfTest.cpp`), screen
 `src/SongsPanel.*`. The words used in song files (chain, effect, setting and switch-action
 names) are saved on Tom's disk: never rename them, only add.
 
-## The kick pad test
-
-Built 26 Nov 2026 as a **test** of an undecided idea (design doc, Effects, "Built-in kick pad"):
-the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was hit.
-**`docs/kick-pad.md` is the guide. Keep it true.** Logic in `src/KickPad.*` (no screen, checked by
-`src/KickPadSelfTest.cpp`), screen in `src/KickPadPanel.*`. Kick recordings are Tom's own files in
-`Documents/GigRig/Kick sounds`: never commit one.
-
 ## Adding an effect
 
 Tom wants to keep adding effects for years, mostly after his heavy-use
@@ -126,3 +118,11 @@ the exact steps, file names and rules. Keep it true.** In short:
 3. If anything is wrong at any point: `linux/rollback.sh`.
 4. Keep the design doc's effects list and the funny pedal names (in project
    memory) in step.
+
+## The kick pad test
+
+Built 26 Nov 2026 as a **test** of an undecided idea (design doc, Effects, "Built-in kick pad"):
+the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was hit.
+**`docs/kick-pad.md` is the guide. Keep it true.** Logic in `src/KickPad.*` (no screen, checked by
+`src/KickPadSelfTest.cpp`), screen in `src/KickPadPanel.*`. Kick recordings are Tom's own files in
+`Documents/GigRig/Kick sounds`: never commit one.
