@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "Responses.h"
 #include "SelfTest.h"
+#include "SongBook.h"
 
 namespace gigrig
 {
@@ -67,6 +68,39 @@ public:
         ampmodels::setUp (ampmodels::folder());
         responses::setUp();
         starterpresets::setUp (EffectsPanel::presetFolder());
+
+        //   GigRig --check-songs <songs folder> <presets folder> <result file> [--every-setting]
+        //   loads every song and lists its problems (and, when asked, every effect setting it ends up with)
+        if (args.contains ("--check-songs"))
+        {
+            const int at = args.indexOf ("--check-songs");
+            bool ok = false;
+
+            if (at + 3 < args.size())
+            {
+                const auto cwd = juce::File::getCurrentWorkingDirectory();
+                AudioEngine engine;
+                engine.openSimulated (96000.0, 64, 16, 16);
+
+                for (int c = 0; c < EffectsRack::numChains; ++c)
+                {
+                    auto r = engine.effects().routing (c);
+                    r.on = true;
+                    engine.effects().setRouting (c, r);
+                }
+
+                SongBook book (engine, cwd.getChildFile (args[at + 1].unquoted()), cwd.getChildFile (args[at + 2].unquoted()));
+                ok = cwd.getChildFile (args[at + 3].unquoted()).replaceWithText (book.checkEverySong (args.contains ("--every-setting")));
+            }
+            else
+            {
+                std::cout << "Use: GigRig --check-songs <songs folder> <presets folder> <result file>" << std::endl;
+            }
+
+            setApplicationReturnValue (ok ? 0 : 1);
+            quit();
+            return;
+        }
 
         // Only one window at a time. Two copies would both hear the pedal and both loop, each with
         // its own timing, which sounds like loops drifting apart (it happened on 23 Nov 2026).

@@ -1241,6 +1241,60 @@ juce::String SongBook::statusLine() const
     return t + parts.joinIntoString ("; ") + ".";
 }
 
+juce::String SongBook::checkEverySong (bool everySetting)
+{
+    juce::String t;
+    int withProblems = 0, withFiles = 0;
+
+    for (int i = 0; i < numEntries(); ++i)
+    {
+        load (i, "checking every song");
+        const auto& e = entries[(size_t) i];
+        withFiles += e.hasFile ? 1 : 0;
+        juce::StringArray lines (problems);
+
+        for (const auto& l : e.sounds.notUnderstood)
+            lines.add ("Line not understood: " + l);
+
+        withProblems += lines.isEmpty() ? 0 : 1;
+        t << (lines.isEmpty() ? "ok       " : "PROBLEM  ") << statusLine() << "\n";
+
+        for (const auto& l : lines)
+            t << "           " << l << "\n";
+
+        if (everySetting)
+        {
+            auto& rack = engine.effects();
+
+            for (int c = 0; c < EffectsRack::numChains; ++c)
+            {
+                const auto& m = rack.chain (c).model();
+
+                for (int k = 0; k < (int) m.slots.size(); ++k)
+                {
+                    const auto& slot = m.slots[(size_t) k];
+                    t << "    chain " << (c + 1) << " slot " << (k + 1) << " " << juce::String (slot.type) << (slot.on ? " on" : " off");
+
+                    if (auto* fx = rack.chain (c).effect (k))
+                        for (int p = 0; p < (int) fx->params().size(); ++p)
+                            t << " " << juce::String (fx->params()[(size_t) p].id) << "=" << juce::String ((double) fx->getParam (p), 9);
+
+                    for (const auto& [key, text] : slot.texts)
+                        t << " " << juce::String (key) << "=\"" << juce::String (text) << "\"";
+
+                    t << "\n";
+                }
+            }
+        }
+    }
+
+    if (numEntries() > 0)
+        load (0, "checking every song");
+
+    return "Songs checked: " + juce::String (numEntries()) + " (" + juce::String (withFiles) + " with a file of their own), "
+             + juce::String (withProblems) + " with a problem. Default sounds " + (hasDefault() ? "set" : "not set") + ".\n" + t;
+}
+
 juce::String SongBook::reportText() const
 {
     const auto& rack = engine.effects();

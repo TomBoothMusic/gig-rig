@@ -180,6 +180,13 @@ public:
     /** After anything changed (a song loaded, the list rescanned), so the screens can follow. */
     std::function<void()> onChanged;
 
+    /** Loads every entry in turn and lists what each one says is wrong ("PROBLEM" lines), for
+        checking a whole folder of songs in one go: GigRig --check-songs <songs> <presets> <result>.
+        Leaves the first entry loaded. */
+    juce::String checkEverySong (bool everySetting = false);
+    /** With everySetting, each song is followed by every chain's effects and every setting's value,
+        so two folders can be compared sound for sound. */
+
     juce::File folder() const                       { return songFolder; }
     PresetLoader loader() const;
 
