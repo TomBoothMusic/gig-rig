@@ -23,11 +23,11 @@ namespace gigrig
         socket, after its effects chain (the same point the looper hears)
           + every loop that was recorded from that socket          <- each loop returns to its own channel
           -> record point "after looper"
-          -> channel gate, EQ, compressor and an analog-style insert (the 1176-style compressor)
+          -> channel gate, warmth, EQ, then compressor, 1176-style and LA-2A style compressors
           -> fader, pan, mute -> main mix
           -> sends: monitor 1, monitor 2, and the four mixer effects (reverbs and delays)
         mixer effects -> wet low cut and high cut -> main mix and monitors
-        main mix / each monitor -> EQ, notches, compressor, limiter, line delay, level -> a return (or a pair)
+        main mix / each monitor -> EQ, notches, compressor, bus compressor, tape, limiter, line delay, level -> a return (or a pair)
 
     So the mixer's reverbs and delays come after the looper and are never baked into a loop,
     and a monitor send carries its channel live and looped together with no extra rule.
@@ -49,7 +49,14 @@ constexpr int numMixSockets = 16;
 constexpr float mixOffDb = -90.0f;      // a fader or send at or below this is off
 
 /** Where each block sits in a channel's processing (MixChannelSetup::strip). */
-constexpr int stripGate = 0, stripEq = 1, stripComp = 2, stripInsert = 3, numStripBlocks = 4;
+constexpr int stripGate = 0, stripWarmth = 1, stripEq = 2, stripComp = 3, stripInsert = 4, stripOpto = 5, numStripBlocks = 6;
+/** The first blocks (gate, warmth, EQ) are the channel's tone; from here on it is the compressors. A monitor can take its sends between the two. */
+constexpr int stripSplit = 3;
+/** Where each block sits in an output's processing (MixOutputSetup::chain). */
+constexpr int outEq = 0, outNotches = 1, outComp = 2, outBus = 3, outTape = 4, outLimiter = 5, outDelay = 6, numOutBlocks = 7;
+
+/** Where a monitor takes its sends from in each channel. */
+enum class TapPoint { beforeProcessing, afterEq, afterCompressors };
 
 /** What a channel records when Record is pressed. */
 enum class RecordPoint { none, raw, afterEffects, afterLooper };
@@ -67,7 +74,8 @@ struct MixChannelSetup
     std::array<float, numMixFx> fxDb { mixOffDb, mixOffDb, mixOffDb, mixOffDb };
     RecordPoint record = RecordPoint::afterLooper;
     int directReturn = -1;              // sound-crew direct out: this channel alone (live and looped, before its EQ) on a return; -1 = none
-    fx::ChainModel strip;               // gate, mixeq, mixcomp, then the 1176-style insert (comp)
+    bool link = false;                  // stereo: the next channel is this one's right side and follows every setting (this one pans left, that one right)
+    fx::ChainModel strip;               // gate, warmth, mixeq | mixcomp, the 1176-style compressor (comp), the LA-2A style one (la2a)
 };
 
 struct MixFxSetup
@@ -87,9 +95,10 @@ struct MixOutputSetup
     bool mute = false;
     bool mono = true;                   // left and right summed and sent as one signal
     bool preFader = true;               // monitors: sends are taken before the channel faders and mutes
+    TapPoint tap = TapPoint::afterCompressors;   // monitors: where in each channel the sends are taken
     int firstReturn = -1;               // 0-based return, -1 = not connected
     bool pair = true;                   // also on the next return (the right side, or the same mono signal again)
-    fx::ChainModel chain;               // mixeq, notches, mixcomp, limiter, linedelay
+    fx::ChainModel chain;               // mixeq, notches, mixcomp, buscomp, tape, limiter, linedelay
 };
 
 struct MixerSetup
@@ -126,6 +135,19 @@ public:
     void setFx (int f, const MixFxSetup&);
     void setOutput (int o, const MixOutputSetup&);
     void setAll (const MixerSetup&);
+
+    // ---- a song's own sends ----
+    // A song may set how much of a channel goes to a reverb or a delay (its file's "send" lines).
+    // These sit on top of the act: they are not saved in it, they go when another song loads,
+    // and they never touch the venue (the reverbs and delays themselves, the main output).
+    struct SongSend { int channel = 0, fx = 0; float db = mixOffDb; };
+    void setSongSends (const std::vector<SongSend>&);
+    std::vector<SongSend> songSends() const;
+    bool hasSongSend (int c, int f) const noexcept      { return songHas[(size_t) c][(size_t) f]; }
+    void setSongSend (int c, int f, float db);
+    void clearSongSend (int c, int f);
+    /** What a channel sends to an effect right now: the song's value where it has one, else the act's. */
+    float sendDb (int c, int f) const noexcept;
 
     // ---- presets: small text files anyone can read ----
     enum class Preset { act, venue, monitors, output };
@@ -275,7 +297,7 @@ private:
 
     struct Chan
     {
-        fx::Chain strip;
+        fx::Chain strip, strip2;        // the tone blocks, then the compressors (stripSplit)
         std::atomic<bool> on { false }, mute { false };
         std::atomic<int> socket { -1 }, record { 0 }, direct { -1 };
         std::atomic<float> trim { 1.0f }, fader { 1.0f }, pan { 0.0f };
@@ -312,7 +334,7 @@ private:
         std::array<std::array<fx::Chain, 2>, 2> chain;
         std::atomic<float> level { 1.0f };
         std::atomic<bool> mute { false }, mono { true }, preFader { true }, pair { true };
-        std::atomic<int> firstReturn { -1 };
+        std::atomic<int> firstReturn { -1 }, tap { 2 };
         std::array<std::atomic<float>, 2> peak {};
 
         Glide levelG;
@@ -323,10 +345,13 @@ private:
     void pushFx (int f, bool first = false);
     void pushOutput (int o, bool first = false);
     void rebuildBuses() noexcept;
+    void followLinks();
     juce::String applyVenue (const MixerSetup& from, const juce::String& name);
     juce::StringArray venueList() const;
 
     MixerSetup now;                                     // message thread's copy
+    std::array<std::array<float, numMixFx>, numMixChannels> songDb {};
+    std::array<std::array<bool, numMixFx>, numMixChannels> songHas {};
     juce::String act, venue, monitors;
     bool actDirty = false, venueDirty = false, monitorsDirty = false;
     bool dirty = false;
@@ -356,7 +381,7 @@ private:
     float master = 0.0f;                                // 0..1: the fade when the mixer is switched on or off
     float mainMix = 0.0f;                               // 0 = set 0 .. 1 = set 1
     float fastStep = 0.0f, slowStep = 0.0f, masterStep = 0.0f;
-    std::vector<float> laneData, stray, work, silence, directData;
+    std::vector<float> laneData, stray, work, tapPre, tapMid, silence, directData;
     std::array<bool, 8> directUsed {};
     std::array<float*, numMixSockets> busPtrs {};
     float guardWindowPeak = 0.0f;

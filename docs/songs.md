@@ -62,6 +62,7 @@ Every line is optional. Lines starting with `#` are notes.
 | `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). |
 | `switches = none` | This song uses no switches for effects (overrides the default's). |
 | `amps = chain 1 / A / B` | The amp models the "next amp" switch steps through, in order. Without it the switch steps through every installed amp model. |
+| `send = Vocal / Vocal plate = -6` | With the Mixer tab on: how much of a mixer channel goes to one of the mixer's reverbs or delays while this song is loaded (`off` for none). The channel and the effect by name, or `channel 1`, `fx 2`. It sits on top of the act and goes when another song loads; a song never changes the reverb or delay itself, which belongs to the venue. See `docs/mixer.md`, "Sends that belong to a song". |
 
 Naming things:
 
@@ -70,7 +71,7 @@ Naming things:
   one of the same kind is `eq #2`.
 - A setting is its id or its name on screen. Ids are listed in `docs/effects.md`.
 - What a switch does: `compare`, `chain on off`, `tap tempo`, `whammy`, `wah`, `delay throw`,
-  `test take`, `next amp`, `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
+  `test take`, `next amp`, `toe switch` (the expression pedal's toe switch: electric full, acoustic muted, the chain's wah or whammy on; see `docs/mixer.md`), `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
 
 When a line cannot be used (a preset that is not in the folder, a setting no effect has), the
 song still loads. The line is reported as `PROBLEM:` on the Songs tab and in the report, and a

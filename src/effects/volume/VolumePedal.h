@@ -16,7 +16,8 @@ namespace gigrig::fx
 
     Reversed turns it round (heel loud, toe silent). Tom's one pedal is a blend: the electric
     chain has this effect as it is, the acoustic chain has it reversed, and both follow the
-    same pedal, so toe down is all electric and heel down is all acoustic.
+    same pedal, so toe down is all electric and heel down is all acoustic. With Travel set to
+    Blend on both, the two together stay the same loudness all the way.
 
     A real expression pedal should set `pedal`, as for the wah and the whammy. */
 class VolumePedal final : public Effect
@@ -26,14 +27,14 @@ public:
     std::string typeId() const override     { return "volume"; }
 
     /** The gain for a pedal position (0..100) and a heel level in dB. For checks and the screen. */
-    static double gainFor (double pedal, double heelDb) noexcept;
+    static double gainFor (double pedal, double heelDb, bool blend = false) noexcept;
 
 private:
     void onPrepare (double rate, int maxBlock) override;
     void onReset() noexcept override;
     void processChunk (float* const* ch, int numCh, int n) noexcept override;
 
-    int pPedal, pHeel, pReverse;
+    int pPedal, pHeel, pReverse, pCurve;
     float gain = 1.0f;
     bool primed = false;
 };

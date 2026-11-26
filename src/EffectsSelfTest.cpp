@@ -231,6 +231,37 @@ void runEffectsSelfTest (const Check& check)
                    "effects: one pedal position moves the volume pedal in every chain, so the electric's and the acoustic's reversed one work as a blend");
         }
 
+        // The toe switch: electric to full, acoustic off, the chain's wah on and worked by the pedal; again, and the blend is back.
+        {
+            const auto before0 = rack.chain (0).model(), before1 = rack.chain (1).model();
+            fx::ChainModel electric, acoustic;
+            electric.slots.push_back ({ "wah", false, {}, {} });
+            electric.slots.push_back ({ "volume", true, { { "curve", 1.0f } }, {} });
+            acoustic.slots.push_back ({ "volume", true, { { "reverse", 1.0f }, { "curve", 1.0f } }, {} });
+            rack.chain (0).setModel (electric);
+            rack.chain (1).setModel (acoustic);
+            const auto pedalOf = [&rack] (int c, int k) { return rack.chain (c).model().slots[(size_t) k].param ("pedal", -1.0f); };
+
+            rack.moveExpressionPedal (40.0f);
+            const bool blended = std::abs (pedalOf (0, 1) - 40.0f) < 0.01f && std::abs (pedalOf (1, 0) - 40.0f) < 0.01f;
+
+            rack.setPedalAssign (0, { 10, 0, 9 });
+            const bool taken = rack.takePedal (10, true);
+            rack.doPedalAction ({ 10, 0, 9 });
+            const bool full = rack.toeSwitchOn() && pedalOf (0, 1) > 99.9f && pedalOf (1, 0) > 99.9f && rack.chain (0).model().slots[0].on;
+            rack.moveExpressionPedal (70.0f);
+            const bool wahMoves = std::abs (pedalOf (0, 0) - 70.0f) < 0.01f && pedalOf (0, 1) > 99.9f;
+            const bool says = rack.pedalText().contains ("toe switch (ON");
+
+            rack.doPedalAction ({ 10, 0, 9 });
+            const bool back = ! rack.toeSwitchOn() && ! rack.chain (0).model().slots[0].on && std::abs (pedalOf (0, 1) - 40.0f) < 0.01f && std::abs (pedalOf (1, 0) - 40.0f) < 0.01f;
+            rack.setPedalAssign (0, { -1, 0, 0 });
+            rack.chain (0).setModel (before0);
+            rack.chain (1).setModel (before1);
+            check (blended && taken && full && wahMoves && says && back,
+                   "effects: the toe switch puts the electric at full and the acoustic off, switches the chain's wah on and gives it the pedal; pressed again the wah goes off and the blend is back where it was");
+        }
+
         // A held switch rocks the wah: toe on the press, heel on the release.
         {
             const auto before = rack.chain (0).model();
@@ -631,7 +662,7 @@ void runEffectsSelfTest (const Check& check)
     // ---- the starter presets built into the app ----
     {
         const auto presets = starterpresets::all();
-        bool sound = presets.size() == 3;
+        bool sound = presets.size() == 4;
         juce::String detail;
 
         for (const auto& [name, text] : presets)
@@ -653,7 +684,7 @@ void runEffectsSelfTest (const Check& check)
             detail << (detail.isEmpty() ? "" : ", ") << name << " (" << (int) m.slots.size() << " effects)";
         }
 
-        check (sound, "starter presets: all three load, and every effect and setting in them exists: " + detail);
+        check (sound, "starter presets: all four load, and every effect and setting in them exists: " + detail);
 
         const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("GigRig self-test presets");
         folder.deleteRecursively();
@@ -662,7 +693,7 @@ void runEffectsSelfTest (const Check& check)
         mine.replaceWithText ("slot=peq\non=1\n");
         const int wroteAgain = starterpresets::setUp (folder);
         const auto kept = mine.loadFileAsString();
-        check (wrote == 3 && wroteAgain == 0 && kept.contains ("slot=peq") && ! kept.contains ("slot=harmony"),
+        check (wrote == 4 && wroteAgain == 0 && kept.contains ("slot=peq") && ! kept.contains ("slot=harmony"),
                "starter presets: copied into the presets folder once; a starter preset Tom has changed is never overwritten");
         folder.deleteRecursively();
     }

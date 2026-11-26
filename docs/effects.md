@@ -171,12 +171,37 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   and the direct outs.
 - The travel follows the ear (level = position to the power 2.5), and the level glides per
   sample, so a swell never zips.
+- `curve` (**Travel**) chooses how the level follows the pedal: `Volume pedal` (the ear's
+  curve above) or `Blend (even loudness)`, a quarter of a sine. With the blend travel on both
+  pedals of a blend, one rises as the other falls and their loudness together stays the same
+  all the way (each is 3 dB down in the middle). Checked in `VolumePedal.cpp`.
 - **The blend.** Tom's one pedal fades between the acoustic and the electric: the electric
   chain has a volume pedal as it is, the acoustic chain has one with `reverse` on.
-  `EffectsRack::moveVolumePedals` moves the `pedal` of every volume pedal in every chain, and
-  the Effects tab calls it when either Pedal slider moves. A real expression pedal should
-  call the same thing. The toe switch (electric to full, acoustic muted, the song's wah or
-  whammy engaged) is not built yet.
+  `EffectsRack::moveExpressionPedal` is where the pedal arrives (the Effects tab calls it
+  when either Pedal slider moves; a real expression pedal should call the same thing). With
+  the toe switch off it moves the `pedal` of every volume pedal in every chain.
+- **The toe switch** (`EffectsRack::toeSwitch`, pedal action 9, the words `toe switch` in a
+  song file; Tom's stand-in is CTL4). On: every volume pedal goes to toe down (electric full,
+  the reversed acoustic silent), the first `wah` or `whammy` in the switch's chain is switched
+  on, and the expression pedal now moves that effect's `pedal` instead of the blend. Off: the
+  effect is switched off and the blend goes back to where the pedal was. A chain with no wah
+  or whammy still gets the electric-full, acoustic-muted part. A new expression effect joins
+  by being added to `expressionSlot` in `EffectsRack.cpp`.
+
+## The studio-style blocks (26 November 2026)
+
+Four ordinary effects (group "Studio") built for the mixer's channels and outputs, and offered
+in the Effects tab too. None adds delay.
+
+| Id | Folder | What | Settings |
+|---|---|---|---|
+| `la2a` | `src/effects/la2a/` | LA-2A style optical leveller: slow, programme-dependent release | `reduction`, `gain`, `mode` (Compress, Limit) |
+| `warmth` | `src/effects/warmth/` | Valve-desk colour with the loudness held steady as Drive rises | `drive`, `colour`, `level` |
+| `tape` | `src/effects/tape/` | Tape machine: soft squeeze on peaks, head bump, softer top | `drive`, `speed` (7.5, 15, 30), `level` |
+| `buscomp` | `src/effects/buscomp/` | Desk-style bus compressor | `threshold`, `ratio`, `attack`, `release`, `makeup`, `listencut`, `mix` |
+
+Each has its own character checks beside the standard ones. In the mixer, `warmth` and `la2a`
+sit on every channel and `buscomp` and `tape` on every output (`docs/mixer.md`).
 
 ## The mixer's own blocks
 

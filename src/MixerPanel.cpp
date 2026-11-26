@@ -49,6 +49,10 @@ namespace
     {
         if (type == "gate")         return "Gate";
         if (type == "comp")         return "1176 style";
+        if (type == "la2a")         return "LA-2A style";
+        if (type == "warmth")       return "Warmth";
+        if (type == "buscomp")      return "Bus comp";
+        if (type == "tape")         return "Tape";
         if (type == "mixeq")        return "EQ";
         if (type == "mixcomp")      return "Compressor";
         if (type == "notches")      return "Notches";
@@ -65,6 +69,10 @@ namespace
     {
         if (type == "gate")         return "Shuts the channel when nothing is played, so a quiet stage stays quiet. Threshold is how loud a sound must be to open it.";
         if (type == "comp")         return "An analog-style insert after the EQ and compressor: the 1176-style compressor from the effects list, for a voice or a bass that should sound pressed and forward.";
+        if (type == "la2a")         return "A slow, smooth valve-studio leveller with two knobs, kind to a voice or a bass. Turn Peak reduction up until the amber bar moves, then make the level up with Gain.";
+        if (type == "warmth")       return "A touch of valve-desk colour before the EQ: Drive adds the harmonics, Colour leans it dark or bright, and the loudness stays about where it was.";
+        if (type == "buscomp")      return "The desk-style compressor that glues a whole mix together. A few dB of movement on the amber bar is plenty; Mix blends the untouched sound back in.";
+        if (type == "tape")         return "A tape machine across the whole mix: gentle squeeze on the peaks, a low bump and a softer top. Drive pushes the tape harder.";
         if (type == "mixeq")        return "Low cut, low shelf, four bells you can sweep (where, how much, how wide), high shelf, high cut. Double-click a slider for its starting point.";
         if (type == "mixcomp")      return "Evens out the loud and the quiet. Lower the Threshold until the strip's amber bar moves on the loud notes; Ratio is how firmly it holds them.";
         if (type == "notches")      return "Six narrow cuts for feedback notes and room booms. A notch at 0 dB does nothing.";
@@ -609,7 +617,11 @@ void MixerPanel::rebuildDetail()
     if (s.kind == Kind::channel)
     {
         const auto& c = now.channel[(size_t) index];
-        detailTitle.setText ("Channel " + juce::String (index + 1) + ": " + c.name + (c.on ? "" : "  (off)"), juce::dontSendNotification);
+        const bool rightSide = index > 0 && now.channel[(size_t) index - 1].link;
+        const int lead = rightSide ? index - 1 : index;
+        detailTitle.setText ("Channel " + juce::String (index + 1) + ": " + c.name + (c.on ? "" : "  (off)")
+                             + (rightSide ? "   (the right side of a stereo pair with channel " + juce::String (index) + ": they share every setting but the name and the socket)"
+                                : c.link ? "   (the left side of a stereo pair with channel " + juce::String (index + 2) + ")" : juce::String()), juce::dontSendNotification);
 
         const auto change = [this, index] (std::function<void (MixChannelSetup&)> edit)
         {
@@ -645,9 +657,35 @@ void MixerPanel::rebuildDetail()
                      [change, m] (float v) { change ([v, m] (MixChannelSetup& n) { n.monDb[(size_t) m] = v; }); });
         }
 
+        bool songs = false;
         for (int f = 0; f < numMixFx; ++f)
-            addSend (1, 150, "To " + now.fx[(size_t) f].name, c.fxDb[(size_t) f],
-                     [change, f] (float v) { change ([v, f] (MixChannelSetup& n) { n.fxDb[(size_t) f] = v; }); });
+            songs = songs || mixer.hasSongSend (lead, f);
+
+        for (int f = 0; f < numMixFx; ++f)
+            addSend (1, 150, "To " + now.fx[(size_t) f].name + (mixer.hasSongSend (lead, f) ? " (song)" : ""), mixer.sendDb (index, f),
+                     [this, change, f, lead] (float v)
+                     {
+                         if (mixer.hasSongSend (lead, f))   mixer.setSongSend (lead, f, v);
+                         else                               change ([v, f] (MixChannelSetup& n) { n.fxDb[(size_t) f] = v; });
+                     });
+
+        if (! rightSide && index + 1 < numMixChannels)
+            addToggle (2, 230, "Stereo (keys, a backing track)", "Stereo with channel " + juce::String (index + 2), c.link,
+                       [change, later] (bool on) { change ([on] (MixChannelSetup& n) { n.link = on; }); later(); });
+
+        addToggle (2, 330, "Reverb and delay sends (the four on the right above)", "Belong to this song, not the act", songs, [this, lead, later] (bool on)
+        {
+            for (int f = 0; f < numMixFx; ++f)
+            {
+                if (on)     mixer.setSongSend (lead, f, mixer.sendDb (lead, f));
+                else        mixer.clearSongSend (lead, f);
+            }
+
+            note = on ? "These four sends now belong to the song that is loaded. Set them, then press 'Keep these sounds for this song' on the Songs tab. Another song puts them back to the act's."
+                      : "These four sends are back to the act's own. Press 'Keep these sounds for this song' on the Songs tab if the song's file should forget them too.";
+            noteTicks = 0;
+            later();
+        });
     }
     else if (s.kind == Kind::fx)
     {
@@ -719,7 +757,11 @@ void MixerPanel::rebuildDetail()
         addToggle (0, 80, "Width", "Mono", o.mono, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.mono = on; }); });
 
         if (index > 0)
+        {
             addToggle (0, 150, "Its sends are taken", "Before the faders", o.preFader, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.preFader = on; }); });
+            addCombo (0, 190, "From where in each channel", { { 1, "Before its processing" }, { 2, "After its gate and EQ" }, { 3, "After its compressors" } }, (int) o.tap + 1,
+                      [change] (int id) { change ([id] (MixOutputSetup& n) { n.tap = (TapPoint) juce::jlimit (0, 2, id - 1); }); });
+        }
 
         std::vector<std::pair<int, juce::String>> names;
         const auto list = mixer.presetNames (Mixer::Preset::output);
@@ -1092,7 +1134,7 @@ void MixerPanel::layoutDetail()
 
     for (auto* b : blockButtons)
     {
-        b->setBounds (blockRow.removeFromLeft (blockButtons.size() > 4 ? 132 : 150));
+        b->setBounds (blockRow.removeFromLeft (blockButtons.size() > 6 ? 112 : blockButtons.size() > 4 ? 128 : 150));
         blockRow.removeFromLeft (4);
     }
 

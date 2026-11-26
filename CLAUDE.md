@@ -72,14 +72,16 @@ names) are saved on Tom's disk: never rename them, only add.
 
 ## The mixer
 
-Built 26 Nov 2026 (first version); **`docs/mixer.md` is the guide. Keep it true.** The mixer
+Built 26 Nov 2026 (two builds the same day); **`docs/mixer.md` is the guide. Keep it true.** The mixer
 is inside the engine (`src/Mixer.*`, no screen, checked by `src/MixerSelfTest.cpp`), its own
 blocks are in `src/effects/mixer/`, its screen is `src/MixerPanel.*`. It is **off by default
 and off must stay sample-for-sample what the app did before it existed** (the first mixer
 check in the self-test). Each loop returns to the channel of the socket it was recorded from;
 the mixer's reverbs and delays are after the looper; the mixer adds no delay. Presets (act,
 venue, monitors, output) are text files in `Documents/GigRig/Mixer`: their section names,
-keys and block ids are saved on Tom's disk, so never rename them, only add.
+keys and block ids are saved on Tom's disk, so never rename them, only add. A song may set a
+channel's sends to the mixer's reverbs and delays (`send =` lines, an overlay on the act) and
+nothing else in the mixer: **a song never changes the venue.**
 
 ## Adding an effect
 
