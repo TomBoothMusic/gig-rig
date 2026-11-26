@@ -53,7 +53,7 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`).
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
   `gnome-screenshot -f shot.png` can show what is on screen.
 - If you are running on the rig itself: never update packages, change kernel
@@ -69,6 +69,14 @@ what songs without lines of their own use. Program changes from Songbook Pro loa
 Logic in `src/SongBook.*` (no screen, checked by `src/SongSelfTest.cpp`), screen in
 `src/SongsPanel.*`. The words used in song files (chain, effect, setting and switch-action
 names) are saved on Tom's disk: never rename them, only add.
+
+## The kick pad test
+
+Built 26 Nov 2026 as a **test** of an undecided idea (design doc, Effects, "Built-in kick pad"):
+the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was hit.
+**`docs/kick-pad.md` is the guide. Keep it true.** Logic in `src/KickPad.*` (no screen, checked by
+`src/KickPadSelfTest.cpp`), screen in `src/KickPadPanel.*`. Kick recordings are Tom's own files in
+`Documents/GigRig/Kick sounds`: never commit one.
 
 ## Adding an effect
 
