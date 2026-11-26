@@ -63,6 +63,7 @@ Every line is optional. Lines starting with `#` are notes.
 | `switches = none` | This song uses no switches for effects (overrides the default's). |
 | `amps = chain 1 / A / B` | The amp models the "next amp" switch steps through, in order. Without it the switch steps through every installed amp model. |
 | `send = Vocal / Vocal plate = -6` | With the Mixer tab on: how much of a mixer channel goes to one of the mixer's reverbs or delays while this song is loaded (`off` for none). The channel and the effect by name, or `channel 1`, `fx 2`. It sits on top of the act and goes when another song loads; a song never changes the reverb or delay itself, which belongs to the venue. See `docs/mixer.md`, "Sends that belong to a song". |
+| `mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20` | With the Mixer tab on: which reverb or delay one of the mixer's four effects is while this song is loaded, and its settings (the effect's id, then `setting = value` for each; one left out takes the effect's starting value). The venue's own comes back when another song loads. The venue keeps the effect's EQ, cuts and levels. See `docs/mixer.md`, "A reverb or delay that belongs to a song". |
 
 Naming things:
 

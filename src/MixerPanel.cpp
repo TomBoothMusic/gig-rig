@@ -386,7 +386,7 @@ fx::ChainModel MixerPanel::currentChain() const
 {
     const auto& s = strips[(size_t) chosen];
     const auto& now = mixer.setup();
-    return s.kind == Kind::channel ? now.channel[(size_t) s.index].strip : s.kind == Kind::fx ? now.fx[(size_t) s.index].effect : now.output[(size_t) s.index].chain;
+    return s.kind == Kind::channel ? now.channel[(size_t) s.index].strip : s.kind == Kind::fx ? mixer.effectNow (s.index) : now.output[(size_t) s.index].chain;
 }
 
 void MixerPanel::setCurrentChain (const fx::ChainModel& m)
@@ -394,7 +394,12 @@ void MixerPanel::setCurrentChain (const fx::ChainModel& m)
     const auto& s = strips[(size_t) chosen];
 
     if (s.kind == Kind::channel)        { auto c = mixer.setup().channel[(size_t) s.index]; c.strip = m; mixer.setChannel (s.index, c); }
-    else if (s.kind == Kind::fx)        { auto f = mixer.setup().fx[(size_t) s.index]; f.effect = m; mixer.setFx (s.index, f); }
+    else if (s.kind == Kind::fx)
+    {
+        // A song's own reverb or delay is edited in the song's copy; the venue's is left alone.
+        if (mixer.hasSongFx (s.index))     mixer.setSongFx (s.index, m);
+        else                               { auto f = mixer.setup().fx[(size_t) s.index]; f.effect = m; mixer.setFx (s.index, f); }
+    }
     else                                { auto o = mixer.setup().output[(size_t) s.index]; o.chain = m; mixer.setOutput (s.index, o); }
 }
 
@@ -709,22 +714,40 @@ void MixerPanel::rebuildDetail()
         for (size_t k = 0; k < mixerFxChoices().size(); ++k)
         {
             kinds.push_back ({ (int) k + 1, blockName (mixerFxChoices()[k]) });
-            if (! f.effect.slots.empty() && f.effect.slots[0].type == mixerFxChoices()[k])
+            if (! mixer.effectNow (index).slots.empty() && mixer.effectNow (index).slots[0].type == mixerFxChoices()[k])
                 selected = (int) k + 1;
         }
 
-        addCombo (0, 200, "Effect", kinds, selected, [change, later] (int id)
+        addCombo (0, 200, mixer.hasSongFx (index) ? "Effect (this song's)" : "Effect", kinds, selected, [this, index, change, later] (int id)
         {
             if (id >= 1 && id <= (int) mixerFxChoices().size())
             {
-                change ([id] (MixFxSetup& n)
+                fx::SlotModel slot;
+                slot.type = mixerFxChoices()[(size_t) id - 1];
+
+                if (mixer.hasSongFx (index))
                 {
-                    fx::SlotModel slot;
-                    slot.type = mixerFxChoices()[(size_t) id - 1];
-                    n.effect.slots = { slot };
-                });
+                    fx::ChainModel m;
+                    m.slots = { slot };
+                    mixer.setSongFx (index, m);
+                    refreshStrips();
+                }
+                else
+                    change ([slot] (MixFxSetup& n) { n.effect.slots = { slot }; });
+
                 later();
             }
+        });
+
+        addToggle (2, 360, "Which reverb or delay this is, and its own settings", "Belong to this song, not the venue", mixer.hasSongFx (index), [this, index, later] (bool on)
+        {
+            if (on)     mixer.setSongFx (index, mixer.effectNow (index));
+            else        mixer.clearSongFx (index);
+
+            note = on ? "This effect's own settings now belong to the song that is loaded. Set them, then press 'Keep these sounds for this song' on the Songs tab. Another song puts the venue's back."
+                      : "This effect is back to the venue's own. Press 'Keep these sounds for this song' on the Songs tab if the song's file should forget its own too.";
+            noteTicks = 0;
+            later();
         });
 
         auto* low = addSlider (0, 150, "Low cut on the wet sound", 20.0, 1000.0, 1.0, " Hz", f.lowCutHz, 20.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.lowCutHz = v; }); });
@@ -734,6 +757,35 @@ void MixerPanel::rebuildDetail()
 
         for (int m = 0; m < numMixMonitors; ++m)
             addSend (0, 140, "Into monitor " + juce::String (m + 1), f.monDb[(size_t) m], [change, m] (float v) { change ([v, m] (MixFxSetup& n) { n.monDb[(size_t) m] = v; }); });
+
+        // The EQ on what goes into the effect (Tom, 27 Nov 2026): the low and high cuts above do the
+        // filtering, these shape what the reverb or delay is fed.
+        const auto eqNow = [&f] (const char* id, float fallback) { return f.eq.slots.empty() ? fallback : f.eq.slots[0].param (id, fallback); };
+        const auto eqSet = [change] (const char* id)
+        {
+            return [change, id] (float v)
+            {
+                change ([v, id] (MixFxSetup& n)
+                {
+                    if (n.eq.slots.empty())
+                    {
+                        fx::SlotModel slot;
+                        slot.type = "mixeq";
+                        slot.on = true;
+                        n.eq.slots = { slot };
+                    }
+
+                    n.eq.slots[0].setParam (id, v);
+                });
+            };
+        };
+
+        addSlider (1, 130, "Into it: low shelf", -15.0, 15.0, 0.1, " dB", eqNow ("lsg", 0.0f), 0.0, eqSet ("lsg"));
+        addSlider (1, 130, "Into it: band A at", 150.0, 3000.0, 1.0, " Hz", eqNow ("b2f", 800.0f), 800.0, eqSet ("b2f"))->setSkewFactorFromMidPoint (700.0);
+        addSlider (1, 130, "Band A", -15.0, 15.0, 0.1, " dB", eqNow ("b2g", 0.0f), 0.0, eqSet ("b2g"));
+        addSlider (1, 130, "Into it: band B at", 500.0, 8000.0, 1.0, " Hz", eqNow ("b3f", 2500.0f), 2500.0, eqSet ("b3f"))->setSkewFactorFromMidPoint (2500.0);
+        addSlider (1, 130, "Band B", -15.0, 15.0, 0.1, " dB", eqNow ("b3g", 0.0f), 0.0, eqSet ("b3g"));
+        addSlider (1, 130, "Into it: high shelf", -15.0, 15.0, 0.1, " dB", eqNow ("hsg", 0.0f), 0.0, eqSet ("hsg"));
     }
     else
     {

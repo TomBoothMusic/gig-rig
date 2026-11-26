@@ -838,6 +838,16 @@ Added after Tom's test of build 103.
    the looped guitar stays.
 7. Wicked Game: track 2 records bass and stomp. Livin: track 1 records bass, acoustic and stomp.
 
+### Part M: an EQ into each mixer reverb and delay, and a song's own delay (10 minutes)
+
+1. **Mixer** tab, press **Vocal delay**. Send the Vocal channel to it and sing. Move **Into it:
+   band A** down and its **at** slider across your voice: the repeats thin out, your dry voice
+   does not change. **Into it: low shelf** and **high shelf** do the same for the bottom and top.
+2. Load a song. Press **Vocal delay** and tick **Belong to this song, not the venue**.
+3. Change **Effect (this song's)** to **Tape delay** and set its sliders.
+4. On the **Songs** tab press **Keep these sounds for this song**.
+5. Load another song: the venue's delay is back. Load the first again: its tape delay is back.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.

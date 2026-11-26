@@ -117,6 +117,27 @@ void runSongSelfTest (const Check& check)
                "songs: a 'send' line sets a mixer channel's send to a reverb or delay by name or by number; the song's line wins over the default's, a name the mixer does not have is reported, and the lines come back from the file as they were written");
     }
 
+    // ---- a song's own settings for the mixer's reverbs and delays (27 Nov 2026) ----
+    {
+        const auto song = SongSounds::fromText ("mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20\nmixer effect = fx 1 / plate / decay = 3.5\n"
+                                                "mixer effect = Nobody / plate\nmixer effect = Vocal delay / klon\nmixer effect = Vocal delay / digitaldelay / time = long\n"
+                                                "mixer effect = Instrument room / room / wobble = 3\n");
+        const auto fallback = SongSounds::fromText ("mixer effect = Vocal delay / analogdelay / time = 52\nmixer effect = fx 4 / analogdelay / time = 52\n");
+        juce::StringArray problems;
+        const auto list = resolveMixerEffects (song, &fallback, defaultMixerSetup(), problems);
+        const auto again = SongSounds::fromText (song.toText ("x"));
+        const auto typeOf = [&list] (size_t i) { return i < list.size() && ! list[i].effect.slots.empty() ? juce::String (list[i].effect.slots[0].type) : juce::String(); };
+        check (song.mixerEffects.size() == 5 && song.notUnderstood.size() == 1 && list.size() == 4 && problems.size() == 3
+               && list[0].fx == 1 && typeOf (0) == "tapedelay" && list[0].effect.slots[0].param ("time", 0.0f) == 121.0f && list[0].effect.slots[0].param ("feedback", 0.0f) == 20.0f
+               && list[1].fx == 0 && typeOf (1) == "plate" && list[1].effect.slots[0].param ("decay", 0.0f) == 3.5f
+               && list[2].fx == 2 && typeOf (2) == "room" && list[2].effect.slots[0].params.empty()
+               && list[3].fx == 3 && typeOf (3) == "analogdelay"
+               && again.mixerEffects.size() == 5 && again.mixerEffects[0].type == "tapedelay" && again.mixerEffects[0].values.size() == 2 && again.mixerEffects[0].values[0].second == 121.0f,
+               "songs: a 'mixer effect' line says which reverb or delay one of the mixer's effects is for this song and how it is set; the song's line wins over the default's, "
+               "an effect the mixer does not have, a name it does not have and a setting the effect does not have are each reported, and the lines come back from the file as written ("
+               + juce::String (list.size()) + " set, " + juce::String (problems.size()) + " reported)");
+    }
+
     // ---- delays and reverbs ring out when a chain's effects are changed ----
     {
         // Playing through a delay, then the chain changes to one without it and the playing stops.
