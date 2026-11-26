@@ -57,6 +57,10 @@ still sends the same thing.
 
 The settings are remembered between runs (`kick-pad.txt` in the app's data folder).
 
+A fresh install starts on the sound Tom locked in on 27 Nov 2026 (build 103, on his studio
+monitors): Level 0.80, Touch 1.10, Click 0.86, Pitch 49 Hz, Length 0.155 s. He rated it about
+95% as good as his favourite SPD::ONE sound, and expects to adjust it on a big PA.
+
 ## The built-in kick
 
 It is made by the app from scratch, not taken from anyone's recording, to Tom's description of

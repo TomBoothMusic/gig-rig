@@ -128,8 +128,23 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
     }
 
     // ---- the sound itself ----------------------------------------------------------
+    {
+        // A fresh install starts on the sound Tom locked in (27 Nov 2026).
+        KickPad fresh;
+        check (std::abs (fresh.getLevel() - 0.8f) < 1.0e-6f && std::abs (fresh.getTouch() - 1.1f) < 1.0e-6f && std::abs (fresh.getClick() - 0.86f) < 1.0e-6f
+                 && std::abs (fresh.getPitch() - 49.0f) < 1.0e-6f && std::abs (fresh.getLength() - 0.155f) < 1.0e-6f,
+               "kick pad: a fresh install starts on Tom's settings (level 0.80, touch 1.10, click 0.86, pitch 49 Hz, length 0.155 s)");
+        fresh.prepare (rate);
+        fresh.setLevel (1.0f);
+        check (peak (oneHit (fresh, 127)) < 1.0f, "kick pad: Tom's sound at full level does not clip on the hardest hit");
+    }
+
+    // The checks below measure the sound at fixed settings of their own, so they do not move when the starting settings do.
+    const auto testSettings = [] (KickPad& k) { k.setLevel (0.8f); k.setTouch (1.5f); k.setClick (1.0f); k.setPitch (55.0f); k.setLength (0.10f); };
+
     KickPad pad;
     pad.prepare (rate);
+    testSettings (pad);
     pad.setLevel (0.8f);
 
     {
@@ -291,6 +306,7 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
     {
         KickPad p;
         p.prepare (rate);
+        testSettings (p);
 
         p.handleMidi ("RC-600", juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
         check (p.hitCount() == 0 && p.padDevice().isEmpty(), "kick pad: a note from the RC-600 is not a kick");

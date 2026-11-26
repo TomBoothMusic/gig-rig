@@ -144,7 +144,9 @@ private:
 
     // ---- settings, read by the audio thread ----
     std::atomic<bool> on { true }, learning { false };
-    std::atomic<float> level { 0.8f }, touch { 1.5f }, click { 1.0f }, pitch { 55.0f }, length { 0.10f };
+    // Where a fresh install starts: the settings Tom settled on with the SPD::ONE on his studio
+    // monitors (27 Nov 2026, build 103, "we'll lock that sound in"). A big PA may move them.
+    std::atomic<float> level { 0.8f }, touch { 1.1f }, click { 0.86f }, pitch { 49.0f }, length { 0.155f };
     std::atomic<int> returnPair { 2 };
 
     // ---- hits on their way to the audio thread ----
