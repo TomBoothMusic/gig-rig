@@ -228,15 +228,15 @@ chooses what it records: nothing, the plain socket, after its effects, or **afte
 
 The volume pedal is an effect (**Volume pedal** in the Effects tab's list, id `volume`), so
 it can sit anywhere in a chain: between the drives and the amp, as on Tom's board, it cleans
-the amp up as it turns down. Its settings are **Pedal** (heel 0, toe 100), **Heel level**
-(how quiet the heel is; all the way down is silence) and **Reversed**.
+the amp up as it turns down. Its settings are **Pedal position** (heel 0, toe 100), **Quietest level**
+(how quiet it gets backed right off; all the way down is silence. It is a limit, not the pedal: sliding it does nothing while Pedal position is at 100) and **Reversed**.
 
 The blend: put a Volume pedal in the electric chain as it is, and one in the acoustic chain
 with **Reversed** on. Both follow the one pedal, so toe down is all electric, heel down is
 all acoustic, and between is a blend. Set **Travel** to **Blend (even loudness)** on both and
 the two follow matching curves, so the overall loudness stays about the same all the way
 through the travel (in the middle each is 3 dB down). Until a real pedal is wired in, moving
-the **Pedal** slider of either one moves both (`EffectsRack::moveExpressionPedal`, which is
+the **Pedal position** slider of either one moves both (`EffectsRack::moveExpressionPedal`, which is
 where a real expression pedal will arrive).
 
 ### The toe switch

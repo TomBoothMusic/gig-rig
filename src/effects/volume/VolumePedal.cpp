@@ -13,8 +13,8 @@ static constexpr double heelSilentDb = -80.0;
 
 VolumePedal::VolumePedal()
 {
-    pPedal = addParam ("pedal", "Pedal", "", 0.0f, 100.0f, 100.0f, 30.0f);
-    pHeel  = addParam ("heel", "Heel level", "dB", (float) heelSilentDb, 0.0f, (float) heelSilentDb);
+    pPedal = addParam ("pedal", "Pedal position", "", 0.0f, 100.0f, 100.0f, 30.0f);
+    pHeel  = addParam ("heel", "Quietest level", "dB", (float) heelSilentDb, 0.0f, (float) heelSilentDb);
     pReverse = addToggle ("reverse", "Reversed (heel is loud)", false);
     pCurve = addChoice ("curve", "Travel", { "Volume pedal", "Blend (even loudness)" }, 0);
 }
@@ -94,7 +94,7 @@ void volumeChecks (const Check& check)
     const float toe = level (100.0f, -80.0f), heel = level (0.0f, -80.0f), half = level (50.0f, -80.0f), heelUp = level (0.0f, -12.0f);
     check (std::abs (toe - 1.0f) < 1.0e-4f && heel < 1.0e-6f, "volume: toe down is exactly the sound that came in, heel down is silence");
     check (half > 0.12f && half < 0.25f, "volume: half way is about a sixth of the level (" + std::to_string (20.0 * std::log10 (half)).substr (0, 5) + " dB), so the travel follows the ear");
-    check (std::abs (20.0f * std::log10 (heelUp) + 12.0f) < 0.1f, "volume: with Heel level at -12 dB the heel is 12 dB down, not silent");
+    check (std::abs (20.0f * std::log10 (heelUp) + 12.0f) < 0.1f, "volume: with Quietest level at -12 dB the heel is 12 dB down, not silent");
 
     // Reversed, for the other half of a blend: the acoustic is loud at the heel and gone at the toe.
     {

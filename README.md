@@ -745,7 +745,7 @@ changed**: use the app exactly as before until you want to try it.
 
 1. On the **Effects** tab, in the electric chain, add **Volume pedal** and move it to sit
    between the drives and the amp. In the acoustic chain add another and switch its **Reversed (heel is loud)** on.
-2. Move the **Pedal** slider of either one: both move. At 100 you should hear only the
+2. Move the **Pedal position** slider of either one: both move. At 100 you should hear only the
    electric, at 0 only the acoustic, and a blend between.
 
 ## The mixer, second build
@@ -756,13 +756,13 @@ Built from Tom's answers after the first build. Set up as above (**Mixer on**), 
 
 1. With the two Volume pedals from Part E in place, set **Travel** to **Blend (even
    loudness)** on both.
-2. Strum the acoustic and the electric in turn while moving a **Pedal** slider slowly from 0
+2. Strum the acoustic and the electric in turn while moving a **Pedal position** slider slowly from 0
    to 100. The overall loudness should stay about the same, with no dip in the middle.
 3. Put a **Wah** (or the **Whammy**) in the electric chain, switched off.
 4. In the switches area of the Effects tab, give **CTL4** the action **toe switch** on the
    electric chain.
 5. Press CTL4 on the RC-600. The electric should jump to full, the acoustic should go silent,
-   and the wah should come on. Move the **Pedal** slider: it now sweeps the wah.
+   and the wah should come on. Move the **Pedal position** slider: it now sweeps the wah.
 6. Press CTL4 again: the wah goes off and the blend is back where it was.
 
 ### Part G: the studio-style blocks (15 minutes, Mixer tab)

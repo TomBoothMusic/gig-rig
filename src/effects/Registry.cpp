@@ -125,7 +125,7 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "wah",          "Wah pedal",             "Filter", "A Cry Baby style wah. Rock it with the Pedal slider or a held switch; set where the sweep starts and ends, how narrow the peak is (Q) and how deep.",
           [] { return std::make_unique<Wah>(); }, wahChecks },
-        { "volume",       "Volume pedal",          "Utility", "A volume pedal you can place anywhere: between the drives and the amp it cleans the amp up as it turns down. Heel level sets how quiet the heel is.",
+        { "volume",       "Volume pedal",          "Utility", "A volume pedal you can place anywhere: between the drives and the amp it cleans the amp up as it turns down. Slide Pedal position to work it (it moves the volume pedal in every chain at once). Quietest level sets how quiet it gets when backed right off.",
           [] { return std::make_unique<VolumePedal>(); }, volumeChecks },
         { "la2a",         "LA-2A style compressor", "Studio", "The slow, smooth optical compressor for voices and bass: Peak reduction and Gain, Compress or Limit. On every mixer channel, and here for a chain.",
           [] { return std::make_unique<OptoComp>(); }, optoCompChecks },
