@@ -14,7 +14,8 @@ namespace gigrig
 constexpr int numLoopTracks = 6;
 constexpr int numLoopOutputs = 8;       // the rig's returns
 constexpr int numLoopSources = 5;
-constexpr int maxLoopLanes = 2;         // separate recordings inside one track, one per input socket it listens to
+constexpr int maxLoopLanes = 3;         // separate recordings inside one track, one per input socket it listens to (3 since 26 Nov 2026:
+                                        // vocal, a guitar and the stomp in one press; each lane costs memory for two full-length loops per track)
 constexpr int maxLoopAssigns = 16;
 constexpr int numLoopBanks = 2;
 
@@ -168,7 +169,7 @@ struct TrackView
 {
     TrackState state = TrackState::empty;
     bool hasAudio = false, hasOverdub = false, undone = false, overdubUndone = false, tentative = false;
-    int lanes = 1;              // 2 when the track keeps its two sources apart
+    int lanes = 1;              // 2 or 3 when the track keeps its sources apart
     double seconds = 0.0;       // loop length
     double bars = 0.0;
     float position = 0.0f;      // 0..1 through the loop (or through the recording so far, in seconds)
