@@ -50,7 +50,7 @@ struct ChainModel
 class Chain
 {
 public:
-    static constexpr int maxSlots = 16;
+    static constexpr int maxSlots = 18;     // 12 at first, 16 from 26 Nov 2026, 18 from 27 Nov (room for the volume pedal in a full electric chain)
 
     Chain();
     ~Chain();

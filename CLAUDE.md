@@ -53,7 +53,8 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`).
+  Tom's presets, songs and mixer set-ups: `~/Documents/GigRig/`. Moving them from the laptop: `docs/linux-setup.md`, B4.
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
   `gnome-screenshot -f shot.png` can show what is on screen.
 - If you are running on the rig itself: never update packages, change kernel

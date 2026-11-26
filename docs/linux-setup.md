@@ -9,8 +9,8 @@ There are two ways to use this guide:
 - **Part A: try it on the Lenovo laptop, for free.** The laptop starts from a USB
   stick, so Windows is not touched. Optional: useful to prove the CQ12T and the
   app on Linux before money is spent.
-- **Part B: set up the mini PC** (most likely a Dell OptiPlex 3080 Micro), once it
-  is bought.
+- **Part B: set up the mini PC.** Tom bought a GMKtec M8 (Ryzen 5 PRO 6650H) on
+  25 November 2026, so the steps are written for that one.
 
 Parts C to G apply to both: interface settings, the acceptance tests, updates,
 Claude on the machine, and troubleshooting.
@@ -121,29 +121,36 @@ About an hour, plus downloads. Everything on the mini PC's drive is wiped.
 - The mini PC, its power supply, a screen with HDMI or DisplayPort, a USB keyboard and mouse, and internet (a network cable is simplest; Wi-Fi works if the PC has it).
 - The Ubuntu USB stick from Part A (or make one the same way; persistence does not matter here).
 
-### B1. BIOS settings (Dell OptiPlex 3080 Micro, 10 minutes)
+### B1. BIOS settings (GMKtec M8, 10 minutes)
 
-1. Switch on and tap **F2** as the Dell logo shows.
-2. Change these, if they are there (names can differ slightly between BIOS versions):
+These names come from GMKtec's own guides for its mini PCs, not from this exact unit, so a
+setting may sit under a slightly different name. If one is not there, skip it and tell Claude.
+
+1. Switch on and tap **Esc** (or **Del**) over and over as the GMKtec logo shows, until the
+   set-up screen opens. If neither works, tap **F7** for the boot menu and choose **Enter Setup**.
+2. Change these, if they are there:
 
    | Where | Setting | Set to | Why |
    | --- | --- | --- | --- |
-   | Storage (or System Configuration), SATA Operation | | **AHCI** | Ubuntu may not see the drive in "RAID On" mode |
-   | Power Management | AC Recovery | **Power On** | The rig starts the moment power reaches it: switch on at the wall and walk away |
-   | Power Management | Deep Sleep Control | **Disabled** | |
-   | Power Management | Wake on LAN | **Disabled** | |
-   | Performance | Intel SpeedStep | Enabled | |
-   | Performance | Intel TurboBoost | Enabled | |
-   | Performance | C-States Control | leave **on** for now | Turn off only if the glitch check finds trouble (Part G) |
-   | Secure Boot | | leave as it is | Ubuntu works with it on |
+   | Advanced, or Chipset (look for a power or "AC" entry) | **AC Power Lost Policy** (also seen as "Restore on AC Power Loss" or "State After G3") | **Power On** | The rig starts the moment power reaches it: switch on at the wall and walk away |
+   | Advanced | Wake on LAN | **Disabled** | |
+   | Advanced, AMD CBS (if shown) | Global C-state Control | leave **on** for now | Turn off only if the glitch check finds trouble (Part G) |
+   | Security | Secure Boot | leave as it is | Ubuntu works with it on |
 
-3. **Apply**, then **Exit**.
+3. Press **F10** to save and leave.
 
-Another make of mini PC: the same ideas apply. The BIOS key is often F2, Del or F1, and the boot menu key F12, F11 or F10.
+Before wiping it: the PC was sold as new with Windows on it. Start it once in Windows first to
+see that it works at all (screen, USB sockets, Wi-Fi), because that is the easy moment to send
+it back.
+
+Another make of mini PC: the same ideas apply. The BIOS key is often F2, Del or F1, and the boot
+menu key F12, F11 or F10. On a Dell OptiPlex Micro the key is **F2**, the start-on-power setting
+is **Power Management, AC Recovery = Power On**, and **SATA Operation** must be **AHCI** or
+Ubuntu may not see the drive.
 
 ### B2. Install Ubuntu (20 minutes)
 
-1. Plug in the USB stick, switch on, and tap **F12** for the boot menu. Pick the USB stick.
+1. Plug in the USB stick, switch on, and tap **F7** for the boot menu (F12 on a Dell). Pick the USB stick.
 2. Choose **Try or Install Ubuntu**, then in the installer choose **Install Ubuntu**.
 3. Answer the questions:
    - Language and keyboard: English (Australia).
@@ -172,7 +179,34 @@ Another make of mini PC: the same ideas apply. The BIOS key is often F2, Del or 
 5. At the end it says **Restart the computer now**. Do that.
 6. The PC restarts, logs in by itself, and the **Gig Rig** app opens on its own after a few seconds.
 
-### B4. Check it
+### B4. Bring your sounds across from the laptop (15 minutes)
+
+A fresh install knows none of your presets, songs or mixer set-ups. They are ordinary files, and
+the same files work on Windows and on Linux. Do this once the app has opened on the mini PC.
+
+1. On the laptop, **close the app**. Plug in a USB stick.
+2. Open **File Explorer** and go to **Documents**. Copy the whole **GigRig** folder onto the stick.
+   (It holds Effect presets, Songs, Mixer, Amp models, Responses, Kick sounds and Test takes. If
+   the **Recordings** folder inside it is large, leave that one out.)
+3. Still on the laptop: click the address bar of File Explorer, type `%APPDATA%\GigRig` and press
+   Enter. Copy these three files onto the stick, into a new folder called **settings**:
+   `effects-rack.txt` (your four chains and their sockets), `mixer.txt` (the mixer as you left it)
+   and `kick-pad.txt` (the kick's sound). **Leave the other files there behind**: they hold the
+   laptop's own audio device and timing measurements, which are wrong for another computer.
+4. On the mini PC, **close the Gig Rig app** (it would otherwise write its own settings over
+   yours when it closes). Plug the stick in and open **Files**.
+5. Copy the **GigRig** folder from the stick into **Documents**. If it asks, choose **Merge**.
+6. In Files, press **Ctrl + L**, type `~/.config/GigRig` and press Enter. Copy the three files
+   from the stick's **settings** folder into it, replacing what is there.
+7. Start the app again (the **Gig Rig** icon, or restart the PC). The Effects tab should show
+   your chains, the Songs tab your songs with a `*`, and the Mixer tab your act and venue names.
+8. On the **Latency and audio test** tab, click **Measure latency** once, so the looper has this
+   computer's own timing.
+
+Later changes go the same way in either direction. Copying the folders never changes the app
+itself, so it cannot break a build.
+
+### B5. Check it
 
 1. Open a Terminal and run `~/gig-rig-code/linux/rig-check.sh`. Every line should say **PASS**, apart from the interface lines if nothing is plugged in yet.
 2. Do the tests in [Part D](#part-d-the-acceptance-tests).
@@ -281,7 +315,7 @@ Run `~/gig-rig-code/linux/rig-check.sh --save` first: it saves its output in
 | Report says **Audio thread: NOT realtime** | Run `install.sh`, then log out and back in (or restart). `rig-check.sh` should then show "Realtime priority allowed up to 95". |
 | The CQ or MOTU is not in the Audio device list | Check `rig-check.sh` "Sound cards seen". Unplug and replug the USB cable, use a port on the PC itself (not a hub), and click **Scan again** on the Device check tab. |
 | Only 48 kHz is offered for the CQ | Set the CQ's own Sample Rate to 96 kHz (Part C) and restart the app. |
-| Glitches in the glitch check | One at a time, each with a 30-minute check: try buffer 128; unplug other USB gear; in the BIOS turn **C-States Control** off; use a different USB port. Paste each report to Claude. |
+| Glitches in the glitch check | One at a time, each with a 30-minute check: try buffer 128; unplug other USB gear; in the BIOS turn the C-state setting off (Part B1); use a different USB port. Paste each report to Claude. |
 | Clicks only when the screen changes or a window moves | Report it to Claude: the graphics driver may need a change. |
 | No sound in Firefox or YouTube | Expected: the desktop sound system is off so the app can own the interface. Run `install.sh --keep-pipewire` to turn it back on (for a test only), and run `install.sh` again to turn it off. |
 | The app does not open after start-up | Click **Show Apps**, then **Gig Rig**, to open it by hand. Then look at today's log in `~/gigrig/logs/app-<date>.log` (or have Claude look). |

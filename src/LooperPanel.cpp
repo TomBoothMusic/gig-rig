@@ -300,6 +300,11 @@ void LooperPanel::labelSwitches (int bank)
             detail = linked.isEmpty() ? juce::String ("-") : linked.joinIntoString (", ");
         }
 
+        // A switch the effects have taken (Songs tab or Effects tab) does nothing in the looper,
+        // so the tile says what it does instead of the looper function it no longer has.
+        if (const auto use = engine.effects().pedalUse (sw); use.isNotEmpty())
+            detail = "Effects: " + use;
+
         switchTiles[sw]->setText (pedalSwitchName (sw), detail);
     }
 }
@@ -379,7 +384,8 @@ void LooperPanel::timerCallback()
     for (int t = 0; t < numLoopTracks; ++t)
         trackTiles[t]->set (t, snapshot.track[(size_t) t], song.track[(size_t) t], snapshot.currentTrack == t, blink);
 
-    if (snapshot.bank != shownBank)
+    // Relabel on a bank change, and twice a second in case the effects took or gave back a switch.
+    if (snapshot.bank != shownBank || ticks % (timerHz / 2) == 0)
         labelSwitches (snapshot.bank);
 
     const auto seen = pedal.seen();

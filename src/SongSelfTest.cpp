@@ -554,6 +554,16 @@ void runSongSelfTest (const Check& check)
                  && report.contains ("Program numbers:") && report.contains ("7 Hallelujah"),
                "song book: the report names the song, its program number, and each problem in its file");
 
+        // The folder check (GigRig --check-songs) finds the same mistake without anyone loading the song.
+        {
+            const auto checked = book.checkEverySong();
+            const auto listed = book.checkEverySong (true);
+            check (checked.contains (" 1 with a problem.") && checked.contains ("PROBLEM  ") && checked.contains ("The preset \"Not there\"") && checked.contains ("Line not understood: what is this")
+                     && listed.contains ("    chain 1 slot 1 "),
+                   "song book: the check of a whole folder names the one song with a mistake and what is wrong with it, and can list every setting each song ends up with");
+            book.load (book.entryNamed ("Cocaine"), "test");
+        }
+
         // The app's start: the looper layout only, the effects as the rack remembers them.
         const auto effectsBefore = rack.chain (0).model().toText();
         songDir.getChildFile ("Cocaine.txt").deleteFile();

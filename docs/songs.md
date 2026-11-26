@@ -56,7 +56,7 @@ Every line is optional. Lines starting with `#` are notes.
 | `program = 11` | The program number that loads this entry (1 to 128, counted as the RC-600 counts its memories). For a built-in song the number is already known; a line here changes it. |
 | `looper = Wicked Game` | Only for an entry that has no looper layout of its own: borrow this built-in song's layout. Without the line it uses the general set-up (memory 1, "Dirty Slap"). |
 | `tempo = 87` | About how fast the song is played, in beats a minute. The looper uses it to decide how many bars the first loop is (the first loop still sets the exact tempo). Without the line a built-in song uses the tempo saved in its RC-600 memory. Use it when a song counts at double or half speed. Takes effect the next time the song loads. |
-| `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
+| `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one, and in front of a Volume pedal that sits right before that amp, so the drives push the pedal and the pedal pushes the amp). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
 | `set = chain 1 / spring / reverb = 3.5` | The song's own change on top: chain, effect, setting, value. |
 | `set = chain 1 / tremolo / off` | Switches one effect off (or `on`) for this song. |
 | `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). |
@@ -94,7 +94,9 @@ set again.
 - **Forget this song's own sounds**: removes the sound lines. The program number stays.
 - **Set this song's sounds again**: back to what the file says.
 - **New entry**: a new song with the loaded song's looper layout and the sounds as they stand.
-- **Switches**: six rows. What they show is saved by the **Keep** buttons.
+- **Switches**: six rows. What they show is saved by the **Keep** buttons. On the **Looper** tab,
+  the tile of a switch the effects have taken says **Effects:** and what it does (for example
+  "Effects: chain 2 next amp sound") in place of its looper job (`EffectsRack::pedalUse`).
 - **Delays and reverbs ring out when the sound changes**: see below.
 - **Open in its own window**: lifts the Songs tab out into its own window (for a second screen,
   with the Effects tab open in the main window). Closing it, or **Put back as a tab**, returns it.
@@ -178,3 +180,11 @@ Wicked Game (program 11)
 ```
 
 And once, at the top: `Default: electric = ..., acoustic = ..., vocal = ..., switches = ...`.
+
+## Checking a whole folder of songs without opening the app
+
+`GigRig --check-songs <songs folder> <presets folder> <result file>` loads every entry in turn
+with no sound card and writes one line per song: `ok` or `PROBLEM`, with the same words the
+Songs tab shows (a missing preset, a line not understood). Add `--every-setting` and it also
+lists every effect in every chain with every setting as the song leaves it. Run it on a folder
+before and after a tidy-up and compare the two files: if they match, every song sounds the same.

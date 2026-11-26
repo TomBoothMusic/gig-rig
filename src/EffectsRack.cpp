@@ -505,6 +505,21 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         onPedalAction();
 }
 
+juce::String EffectsRack::pedalAssignText (const PedalAssign& a, bool brief) const
+{
+    const auto& m = chains[(size_t) a.chain].chain.model();
+    juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
+                      : a.action == 4 ? (brief ? "test take" : "test take: record, then play round and round, then stop")
+                      : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held"
+                      : a.action == 9 ? (brief ? (toeOn ? "toe switch (ON)" : "toe switch (off)")
+                                               : (toeOn ? "toe switch (ON: electric full, acoustic off, the pedal works the wah or whammy)" : "toe switch (off: the pedal is the acoustic and electric blend)"))
+                      : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+                      : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
+                            ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
+
+    return (a.action == 2 || a.action == 4 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") + what;
+}
+
 juce::String EffectsRack::pedalText() const
 {
     juce::String t;
@@ -516,17 +531,24 @@ juce::String EffectsRack::pedalText() const
         if (a.sw < 0)
             continue;
 
-        const auto& m = chains[(size_t) a.chain].chain.model();
-        juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
-                          : a.action == 4 ? "test take: record, then play round and round, then stop"
-                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held" : a.action == 9 ? (toeOn ? "toe switch (ON: electric full, acoustic off, the pedal works the wah or whammy)" : "toe switch (off: the pedal is the acoustic and electric blend)") : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
-                          : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
-                                ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
-          << ": " << (a.action == 2 || a.action == 4 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
+          << ": " << pedalAssignText (a, false) << " (the looper no longer hears this switch)\n";
     }
 
     return t;
+}
+
+juce::String EffectsRack::pedalUse (int sw) const
+{
+    // The same test, in the same order, as takePedal: the first row that names the switch has it.
+    if (! enabled.load() || sw < 0)
+        return {};
+
+    for (int i = 0; i < numPedalAssigns; ++i)
+        if (const auto a = pedalAssign (i); a.sw == sw)
+            return pedalAssignText (a, true);
+
+    return {};
 }
 
 EffectsRack::Levels EffectsRack::takeLevels (int c) noexcept
