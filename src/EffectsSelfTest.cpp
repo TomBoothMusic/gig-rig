@@ -270,6 +270,14 @@ void runEffectsSelfTest (const Check& check)
             const float ready = rack.chain (0).model().slots[1].param ("hold", -1.0f);
             const bool stillOn = rack.chain (0).model().slots[1].on;
             rack.setPedalAssign (0, { 10, 0, 8 });
+            // Held past 2 seconds: the pedal's "hold" news goes to the effects as "still down",
+            // not as a release (build 88 cut the harmony, and swept the wah back, at 2 seconds).
+            rack.holdHarmony (0, true);
+            const bool holdTaken = rack.takePedal (10, false, true);
+            const bool keepsSinging = std::abs (rack.chain (0).model().slots[1].param ("hold", -1.0f) - 2.0f) < 0.1f;
+            rack.holdHarmony (0, false);
+            check (holdTaken && keepsSinging && ! rack.takePedal (3, false, true),
+                   "effects: a switch held for longer than 2 seconds keeps the harmony singing (the looper's 'held' signal is not a release)");
             const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false);
             const bool says = rack.pedalText().contains ("harmony while held");
             rack.setPedalAssign (0, { -1, 0, 0 });

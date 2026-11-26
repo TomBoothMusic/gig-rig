@@ -89,7 +89,7 @@ public:
     void setPedalAssign (int i, PedalAssign a) noexcept;
     /** Any thread. True if the effects use this switch (so the looper must not); presses are
         carried out on the message thread. */
-    bool takePedal (int sw, bool isDown);
+    bool takePedal (int sw, bool isDown, bool stillHeld = false);
     /** Message thread: what a pedal press does. */
     void doPedalAction (const PedalAssign& a);
     /** Message thread: moves the Pedal of the first whammy in a chain to the toe (down) or the

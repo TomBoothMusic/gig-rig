@@ -172,7 +172,7 @@ void EffectsRack::setPedalAssign (int i, PedalAssign a) noexcept
     dirty = true;
 }
 
-bool EffectsRack::takePedal (int sw, bool isDown)
+bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
 {
     if (! enabled.load() || sw < 0)
         return false;
@@ -183,6 +183,11 @@ bool EffectsRack::takePedal (int sw, bool isDown)
 
         if (a.sw != sw)
             continue;
+
+        // "Held for 2 seconds" is news for the looper only. The switch is still down, so a
+        // held wah, whammy, throw or harmony carries on (build 88 took it for a release).
+        if (stillHeld)
+            return true;
 
         if (isDown && a.action == 2)
             tap (juce::Time::getMillisecondCounterHiRes());     // at once, so the press time is exact
