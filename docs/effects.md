@@ -190,17 +190,18 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
 
 ## The studio-style blocks (26 November 2026)
 
-Four ordinary effects (group "Studio") built for the mixer's channels and outputs, and offered
+Five ordinary effects (group "Studio") built for the mixer's channels and outputs, and offered
 in the Effects tab too. None adds delay.
 
 | Id | Folder | What | Settings |
 |---|---|---|---|
 | `la2a` | `src/effects/la2a/` | LA-2A style optical leveller: slow, programme-dependent release | `reduction`, `gain`, `mode` (Compress, Limit) |
-| `warmth` | `src/effects/warmth/` | Valve-desk colour with the loudness held steady as Drive rises | `drive`, `colour`, `level` |
+| `warmth` | `src/effects/warmth/` | Valve-desk colour with the loudness held steady as Drive rises | `drive`, `colour`, `level`, `mix` |
+| `enhancer` | `src/effects/enhancer/` | Source enhancer in the style of the Portico 5045: turns a microphone down by a set depth between phrases, never shut | `threshold`, `depth`, `time` (A to F), `mode` (RMS, Peak) |
 | `tape` | `src/effects/tape/` | Tape machine: soft squeeze on peaks, head bump, softer top | `drive`, `speed` (7.5, 15, 30), `level` |
 | `buscomp` | `src/effects/buscomp/` | Desk-style bus compressor | `threshold`, `ratio`, `attack`, `release`, `makeup`, `listencut`, `mix` |
 
-Each has its own character checks beside the standard ones. In the mixer, `warmth` and `la2a`
+Each has its own character checks beside the standard ones. In the mixer, `enhancer`, `warmth` and `la2a`
 sit on every channel and `buscomp` and `tape` on every output (`docs/mixer.md`).
 
 ## The mixer's own blocks

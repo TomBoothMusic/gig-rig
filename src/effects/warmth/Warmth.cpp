@@ -14,6 +14,7 @@ Warmth::Warmth()
     pDrive  = addParam ("drive", "Drive", "", 0.0f, 10.0f, 3.0f);
     pColour = addParam ("colour", "Colour (valve)", "", 0.0f, 10.0f, 4.0f);
     pLevel  = addParam ("level", "Level", "dB", -12.0f, 12.0f, 0.0f);
+    pMix    = addParam ("mix", "Mix", "%", 0.0f, 100.0f, 100.0f);
 }
 
 void Warmth::onPrepare (double rate, int)
@@ -37,6 +38,7 @@ void Warmth::update()
     offset = std::tanh (bias);
     norm = 1.0 / (k * (1.0 - offset * offset)); // so a quiet sound comes out at the level it went in
     out = dbToGain (value (pLevel));
+    mix = 0.01 * value (pMix);
     low.lowShelf (sampleRate(), 160.0, 0.12 * drive, 0.7);
     high.highShelf (sampleRate(), 9000.0, -0.15 * drive, 0.7);
 }
@@ -51,7 +53,8 @@ void Warmth::processChunk (float* const* ch, int numCh, int n) noexcept
         {
             const double x = low.run (ch[c][i], c);
             const double y = (std::tanh (k * x + bias) - offset) * norm;
-            ch[c][i] = (float) (out * high.run (dc.run ((float) y, c), c));
+            const double wet = high.run (dc.run ((float) y, c), c);
+            ch[c][i] = (float) (out * (ch[c][i] + mix * (wet - ch[c][i])));
         }
 }
 
@@ -86,6 +89,15 @@ void warmthChecks (const Check& check)
     fx->reset();
     const auto even = run (*fx, loudIn);
     const double h2none = strength (even, from, 2000.0, rate) / strength (even, from, 1000.0, rate);
+    fx->setParam ("mix", 0.0f);
+    fx->reset();
+    const auto dry = run (*fx, loudIn);
+    float worst = 0.0f;
+    for (size_t i = 0; i < dry.size(); ++i)
+        worst = std::max (worst, std::abs (dry[i] - loudIn[i]));
+    fx->setParam ("mix", 100.0f);
+    check (worst < 1.0e-6f, "warmth: with Mix at 0 the sound comes out exactly as it went in");
+
     check (h2none < h2 * 0.2, "warmth: with Colour at 0 the rounding is even on both sides, so the octave harmonic goes (" + num (20.0 * std::log10 (std::max (h2none, 1.0e-9))) + " dB)");
 }
 

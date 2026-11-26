@@ -805,6 +805,19 @@ Built from Tom's answers after the first build. Set up as above (**Mixer on**), 
 6. Check the **Vocal delay** strip itself (its time, its feedback) is the same for both songs:
    a song only changes how much of a channel goes to it.
 
+### Part K: the source enhancer, Warmth's Mix and the level marks (10 minutes)
+
+Added after Tom's first test of the mixer.
+
+1. Each channel's meter now has a lighter band between two marks. Sing your loudest and raise
+   the Vocal channel's **Trim** until the peaks land inside the band. Do the same for each
+   instrument. The limiter, tape and compressors should now work without extreme settings.
+2. Click **Vocal**, click **Enhancer: off** and tick **This block on**. Stop singing and lower
+   or raise **Threshold** until the room noise and spill drop when you are quiet but your
+   quietest singing still comes through whole. **Depth** is how far it turns down in the gaps.
+3. Try **Time** at A and at F: A closes quickly after each phrase, F slowly.
+4. Click **Warmth**, switch it on with **Drive** high, and move **Mix** between 0 and 100.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.

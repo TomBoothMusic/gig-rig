@@ -17,7 +17,7 @@ instead; untick it and you are back where you were.
 a socket, after its effects chain (the same point the looper hears)
   + every loop that was recorded from that socket      (each loop comes back on its own channel)
   -> record point "after the looper", and the direct out for a sound crew
-  -> the channel: gate, warmth, EQ, compressor, 1176-style compressor, LA-2A style compressor
+  -> the channel: gate, source enhancer, warmth, EQ, compressor, 1176-style compressor, LA-2A style compressor
   -> fader, pan, mute -> main mix
   -> sends: the four reverbs and delays (after everything), and monitor 1 and monitor 2
      (each monitor chooses: before the processing, after the EQ, or after the compressors)
@@ -46,8 +46,8 @@ The thin amber bar beside a meter shows how far the compressor (or limiter) is t
 **Press a strip's name** and everything about it appears underneath:
 
 - **A channel:** its name, which socket it comes from, trim, pan, what it records, a direct
-  out, its sends to each monitor and each reverb or delay, and six blocks of processing:
-  **Gate**, **Warmth**, **EQ**, **Compressor**, **1176 style** and **LA-2A style**. Press a
+  out, its sends to each monitor and each reverb or delay, and seven blocks of processing:
+  **Gate**, **Enhancer**, **Warmth**, **EQ**, **Compressor**, **1176 style** and **LA-2A style**. Press a
   block's button to see its sliders; **This block on** switches it in and out. Double-click a
   slider for its starting point. Under the sends are two switches: **Stereo with channel N**
   and **Belong to this song, not the act** (both explained below).
@@ -67,9 +67,18 @@ how much and how wide), a high shelf and a high cut.
 All four start switched off, and all are in the Effects tab's list too (under **Studio**), so
 they can go in an effects chain as well.
 
+- **Enhancer** (every channel, after the gate): a source enhancer in the style of the Rupert
+  Neve Portico 5045, the gentle alternative to a gate on a voice. While you sing the channel
+  is untouched; between phrases it is turned down by **Depth** (a few dB), never shut, so
+  spill and feedback in the gaps drop and no word is cut. Set **Threshold** just under your
+  quietest singing. **Time** (A fastest to F slowest) is how slowly it closes, and it opens
+  again within a few thousandths of a second. It listens to the voice's part of the sound,
+  so a kick or a cymbal near the microphone opens it less than a voice does. **Listens to**
+  chooses RMS (loudness, the usual) or Peak. The amber bar does not include it; its own
+  turn-down shows in the report.
 - **Warmth** (every channel, before the EQ): a touch of valve-desk colour. **Drive** adds the
-  harmonics, **Colour** leans it dark or bright, **Level** trims. The loudness stays about
-  where it was as Drive goes up.
+  harmonics, **Colour** leans it dark or bright, **Level** trims, and **Mix** blends the
+  untouched sound back in. The loudness stays about where it was as Drive goes up.
 - **LA-2A style** (every channel, last): the slow, smooth studio leveller with two knobs,
   **Peak reduction** and **Gain**, and a Compress or Limit switch. Kind to a voice or a bass.
 - **Bus comp** (main and both monitors): the desk-style compressor that glues a mix together.
@@ -80,6 +89,15 @@ they can go in an effects chain as well.
   **Level** trims.
 
 The amber bar beside a strip's meter adds up every compressor on that strip.
+
+### Setting levels: the two marks on a channel's meter
+
+The compressors, the tape, the bus compressor and the limiter are all made for a healthy
+level. Each channel's meter has a lighter band between two marks (-18 and -9 dB). Sing or
+play your loudest and raise that channel's **Trim** until the peaks land inside the band,
+then set the mix with the faders and the overall loudness with **Main**. If the limiter's
+Ceiling has to go far down before it does anything, the channels are too quiet: raise the
+Trims, not the Ceiling.
 
 ### Where a monitor takes its sends from
 

@@ -158,6 +158,7 @@ target_sources(GigRig PRIVATE
     src/effects/wah/Wah.cpp
     src/effects/volume/VolumePedal.cpp
     src/effects/la2a/OptoComp.cpp
+    src/effects/enhancer/SourceEnhancer.cpp
     src/effects/warmth/Warmth.cpp
     src/effects/tape/TapeMachine.cpp
     src/effects/buscomp/BusComp.cpp
