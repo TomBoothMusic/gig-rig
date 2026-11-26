@@ -38,7 +38,7 @@ MainComponent::MainComponent()
     // A switch the Effects tab has taken goes to the effects instead.
     pedal.onEvent = [this] (const PedalEvent& event)
     {
-        if (engine.effects().takePedal (event.sw, event.kind == PedalEvent::Kind::down))
+        if (engine.effects().takePedal (event.sw, event.kind == PedalEvent::Kind::down, event.kind == PedalEvent::Kind::hold))
             return;
 
         engine.looper().pedal (event);
