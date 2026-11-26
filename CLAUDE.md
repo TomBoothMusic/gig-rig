@@ -82,7 +82,11 @@ the mixer's reverbs and delays are after the looper; the mixer adds no delay. Pr
 venue, monitors, output) are text files in `Documents/GigRig/Mixer`: their section names,
 keys and block ids are saved on Tom's disk, so never rename them, only add. A song may set a
 channel's sends to the mixer's reverbs and delays (`send =` lines, an overlay on the act) and
-nothing else in the mixer: **a song never changes the venue.**
+which reverb or delay each of the mixer's four effects is and its settings (`mixer effect =`
+lines, an overlay on the venue; Tom's decision, 27 Nov 2026), and nothing else in the mixer:
+**a song never changes the venue itself** (each effect's EQ, cuts and levels, the main output).
+Tom's split (27 Nov 2026): the song carries a reverb's or delay's own settings, the send level is
+the venue's choice. `moveToMixer` in `src/SongBook.cpp` (the Songs tab button) moves old songs over.
 
 ## Adding an effect
 

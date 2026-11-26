@@ -294,6 +294,34 @@ SongSounds SongSounds::fromText (const juce::String& text)
             s.sends.push_back ({ parts[0], parts[1].upToLastOccurrenceOf ("=", false, false).trim(),
                                  level.equalsIgnoreCase ("off") ? mixOffDb : juce::jlimit (mixOffDb, 10.0f, level.getFloatValue()) });
         }
+        else if (low == "mixer effect")
+        {
+            // "mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20"
+            if (parts.size() < 2 || parts[0].isEmpty() || parts[1].isEmpty() || parts[1].containsChar ('='))
+            {
+                s.notUnderstood.add (line + "  (a mixer effect line reads: mixer effect = which one / the reverb or delay's id / setting = value / ...)");
+                continue;
+            }
+
+            MixerEffect e { parts[0], parts[1].toLowerCase(), {} };
+            bool good = true;
+
+            for (int p = 2; p < parts.size(); ++p)
+            {
+                const auto key = parts[p].upToFirstOccurrenceOf ("=", false, false).trim();
+                const auto value = parts[p].fromFirstOccurrenceOf ("=", false, false).trim();
+                good = good && key.isNotEmpty() && value.containsAnyOf ("0123456789");
+                e.values.push_back ({ key, value.getFloatValue() });
+            }
+
+            if (! good)
+            {
+                s.notUnderstood.add (line + "  (each setting reads: name = number)");
+                continue;
+            }
+
+            s.mixerEffects.push_back (e);
+        }
         else if (low == "amps")
         {
             if (parts.size() < 2)
@@ -371,6 +399,14 @@ juce::String SongSounds::toText (const juce::String& title, const juce::StringAr
     for (const auto& x : sends)
         t << "send = " << x.channel << " / " << x.effect << " = " << (x.db <= mixOffDb ? juce::String ("off") : juce::String (x.db, 1)) << "\n";
 
+    for (const auto& x : mixerEffects)
+    {
+        t << "mixer effect = " << x.effect << " / " << x.type;
+        for (const auto& v : x.values)
+            t << " / " << v.first << " = " << juce::String (v.second, 2);
+        t << "\n";
+    }
+
     return t;
 }
 
@@ -429,6 +465,222 @@ std::vector<Mixer::SongSend> resolveSends (const SongSounds& song, const SongSou
         add (*fallback, "The Default sounds line");
 
     return sends;
+}
+
+int mixerEffectFromWords (const juce::String& words, const MixerSetup& mixer)
+{
+    for (int f = 0; f < numMixFx; ++f)
+        if (mixer.fx[(size_t) f].name.trim().equalsIgnoreCase (words.trim()))
+            return f;
+
+    auto w = words.trim().toLowerCase();
+    for (const auto* start : { "effect", "fx" })
+        if (w.startsWith (start))
+            w = w.substring ((int) std::strlen (start)).trim();
+
+    return w.containsOnly ("0123456789") && w.isNotEmpty() && w.getIntValue() >= 1 && w.getIntValue() <= numMixFx ? w.getIntValue() - 1 : -1;
+}
+
+namespace
+{
+    // The name a file can use for one of the mixer's things: its own, or "<kind> N" when the name is empty, has / or = in it, or is used twice.
+    template <typename List>
+    juce::String mixerWords (const List& list, int index, const char* kind)
+    {
+        const auto& name = list[(size_t) index].name;
+        const bool unique = name.trim().isNotEmpty() && ! name.containsAnyOf ("/=")
+                            && std::count_if (list.begin(), list.end(), [&name] (const auto& o) { return o.name.trim().equalsIgnoreCase (name.trim()); }) == 1;
+        return unique ? name.trim() : juce::String (kind) + " " + juce::String (index + 1);
+    }
+
+    bool isMixerReverb (const std::string& type)   { return type == "plate" || type == "room" || type == "spring"; }
+    bool isMixerDelay (const std::string& type)    { return type == "digitaldelay" || type == "tapedelay" || type == "analogdelay"; }
+}
+
+SongSounds::MixerEffect mixerEffectLine (int f, const fx::ChainModel& effect, const MixerSetup& mixer)
+{
+    SongSounds::MixerEffect e { mixerWords (mixer.fx, f, "fx"), {}, {} };
+
+    if (effect.slots.empty())
+        return e;
+
+    e.type = juce::String (effect.slots[0].type);
+
+    if (const auto made = fx::makeEffect (effect.slots[0].type))
+        for (const auto& info : made->params())
+            e.values.push_back ({ juce::String (info.id), effect.slots[0].param (info.id, info.def) });
+
+    return e;
+}
+
+void putMixerEffect (SongSounds& s, const SongSounds::MixerEffect& e, const MixerSetup& mixer)
+{
+    const int f = mixerEffectFromWords (e.effect, mixer);
+    std::erase_if (s.mixerEffects, [&] (const SongSounds::MixerEffect& x) { return mixerEffectFromWords (x.effect, mixer) == f; });
+    s.mixerEffects.push_back (e);
+}
+
+MovedToMixer moveToMixer (const SongSounds& song, const juce::StringArray& chainNames,
+                          const std::array<int, EffectsRack::numChains>& chainChannel, const MixerSetup& mixer, const PresetLoader& loadPreset)
+{
+    MovedToMixer out;
+    out.song = song;
+
+    if (! song.notUnderstood.isEmpty())
+    {
+        out.notes.add ("left alone: it has lines the app could not read, and rewriting the file would lose them");
+        return out;
+    }
+
+    const std::array<fx::ChainModel, EffectsRack::numChains> nothing;
+    const auto r = resolveSounds (song, nullptr, chainNames, nothing, loadPreset);
+
+    // The mixer reverb or delay a channel's effect goes to: a vocal's to the one with "vocal" in
+    // its name, anything else's to the one without.
+    const auto target = [&mixer] (bool vocal, bool delay)
+    {
+        for (int f = 0; f < numMixFx; ++f)
+        {
+            const auto& x = mixer.fx[(size_t) f];
+
+            if (x.on && ! x.effect.slots.empty() && x.name.containsIgnoreCase ("vocal") == vocal
+                && (delay ? isMixerDelay (x.effect.slots[0].type) : isMixerReverb (x.effect.slots[0].type)))
+                return f;
+        }
+
+        return -1;
+    };
+    for (int c = 0; c < EffectsRack::numChains; ++c)
+    {
+        const int ch = chainChannel[(size_t) c];
+
+        if (ch < 0 || ! r.has[(size_t) c] || ! r.named[(size_t) c])
+            continue;
+
+        const auto& model = r.model[(size_t) c];
+
+        if (std::any_of (model.slots.begin(), model.slots.end(), [] (const fx::SlotModel& s) { return s.type == "amp" || s.type == "bass9"; }))
+            continue;
+
+        const auto words = "chain " + juce::String (c + 1);
+        const bool vocal = mixer.channel[(size_t) ch].name.containsIgnoreCase ("vocal");
+
+        for (const bool delay : { false, true })
+        {
+            if (delay && ! vocal)
+                continue;       // an instrument's delay stays in its chain
+
+            const int f = target (vocal, delay);
+
+            if (f < 0)
+                continue;
+
+            if (std::any_of (out.song.mixerEffects.begin(), out.song.mixerEffects.end(), [&] (const auto& x) { return mixerEffectFromWords (x.effect, mixer) == f; }))
+                continue;
+
+            int slot = -1;
+            for (int i = 0; i < (int) model.slots.size() && slot < 0; ++i)
+            {
+                const auto& s = model.slots[(size_t) i];
+
+                if (s.on && (delay ? isMixerDelay (s.type) && s.param ("throw", 0.0f) < 0.5f : isMixerReverb (s.type)))
+                    slot = i;
+            }
+
+            if (std::find (out.sends.begin(), out.sends.end(), std::pair<int, int> { ch, f }) == out.sends.end())
+                out.sends.push_back ({ ch, f });
+
+            if (slot < 0)
+            {
+                // The song has none switched on. The send belongs to the venue, so the song says
+                // "none" with the effect's own level at nothing.
+                fx::ChainModel quiet = mixer.fx[(size_t) f].effect;
+                quiet.slots.resize (1);
+                quiet.slots[0].setParam (delay ? "mix" : "reverb", 0.0f);
+                out.song.mixerEffects.push_back (mixerEffectLine (f, quiet, mixer));
+                out.changed = true;
+                continue;
+            }
+
+            fx::ChainModel one;
+            one.slots = { model.slots[(size_t) slot] };
+            one.slots[0].on = true;
+            if (delay)
+                one.slots[0].setParam ("throw", 0.0f);
+            out.song.mixerEffects.push_back (mixerEffectLine (f, one, mixer));
+
+            std::erase_if (out.song.settings, [&] (const SongSounds::Setting& x)
+            {
+                return x.setting == "on" && chainFromWords (x.chain, chainNames) == c && slotFromWords (model, x.effect) == slot;
+            });
+            out.song.settings.push_back ({ words, slotWords (model, slot), "on", "0" });
+            out.changed = true;
+            out.notes.add (words + "'s " + slotWords (model, slot) + " to " + mixerWords (mixer.fx, f, "fx"));
+
+            if (delay)
+                for (int i = slot + 1; i < (int) model.slots.size(); ++i)
+                    if (model.slots[(size_t) i].on && isMixerDelay (model.slots[(size_t) i].type) && model.slots[(size_t) i].param ("throw", 0.0f) < 0.5f)
+                        out.notes.add ("(" + words + " has a second delay switched on, " + slotWords (model, i) + ": it stays in the chain)");
+        }
+    }
+
+    return out;
+}
+
+std::vector<Mixer::SongFx> resolveMixerEffects (const SongSounds& song, const SongSounds* fallback, const MixerSetup& mixer, juce::StringArray& problems)
+{
+    const auto effectOf = [&] (const juce::String& words) { return mixerEffectFromWords (words, mixer); };
+
+    std::vector<Mixer::SongFx> list;
+    const auto add = [&] (const SongSounds& from, const char* whose)
+    {
+        for (const auto& x : from.mixerEffects)
+        {
+            const int f = effectOf (x.effect);
+            const auto said = juce::String (whose) + " \"mixer effect = " + x.effect + " / " + x.type + "\": ";
+
+            if (f < 0)
+            {
+                problems.add (said + "the mixer has no reverb or delay called \"" + x.effect + "\" in the venue that is loaded, so the line was left out.");
+                continue;
+            }
+
+            if (std::find (mixerFxChoices().begin(), mixerFxChoices().end(), x.type.toStdString()) == mixerFxChoices().end())
+            {
+                problems.add (said + "\"" + x.type + "\" is not a reverb or delay the mixer has, so the line was left out.");
+                continue;
+            }
+
+            if (std::any_of (list.begin(), list.end(), [f] (const Mixer::SongFx& s) { return s.fx == f; }))
+                continue;
+
+            fx::SlotModel slot;
+            slot.type = x.type.toStdString();
+            const auto made = fx::makeEffect (slot.type);
+
+            for (const auto& v : x.values)
+            {
+                if (made != nullptr && made->paramIndex (v.first.toStdString()) < 0)
+                {
+                    problems.add (said + "that effect has no setting called \"" + v.first + "\", so that one was left out.");
+                    continue;
+                }
+
+                slot.setParam (v.first.toStdString(), v.second);
+            }
+
+            fx::ChainModel m;
+            m.slots = { slot };
+            list.push_back ({ f, m });
+        }
+    };
+
+    add (song, "The song's line");
+
+    if (fallback != nullptr)
+        add (*fallback, "The Default sounds line");
+
+    return list;
 }
 
 //==============================================================================
@@ -1018,6 +1270,7 @@ void SongBook::applySounds (const juce::String& why)
     // The song's sends to the mixer's reverbs and delays: on top of the act, gone with the next
     // song, and never a change to the venue (the reverbs and delays themselves).
     engine.mixer().setSongSends (resolveSends (e.sounds, hasDefault() ? &defaultSounds : nullptr, engine.mixer().setup(), problems));
+    engine.mixer().setSongFx (resolveMixerEffects (e.sounds, hasDefault() ? &defaultSounds : nullptr, engine.mixer().setup(), problems));
 
     for (const auto& line : e.sounds.notUnderstood)
         problems.add ("Line not understood in the song's file: " + line);
@@ -1147,6 +1400,11 @@ SongSounds SongBook::capture (const juce::String& songName, juce::StringArray& n
         }
     }
 
+    // The mixer reverbs and delays that belong to the song: which one, what it is, and every setting.
+    for (const auto& x : engine.mixer().songFx())
+        if (! x.effect.slots.empty())
+            s.mixerEffects.push_back (mixerEffectLine (x.fx, x.effect, engine.mixer().setup()));
+
     s.hasSwitches = true;
 
     for (int i = 0; i < EffectsRack::numPedalAssigns; ++i)
@@ -1255,6 +1513,173 @@ juce::String SongBook::keepAsDefault()
     applySounds ("the default sounds were kept");
     note = "Kept as the default sounds: every song without lines of its own for a chain now uses these."
          + (notes.isEmpty() ? juce::String() : " " + notes.joinIntoString (" "));
+    changed();
+    return note;
+}
+
+juce::String SongBook::keepMixerEffect (int f, bool asDefault)
+{
+    auto& mixer = engine.mixer();
+
+    if (f < 0 || f >= numMixFx || mixer.effectNow (f).slots.empty())
+        return note = "There is no reverb or delay there to save.";
+
+    const auto effect = mixer.effectNow (f);
+    const auto e = currentEntry();
+    auto s = asDefault ? defaultSounds : e.sounds;
+    const bool songHasOwn = std::any_of (e.sounds.mixerEffects.begin(), e.sounds.mixerEffects.end(),
+                                         [&] (const auto& x) { return mixerEffectFromWords (x.effect, mixer.setup()) == f; });
+    s.notUnderstood.clear();
+    putMixerEffect (s, mixerEffectLine (f, effect, mixer.setup()), mixer.setup());
+
+    if (! asDefault && ! e.hasFile)
+    {
+        if (! e.builtIn)
+            s.looper = builtInSong (e.layout).title();
+        if (! e.builtIn || e.program != builtInSong (e.layout).rcMemory)
+            s.program = e.program;
+    }
+
+    if (! writeSong (asDefault ? juce::String (defaultFileName) : e.name, s))
+        return note = "Could not write the file in " + songFolder.getFullPathName();
+
+    rescan();
+
+    // The effect on screen now is the song's (or the default's, which every song without its own follows).
+    if (! asDefault || ! songHasOwn)
+        mixer.setSongFx (f, effect);
+
+    const auto name = mixer.setup().fx[(size_t) f].name;
+    note = asDefault ? "Saved " + name + " as it is now into the default sounds: every song without its own " + name + " uses it."
+                       + (songHasOwn ? " \"" + e.name + "\" has its own, so it keeps its own." : juce::String())
+                     : "Saved " + name + " as it is now for \"" + e.name + "\". Nothing else in the song's file was changed.";
+    changed();
+    return note;
+}
+
+juce::File SongBook::newestBackup() const
+{
+    auto folders = songFolder.getParentDirectory().findChildFiles (juce::File::findDirectories, false, songFolder.getFileName() + " backup *");
+    folders.sort();
+    return folders.isEmpty() ? juce::File() : folders.getLast();
+}
+
+juce::String SongBook::moveSoundsToMixer()
+{
+    auto& mixer = engine.mixer();
+    const auto& rack = engine.effects();
+    const auto& setup = mixer.setup();
+    moveLog.clear();
+
+    // Which mixer channel each chain feeds: the first channel in use that takes its socket.
+    std::array<int, numChains> chainChannel;
+    chainChannel.fill (-1);
+
+    for (int c = 0; c < numChains; ++c)
+        if (rack.routing (c).on)
+            for (int ch = numMixChannels - 1; ch >= 0; --ch)
+                if (setup.channel[(size_t) ch].on && setup.channel[(size_t) ch].socket == rack.routing (c).source)
+                    chainChannel[(size_t) c] = ch;
+
+    if (std::all_of (chainChannel.begin(), chainChannel.end(), [] (int ch) { return ch < 0; }))
+        return note = "Nothing was moved: no effects chain that is on feeds a mixer channel that is on. Load your act on the Mixer tab first.";
+
+    const auto backup = songFolder.getParentDirectory().getChildFile (songFolder.getFileName() + " backup " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S"));
+
+    if (! songFolder.isDirectory() || ! songFolder.copyDirectoryTo (backup))
+        return note = "Nothing was moved: could not copy the songs folder to " + backup.getFullPathName() + " first.";
+
+    const auto names = chainNames();
+    const auto load = loader();
+    int moved = 0, failed = 0;
+    std::vector<std::pair<int, int>> sends;
+    const auto noteSends = [&sends] (const MovedToMixer& m)
+    {
+        for (const auto& s : m.sends)
+            if (std::find (sends.begin(), sends.end(), s) == sends.end())
+                sends.push_back (s);
+    };
+
+    if (hasDefault())
+    {
+        const auto m = moveToMixer (defaultSounds, names, chainChannel, setup, load);
+        noteSends (m);
+
+        if (m.changed && ! writeSong (defaultFileName, m.song))
+            ++failed;
+        else if (m.changed)
+            ++moved;
+
+        if (! m.notes.isEmpty())
+            moveLog.add ("Default sounds: " + m.notes.joinIntoString ("; "));
+    }
+
+    const auto list = entries;
+
+    for (const auto& e : list)
+    {
+        if (! e.hasFile || ! e.sounds.saysAnything())
+            continue;
+
+        const auto m = moveToMixer (e.sounds, names, chainChannel, setup, load);
+        noteSends (m);
+
+        if (m.changed && ! writeSong (e.name, m.song))
+            ++failed;
+        else if (m.changed)
+            ++moved;
+
+        if (! m.notes.isEmpty())
+            moveLog.add (e.name + ": " + m.notes.joinIntoString ("; "));
+    }
+
+    // The send level is the venue's choice, not the song's (Tom, 27 Nov 2026). A send that is off
+    // would leave the moved reverb or delay unheard, so it is opened at 0 dB, where the sound is
+    // what it was in the chain. Sends already open are left as they are.
+    juce::StringArray opened;
+
+    for (const auto& [ch, f] : sends)
+    {
+        if (mixer.hasSongSend (ch, f) || mixer.setup().channel[(size_t) ch].fxDb[(size_t) f] > mixOffDb)
+            continue;
+
+        auto next = mixer.setup().channel[(size_t) ch];
+        next.fxDb[(size_t) f] = 0.0f;
+        mixer.setChannel (ch, next);
+        opened.add (mixer.setup().channel[(size_t) ch].name + " to " + mixer.setup().fx[(size_t) f].name);
+    }
+
+    if (! opened.isEmpty())
+        moveLog.add ("Sends opened at 0 dB (they were off): " + opened.joinIntoString (", ") + ". Save your act on the Mixer tab to keep them.");
+
+    rescan();
+    applySounds ("reverbs and delays were moved to the mixer");
+    note = "Moved to the mixer in " + juce::String (moved) + " song file" + (moved == 1 ? "" : "s") + "."
+         + (failed > 0 ? " " + juce::String (failed) + " could not be written." : juce::String())
+         + (opened.isEmpty() ? juce::String() : " Sends opened at 0 dB: " + opened.joinIntoString (", ") + " (save your act on the Mixer tab to keep them).")
+         + " The files as they were are in \"" + backup.getFileName() + "\" beside the songs folder; 'Put the songs back' undoes it."
+         + (mixer.isOn() ? juce::String() : " The mixer is switched OFF: these reverbs and delays are only heard with the mixer on.");
+    changed();
+    return note;
+}
+
+juce::String SongBook::restoreSongsBackup()
+{
+    const auto backup = newestBackup();
+
+    if (! backup.isDirectory())
+        return note = "There is no backup to put back: 'Move reverbs and delays to the mixer' makes one each time it is pressed.";
+
+    int count = 0;
+
+    for (const auto& f : backup.findChildFiles (juce::File::findFiles, false, "*.txt"))
+        if (f.copyFileTo (songFolder.getChildFile (f.getFileName())))
+            ++count;
+
+    moveLog.clear();
+    rescan();
+    applySounds ("the song files were put back from a backup");
+    note = "Put back " + juce::String (count) + " song files from \"" + backup.getFileName() + "\".";
     changed();
     return note;
 }
@@ -1416,6 +1841,9 @@ juce::String SongBook::reportText() const
         for (const auto& line : juce::StringArray::fromLines (e.sounds.toText (e.name)))
             if (line.isNotEmpty() && ! line.startsWithChar ('#'))
                 t << "  file: " << line << "\n";
+
+    for (const auto& line : moveLog)
+        t << "Moved to the mixer: " << line << "\n";
 
     if (note.isNotEmpty())
         t << "Last: " << note << "\n";

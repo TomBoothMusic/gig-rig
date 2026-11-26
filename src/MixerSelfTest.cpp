@@ -396,6 +396,59 @@ void runMixerSelfTest (const Check& check)
                "mixer: a loop on a track that hears the acoustic and the stomp records the kick pad's kick on a lane of its own, and plays it back as loud as it was (" + db (looped) + ", played " + db (live) + ")");
     }
 
+    // ---- a song's own reverb or delay, and the EQ on what goes into one (27 Nov 2026) ----
+    {
+        Bench b;
+        auto s = bareSetup();
+        s.channel[0].on = true;
+        s.channel[0].fxDb[1] = 0.0f;                        // the vocal into mixer effect 2
+        s.fx[1].on = true;
+        s.fx[1].returnDb = mixOffDb;
+        s.fx[1].monDb = { mixOffDb, 0.0f };                 // the effect alone, on monitor 2
+        fx::SlotModel venueDelay;
+        venueDelay.type = "digitaldelay";
+        venueDelay.setParam ("time", 100.0f);
+        venueDelay.setParam ("mix", 20.0f);
+        s.fx[1].effect.slots = { venueDelay };
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+        b.source = band (b.rate);
+        b.run (3.0);
+        const double venue = steady (b.last (3, 1.0), vocalHz, b.rate);
+        const auto venueText = b.engine.mixer().setup().fx[1].effect.toText();
+
+        fx::SlotModel songDelay = venueDelay;
+        songDelay.setParam ("mix", 80.0f);
+        fx::ChainModel m;
+        m.slots = { songDelay };
+        b.engine.mixer().setSongFx ({ { 1, m } });
+        b.run (3.0);
+        const double song = steady (b.last (3, 1.0), vocalHz, b.rate);
+        const bool said = b.engine.mixer().reportText().contains ("this song's own");
+        const bool venueKept = b.engine.mixer().setup().fx[1].effect.toText() == venueText;
+
+        b.engine.mixer().setSongFx (std::vector<Mixer::SongFx>());
+        b.run (3.0);
+        const double back = steady (b.last (3, 1.0), vocalHz, b.rate);
+        check (venue > 0.001 && song > venue * 2.0 && std::abs (back / venue - 1.0) < 0.02 && said && venueKept && ! b.engine.mixer().reportText().contains ("this song's own"),
+               "mixer: a song's own delay settings take over a mixer effect while the song is loaded (" + db (song) + " against the venue's " + db (venue)
+               + "), the venue's own are untouched, and they are back when the song lets go (" + db (back) + ")");
+
+        // The EQ on what goes into the effect: a deep cut at the sung note leaves the delay little to repeat.
+        auto cut = b.engine.mixer().setup().fx[1];
+        fx::SlotModel eq;
+        eq.type = "mixeq";
+        eq.setParam ("b2f", (float) vocalHz);
+        eq.setParam ("b2g", -15.0f);
+        cut.eq.slots = { eq };
+        b.engine.mixer().setFx (1, cut);
+        b.run (3.0);
+        const double thinned = steady (b.last (3, 1.0), vocalHz, b.rate);
+        const auto saved = b.engine.mixer().stateText();
+        check (thinned < venue * 0.35 && saved.contains ("[fx 2 eq]") && saved.contains ("b2g"),
+               "mixer: the EQ in front of a mixer delay or reverb shapes what goes into it (a 15 dB cut at the sung note takes its repeats from " + db (venue) + " to " + db (thinned) + ") and is saved with the venue");
+    }
+
     // ---- each loop comes back on the channel it was recorded from ----
     {
         // The same performance twice: once the old way (loops on returns 5 and 6), once through the mixer.

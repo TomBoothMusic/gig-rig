@@ -911,6 +911,39 @@ Added after Tom's test of build 103.
    the looped guitar stays.
 7. Wicked Game: track 2 records bass and stomp. Livin: track 1 records bass, acoustic and stomp.
 
+### Part M: an EQ into each mixer reverb and delay, and a song's own delay (10 minutes)
+
+1. **Mixer** tab, press **Vocal delay**. Send the Vocal channel to it and sing. Move **Into it:
+   band A** down and its **at** slider across your voice: the repeats thin out, your dry voice
+   does not change. **Into it: low shelf** and **high shelf** do the same for the bottom and top.
+2. Load a song. Press **Vocal delay** and tick **Belong to this song, not the venue**.
+3. Change **Effect (this song's)** to **Tape delay** and set its sliders.
+4. On the **Songs** tab press **Keep these sounds for this song**.
+5. Load another song: the venue's delay is back. Load the first again: its tape delay is back.
+6. The quick way: with a song loaded, press **Vocal delay**, change a slider, and press **Save to
+   this song** just under it. Only that delay's line in the song's file changes. **Save as
+   default** puts it in the default sounds instead, for every song without its own.
+
+### Part N: moving your songs' vocal reverb, vocal delay and acoustic room into the mixer (15 minutes)
+
+Do this at home, not before a gig. It rewrites your song files, after copying them all first.
+
+1. Start with the mixer **on** and your act and venue loaded, and play a song or two so you know
+   how the vocal and the acoustic sound now.
+2. **Songs** tab: press **Move reverbs and delays to the mixer**. The line under **What happened**
+   says how many song files changed and the name of the backup folder.
+3. Play the same songs. They should sound the same, but now a loop of your voice or the acoustic
+   is recorded dry and the reverb and delay come after it.
+4. The reverb and delay amounts are still each song's own. How much of them a room gets is the
+   send: on the **Mixer** tab press **Vocal**, and move **To Vocal plate** and **To Vocal delay**.
+   Press **Save** beside **Act** to keep the sends.
+5. If anything is wrong, press **Put the songs back** on the Songs tab. Every song file is as it
+   was before step 2.
+
+What it does not touch: delay throws, anything in the electric or bass chains, the acoustic's
+own short delay, and your presets. With the mixer switched **off** the moved reverbs and delays
+are not heard at all, so press **Put the songs back** before going back to the mixer off.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.

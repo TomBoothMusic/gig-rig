@@ -86,6 +86,7 @@ struct MixFxSetup
     float lowCutHz = 20.0f, highCutHz = 20000.0f;   // on the wet sound only
     float returnDb = 0.0f;              // into the main mix
     std::array<float, numMixMonitors> monDb { mixOffDb, mixOffDb };
+    fx::ChainModel eq;                  // one mixeq, on what goes INTO the effect (Tom, 27 Nov 2026)
 };
 
 struct MixOutputSetup
@@ -146,6 +147,19 @@ public:
     bool hasSongSend (int c, int f) const noexcept      { return songHas[(size_t) c][(size_t) f]; }
     void setSongSend (int c, int f, float db);
     void clearSongSend (int c, int f);
+    // ---- a song's own reverb and delay settings (Tom's decision, 27 Nov 2026) ----
+    // A song may also say which reverb or delay one of the mixer's four effects is, and how it
+    // is set (its file's "mixer effect" lines). Like the sends this sits on top: the venue's own
+    // effect comes back when another song loads. The EQ, the cuts and the levels stay the venue's.
+    struct SongFx { int fx = 0; fx::ChainModel effect; };
+    void setSongFx (const std::vector<SongFx>&);
+    std::vector<SongFx> songFx() const;
+    bool hasSongFx (int f) const noexcept               { return f >= 0 && f < numMixFx && songFxHas[(size_t) f]; }
+    void setSongFx (int f, const fx::ChainModel&);
+    void clearSongFx (int f);
+    /** The reverb or delay an effect is right now: the song's where it has one, else the venue's. */
+    const fx::ChainModel& effectNow (int f) const noexcept  { return songFxHas[(size_t) f] ? songFxModel[(size_t) f] : now.fx[(size_t) f].effect; }
+
     /** What a channel sends to an effect right now: the song's value where it has one, else the act's. */
     float sendDb (int c, int f) const noexcept;
 
@@ -320,7 +334,7 @@ private:
 
     struct Fx
     {
-        fx::Chain chain;
+        fx::Chain chain, pre;           // the effect, and the EQ on what goes into it
         fx::WetFilter filter;
         std::atomic<bool> on { true };
         std::atomic<float> ret { 1.0f };
@@ -358,6 +372,8 @@ private:
     MixerSetup now;                                     // message thread's copy
     std::array<std::array<float, numMixFx>, numMixChannels> songDb {};
     std::array<std::array<bool, numMixFx>, numMixChannels> songHas {};
+    std::array<bool, numMixFx> songFxHas {};
+    std::array<fx::ChainModel, numMixFx> songFxModel;
     juce::String act, venue, monitors;
     bool actDirty = false, venueDirty = false, monitorsDirty = false;
     bool dirty = false;

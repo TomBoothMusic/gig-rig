@@ -23,6 +23,7 @@ namespace gigrig
         switch CTL3 = chain 3 / delay throw
         amps = chain 1 / Dream 65 - Clean / Dream 65 - Break Up
         send = Vocal / Vocal plate = -6
+        mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20 / mix = 20
 
     A song NAMES presets (the files in Documents/GigRig/Effect presets); it does not copy them.
     So editing a preset changes every song that names it. 'set' lines are the song's own
@@ -34,6 +35,7 @@ struct SongSounds
     struct Switch       { int sw = -1; juce::String chain, action; };
     struct AmpList      { juce::String chain; juce::StringArray models; };
     struct Send         { juce::String channel, effect; float db = 0.0f; };      // a mixer channel's send to a mixer reverb or delay
+    struct MixerEffect  { juce::String effect, type; std::vector<std::pair<juce::String, float>> values; };   // which reverb or delay a mixer effect is for this song, and its settings
 
     int program = 0;                    // 1 to 128 as Songbook Pro and the RC-600 count them, 0 = none
     juce::String looper;                // the looper layout to use (a built-in song's name); empty = its own, or the general one
@@ -45,9 +47,10 @@ struct SongSounds
     std::vector<Switch> switches;
     std::vector<AmpList> amps;
     std::vector<Send> sends;            // on top of the act while this song is loaded; never changes the venue
+    std::vector<MixerEffect> mixerEffects;  // on top of the venue while this song is loaded (Tom, 27 Nov 2026); the venue keeps its EQ, cuts and levels
     juce::StringArray notUnderstood;    // lines the reader could not use, for the report
 
-    bool saysAnything() const noexcept  { return ! chains.empty() || ! settings.empty() || hasSwitches || ! amps.empty() || ! sends.empty(); }
+    bool saysAnything() const noexcept  { return ! chains.empty() || ! settings.empty() || hasSwitches || ! amps.empty() || ! sends.empty() || ! mixerEffects.empty(); }
 
     juce::String toText (const juce::String& title, const juce::StringArray& chainNames = {}) const;
     static SongSounds fromText (const juce::String& text);
@@ -72,7 +75,41 @@ struct ResolvedSounds
     fallback's (the default sounds) fill in the pairs the song does not name. Pure. */
 std::vector<Mixer::SongSend> resolveSends (const SongSounds& song, const SongSounds* fallback, const MixerSetup&, juce::StringArray& problems);
 
+/** The mixer reverbs and delays a song sets for itself ("mixer effect" lines), worked out the same
+    way: "Vocal delay" or "fx 2" for which, then the effect's id and its settings. Settings a line
+    does not name take that effect's own starting values. The song's lines win; the fallback's fill
+    in the effects the song does not name. Pure. */
+std::vector<Mixer::SongFx> resolveMixerEffects (const SongSounds& song, const SongSounds* fallback, const MixerSetup&, juce::StringArray& problems);
+
 using PresetLoader = std::function<bool (const juce::String& name, fx::ChainModel&)>;
+
+/** Which of the mixer's reverbs and delays a file means by "Vocal delay" or "fx 2". -1 = none. */
+int mixerEffectFromWords (const juce::String& words, const MixerSetup&);
+
+/** A mixer reverb or delay as a song file's line: its name (or "fx 2" when the name will not do), what it is, every setting. */
+SongSounds::MixerEffect mixerEffectLine (int fx, const fx::ChainModel& effect, const MixerSetup&);
+
+/** Puts a mixer effect line into a song's sounds in place of any line for the same reverb or delay. */
+void putMixerEffect (SongSounds&, const SongSounds::MixerEffect&, const MixerSetup&);
+
+/** Moves one song's vocal reverb, vocal delay and acoustic room out of its effects chains and into
+    the mixer (Tom, 27 Nov 2026): for each chain the song names itself that feeds a mixer channel,
+    the reverb that is on (and, on a vocal channel, the delay that is on and is not a delay throw)
+    becomes a 'mixer effect' line with the same settings, and the copy in the chain is switched
+    off with a 'set' line. A song with none switched on gets the line with its level at nothing.
+    The send level is the venue's choice, so no 'send' line is written: 'sends' lists the channel
+    and effect pairs whose send must be open for the moved sounds to be heard. A chain with an amp or the bass in it is left
+    alone (electric delays stay where they are), so are delay throws, presets, and anything the
+    song already has mixer lines for (so a second go changes nothing). chainChannel: the mixer channel each chain feeds, -1 = none. Pure. */
+struct MovedToMixer
+{
+    SongSounds song;
+    bool changed = false;
+    juce::StringArray notes;
+    std::vector<std::pair<int, int>> sends;     // mixer channel, mixer effect
+};
+MovedToMixer moveToMixer (const SongSounds& song, const juce::StringArray& chainNames,
+                          const std::array<int, EffectsRack::numChains>& chainChannel, const MixerSetup&, const PresetLoader& loadPreset);
 
 /** Which chain a file means by "chain 2", "2" or a chain's own name. -1 = none. */
 int chainFromWords (const juce::String& words, const juce::StringArray& chainNames);
@@ -177,6 +214,16 @@ public:
         name and program number (0 = none). Returns an error, or an empty string. */
     juce::String addEntry (const juce::String& name, int program);
 
+    /** Writes one mixer reverb or delay as it is now (which it is, every setting) into the loaded
+        song's file, or into the default sounds, and nothing else: the chains are not touched. */
+    juce::String keepMixerEffect (int fx, bool asDefault);
+    /** Moves every song's vocal reverb, vocal delay and acoustic room into the mixer (moveToMixer),
+        after copying the whole songs folder to a backup folder beside it. */
+    juce::String moveSoundsToMixer();
+    /** Puts the song files back from the newest backup moveSoundsToMixer made. */
+    juce::String restoreSongsBackup();
+    juce::File newestBackup() const;
+
     /** One line for the screen: "Wicked Game (program 11): its own sounds on chains 1 and 3, default on chain 2." */
     juce::String statusLine() const;
     juce::String lastNote() const                   { return note; }
@@ -212,7 +259,7 @@ private:
     int current = 0;
     SongSetup loadedSong;
     juce::String note, soundsFrom, folderStamp;
-    juce::StringArray problems, programLog;
+    juce::StringArray problems, programLog, moveLog;
     std::array<int, EffectsRack::numChains> chainFrom {};   // 0 = left alone, 1 = the song's own lines, 2 = the default sounds
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongBook)

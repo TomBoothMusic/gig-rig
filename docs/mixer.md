@@ -59,8 +59,10 @@ The thin amber bar beside a meter shows how far the compressor (or limiter) is t
   slider for its starting point. Under the sends are two switches: **Stereo with channel N**
   and **Belong to this song, not the act** (both explained below).
 - **A reverb or delay:** which effect it is, a **low cut and high cut on its wet sound**
-  (so an obvious reverb on a voice stays clean), how much goes into each monitor, and the
-  effect's own sliders. The strip's fader is how loud it comes back.
+  (so an obvious reverb on a voice stays clean), an **EQ on what goes into it** (the sliders
+  starting **Into it**: a low shelf, two bands and a high shelf), how much goes into each
+  monitor, and the effect's own sliders. The strip's fader is how loud it comes back. The tick
+  box **Belong to this song, not the venue** is explained below.
 - **An output:** which return it goes out on, mono or stereo, and its blocks: **EQ**,
   **Notches** (six narrow cuts for feedback and room booms), **Compressor**, **Bus comp**,
   **Tape**, **Limiter** and **Speaker delay**. Monitors also choose whether their sends are
@@ -137,8 +139,10 @@ Monitor 1 on returns 1 and 2 and Monitor 2 on returns 3 and 4.
 
 ### Sends that belong to a song
 
-A song can set how much of a channel goes to a reverb or a delay, and nothing else in the
-mixer. It **never changes the venue**: not the reverbs and delays themselves, not the main output.
+A song can set how much of a channel goes to a reverb or a delay. It can also say which
+reverb or delay one of the mixer's four effects is and how that is set (next section). It
+changes nothing else in the mixer: **the venue keeps** each effect's EQ, cuts and levels, and
+the main output.
 
 1. Load the song. On the **Mixer** tab press the channel's name (say **Vocal**).
 2. Tick **Belong to this song, not the act**. The four reverb and delay sends are now marked
@@ -152,6 +156,57 @@ of its own. The **Default sounds** file may have send lines too: they apply to e
 that does not name that channel and effect itself. By hand, a line reads
 `send = channel / reverb or delay = level in dB` (or `off`), with the channel and the effect by
 name or by number (`channel 1`, `fx 2`).
+
+### A reverb or delay that belongs to a song
+
+Tom's decision, 27 Nov 2026: the vocal's delay and reverb and the acoustic's room live in the
+mixer, after the looper, and a song that has its own delay time or its own tape echo keeps it.
+
+1. Load the song. On the **Mixer** tab press the effect's name (say **Vocal delay**).
+2. Tick **Belong to this song, not the venue**. The **Effect** box now reads **Effect (this
+   song's)**.
+3. Choose the delay or reverb and set its sliders.
+4. On the **Songs** tab press **Keep these sounds for this song**. The song's file gets a line
+   such as `mixer effect = Vocal delay / tapedelay / time = 121.30 / feedback = 19.60 / ...`.
+
+When another song loads, the venue's own effect comes back, unless that song has a line of its
+own. The **Default sounds** file may have these lines too. By hand a line reads
+`mixer effect = which one / the effect's id / setting = value / ...`, with the effect by name
+or number (`fx 2`); a setting left out takes the effect's own starting value. The ids the
+mixer has are `plate`, `room`, `spring`, `tapedelay`, `analogdelay` and `digitaldelay`.
+
+**Save to this song** and **Save as default**, under the tick box, do steps 2 to 4 for that one
+effect in one press: the effect as it is now is written into the loaded song's file (or the
+Default sounds file) and nothing else in the file changes.
+
+Tom's split, 27 Nov 2026: **the song carries the effect's own settings** (which delay, its time,
+how much reverb), and **the send level is the venue's choice**, set on the channel and saved
+with the act. A song with no vocal delay has the mixer's delay with its **Mix** at 0, so it
+stays dry whatever the send is. (`send =` lines in a song still work for a song that needs one.)
+
+### Moving songs made before the mixer
+
+**Move reverbs and delays to the mixer** on the Songs tab does it for every song file at once.
+It first copies the whole songs folder to a folder beside it called **Songs backup** with the
+date and time. Then, for each song that names its own presets for the vocal or the acoustic:
+
+- the vocal's reverb that is on becomes that song's **Vocal plate** line, with the same settings;
+- the vocal's delay that is on (not a delay throw) becomes that song's **Vocal delay** line;
+- the acoustic's reverb that is on becomes that song's **Instrument room** line;
+- the copies in the effects chains are switched off by `set` lines in the song. Presets are not changed.
+
+A send that was off is opened at 0 dB, where the sound is what it was in the chain; save the
+act to keep it. Chains with an amp or the bass in them are left alone, so electric delays stay
+in their chain. Songs that follow the Default sounds follow it here too. Pressing it twice
+changes nothing the second time. **Put the songs back** copies the newest backup back. The
+report lists what moved, song by song, on lines starting **Moved to the mixer**.
+
+Which mixer effect is which is worked out from names: a channel with "vocal" in its name goes
+to the reverb and the delay with "vocal" in their names, any other channel to the reverb
+without. With the mixer off the moved effects are not heard.
+
+An effect set the same way in an effects chain and in the mixer sounds the same: send 0 dB,
+return 0 dB, and the effect's own **Mix** does the same job in both places.
 
 ### How it starts
 

@@ -48,7 +48,8 @@ private:
                      keepButton { "Keep these sounds for this song" }, defaultButton { "Keep these sounds as the default" },
                      forgetButton { "Forget this song's own sounds" }, folderButton { "Open songs folder" },
                      addButton { "Add as a new entry" }, againButton { "Set this song's sounds again" },
-                     windowButton { "Open in its own window" };
+                     windowButton { "Open in its own window" },
+                     moveButton { "Move reverbs and delays to the mixer" }, backButton { "Put the songs back" };
     juce::ToggleButton tailsBox { "Delays and reverbs ring out when the sound changes" };
     std::array<juce::ComboBox, EffectsRack::numPedalAssigns> switchBoxes, actionBoxes;
     juce::String said, shownNotes, shownFile;

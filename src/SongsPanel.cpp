@@ -60,6 +60,11 @@ SongsPanel::SongsPanel (AudioEngine& e, SongBook& b)
     forgetButton.onClick  = [this] { say (book.forgetCurrent()); };
     againButton.onClick   = [this] { book.applySounds ("asked for on the Songs tab"); };
     windowButton.onClick  = [this] { if (onWindowButton != nullptr) onWindowButton(); };
+    moveButton.setTooltip ("For every song: the vocal's reverb and delay and the acoustic's room move out of the effects chains and into the mixer, after the looper, with the same settings. "
+                           "Delay throws, electric guitar delays and your presets are left alone. The songs folder is copied to a backup first.");
+    backButton.setTooltip ("Copies the song files back from the newest backup that 'Move reverbs and delays to the mixer' made.");
+    moveButton.onClick    = [this] { say (book.moveSoundsToMixer()); };
+    backButton.onClick    = [this] { say (book.restoreSongsBackup()); };
     windowButton.setTooltip ("Lifts the Songs tab out into a window of its own, so it can sit on a second screen while the Effects tab stays open. Closing that window puts it back.");
     folderButton.onClick  = [this] { book.folder().createDirectory(); book.folder().startAsProcess(); };
 
@@ -103,7 +108,7 @@ SongsPanel::SongsPanel (AudioEngine& e, SongBook& b)
 
     for (auto* c : std::initializer_list<juce::Component*> { &songLabel, &statusLabel, &programLabel, &newLabel, &switchHeading, &fileHeading, &notesHeading, &helpLabel,
                                                              &songBox, &programEditor, &newName, &newProgram, &fileView, &notesView, &programButton, &copyButton,
-                                                             &keepButton, &defaultButton, &forgetButton, &folderButton, &addButton, &againButton, &windowButton, &tailsBox })
+                                                             &keepButton, &defaultButton, &forgetButton, &folderButton, &addButton, &againButton, &windowButton, &moveButton, &backButton, &tailsBox })
         addAndMakeVisible (c);
 
     refresh();
@@ -241,6 +246,12 @@ void SongsPanel::resized()
     forgetButton.setBounds (buttons.removeFromLeft (220));
     buttons.removeFromLeft (6);
     againButton.setBounds (buttons.removeFromLeft (juce::jmin (220, buttons.getWidth())));
+
+    area.removeFromTop (4);
+    auto moving = area.removeFromTop (26);
+    moveButton.setBounds (moving.removeFromLeft (290));
+    moving.removeFromLeft (6);
+    backButton.setBounds (moving.removeFromLeft (170));
 
     area.removeFromTop (4);
     helpLabel.setBounds (area.removeFromTop (20));
