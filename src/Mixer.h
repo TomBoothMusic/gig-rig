@@ -1,0 +1,372 @@
+#pragma once
+
+#include <juce_audio_formats/juce_audio_formats.h>
+
+#include "MixRecorder.h"
+#include "effects/Chain.h"
+#include "effects/mixer/MixerBlocks.h"
+
+#include <array>
+#include <atomic>
+#include <functional>
+#include <vector>
+
+namespace gigrig
+{
+
+/** The mixer stage inside the audio engine (built 26 Nov 2026, see docs/mixer.md and the
+    design doc's "Signal flow" and "Mixer, presets and IEMs").
+
+    Switched off (the default) it does nothing at all: effect chains and loops go to the
+    returns exactly as before, and the CQ12T does the mixing. Switched on, the app is the mixer:
+
+        socket, after its effects chain (the same point the looper hears)
+          + every loop that was recorded from that socket          <- each loop returns to its own channel
+          -> record point "after looper"
+          -> channel gate, EQ, compressor and an analog-style insert (the 1176-style compressor)
+          -> fader, pan, mute -> main mix
+          -> sends: monitor 1, monitor 2, and the four mixer effects (reverbs and delays)
+        mixer effects -> wet low cut and high cut -> main mix and monitors
+        main mix / each monitor -> EQ, notches, compressor, limiter, line delay, level -> a return (or a pair)
+
+    So the mixer's reverbs and delays come after the looper and are never baked into a loop,
+    and a monitor send carries its channel live and looped together with no extra rule.
+
+    Four kinds of preset, loaded independently:
+      act       every channel (what is plugged in, levels, EQ, compressor, sends)
+      venue/PA  the main output's whole chain, and the mixer effects
+      monitors  the two monitor outputs
+      output    one output's processing, loadable into any output
+    Changing songs never touches any of them.
+
+    Nothing here adds delay (except the line delay, when it is set). */
+
+constexpr int numMixChannels = 8;
+constexpr int numMixFx = 4;
+constexpr int numMixOutputs = 3;        // 0 = main, 1 = monitor 1 (Tom), 2 = monitor 2 (the duo partner)
+constexpr int numMixMonitors = 2;
+constexpr int numMixSockets = 16;
+constexpr float mixOffDb = -90.0f;      // a fader or send at or below this is off
+
+/** Where each block sits in a channel's processing (MixChannelSetup::strip). */
+constexpr int stripGate = 0, stripEq = 1, stripComp = 2, stripInsert = 3, numStripBlocks = 4;
+
+/** What a channel records when Record is pressed. */
+enum class RecordPoint { none, raw, afterEffects, afterLooper };
+
+struct MixChannelSetup
+{
+    juce::String name;
+    bool on = false;
+    int socket = -1;                    // 0-based input socket, as the looper hears it (after that socket's effects chain); -1 = none
+    float trimDb = 0.0f;
+    bool mute = false;
+    float faderDb = 0.0f;               // into the main mix
+    float pan = 0.0f;                   // -1 left .. 1 right
+    std::array<float, numMixMonitors> monDb { mixOffDb, mixOffDb };
+    std::array<float, numMixFx> fxDb { mixOffDb, mixOffDb, mixOffDb, mixOffDb };
+    RecordPoint record = RecordPoint::afterLooper;
+    int directReturn = -1;              // sound-crew direct out: this channel alone (live and looped, before its EQ) on a return; -1 = none
+    fx::ChainModel strip;               // gate, mixeq, mixcomp, then the 1176-style insert (comp)
+};
+
+struct MixFxSetup
+{
+    juce::String name;
+    bool on = true;
+    fx::ChainModel effect;              // one reverb or delay from the effects list
+    float lowCutHz = 20.0f, highCutHz = 20000.0f;   // on the wet sound only
+    float returnDb = 0.0f;              // into the main mix
+    std::array<float, numMixMonitors> monDb { mixOffDb, mixOffDb };
+};
+
+struct MixOutputSetup
+{
+    juce::String name;
+    float levelDb = 0.0f;
+    bool mute = false;
+    bool mono = true;                   // left and right summed and sent as one signal
+    bool preFader = true;               // monitors: sends are taken before the channel faders and mutes
+    int firstReturn = -1;               // 0-based return, -1 = not connected
+    bool pair = true;                   // also on the next return (the right side, or the same mono signal again)
+    fx::ChainModel chain;               // mixeq, notches, mixcomp, limiter, linedelay
+};
+
+struct MixerSetup
+{
+    std::array<MixChannelSetup, numMixChannels> channel;
+    std::array<MixFxSetup, numMixFx> fx;
+    std::array<MixOutputSetup, numMixOutputs> output;
+};
+
+/** The mixer as it starts: Tom's sources in the design doc's order, three ready effects with
+    every send off, everything flat. */
+MixerSetup defaultMixerSetup();
+fx::ChainModel defaultStripModel();
+fx::ChainModel defaultOutputModel();
+/** The effects a mixer effect slot may hold (ids from the effects list). */
+const std::vector<std::string>& mixerFxChoices();
+juce::String mixOutputName (int output);
+
+//==============================================================================
+class Mixer
+{
+public:
+    Mixer();
+    ~Mixer();
+
+    //==============================================================================
+    // Message thread.
+
+    void setOn (bool shouldBeOn) noexcept               { wanted.store (shouldBeOn); markChanged(); }
+    bool isOn() const noexcept                          { return wanted.load(); }
+
+    const MixerSetup& setup() const noexcept            { return now; }
+    void setChannel (int c, const MixChannelSetup&);
+    void setFx (int f, const MixFxSetup&);
+    void setOutput (int o, const MixOutputSetup&);
+    void setAll (const MixerSetup&);
+
+    // ---- presets: small text files anyone can read ----
+    enum class Preset { act, venue, monitors, output };
+    static juce::File presetRoot();
+    static juce::File presetFolder (Preset kind, const juce::File& root = presetRoot());
+    juce::StringArray presetNames (Preset kind) const;
+    /** Uses another folder for presets (the self-test does, so it never touches Tom's files). */
+    void setPresetRoot (const juce::File& folder)       { root = folder; }
+    /** Writes the starter presets, each only if no file of that name is there. Returns how many it wrote. */
+    int writeStarterPresets();
+
+    juce::String actText() const;
+    juce::String venueText() const;
+    juce::String monitorsText() const;
+    juce::String outputText (int output) const;
+    /** Each returns an error, or an empty string. */
+    juce::String saveAct (const juce::String& name);
+    juce::String loadAct (const juce::String& name);
+    juce::String saveVenue (const juce::String& name);
+    juce::String saveMonitors (const juce::String& name);
+    juce::String loadMonitors (const juce::String& name);
+    juce::String saveOutput (int output, const juce::String& name);
+    juce::String loadOutput (int output, const juce::String& name);
+
+    /** Loads a venue (PA) preset the safe way: the new main chain fades in beside the old one
+        over about a second, and the level never jumps up (a preset saved louder keeps the
+        level as it is and says by how much it differs). Returns a line for the screen. */
+    juce::String loadVenue (const juce::String& name);
+    static constexpr double venueFadeSeconds = 1.0;
+
+    juce::String actName() const                        { return act; }
+    juce::String venueName() const                      { return venue; }
+    juce::String monitorsName() const                   { return monitors; }
+    bool actChanged() const noexcept                    { return actDirty; }
+    bool venueChanged() const noexcept                  { return venueDirty; }
+    bool monitorsChanged() const noexcept               { return monitorsDirty; }
+
+    // ---- the venue encoder (ENC 5 on the board; three buttons on the Mixer tab for now) ----
+    // Turning only browses: nothing changes until a push, and browsing gives up after 5 seconds.
+    // A push loads the name shown. If tonight's changes to the venue in use are not saved, the
+    // first push only warns and a second push (within 5 seconds) loads.
+    // 'nowMs' is a running clock (Time::getMillisecondCounterHiRes); the self-test passes its own.
+    juce::String turnVenue (int steps, double nowMs);
+    juce::String pushVenue (double nowMs);
+    /** What the main screen shows: the venue in use, or the one being browsed. */
+    juce::String venueScreen (double nowMs) const;
+    static constexpr double browseTimeoutMs = 5000.0;
+
+    // ---- recording: each channel at its record point, and the main mix ----
+    static juce::File recordingFolder();
+    /** Starts a new folder of WAV files. Returns an error, or an empty string. */
+    juce::String startRecording (const juce::File& parentFolder);
+    void stopRecording();
+    MixRecorder& recorder() noexcept                    { return rec; }
+
+    // ---- meters and figures ----
+    float takeChannelPeak (int c) noexcept              { return chans[(size_t) c].peak.exchange (0.0f); }
+    float takeOutputPeak (int o, int side) noexcept     { return outs[(size_t) o].peak[(size_t) side].exchange (0.0f); }
+    float takeFxPeak (int f) noexcept                   { return fxs[(size_t) f].peak.exchange (0.0f); }
+    /** How far a channel's compressor (or an output's compressor or limiter) is turning down now, in dB (0 = not at all). */
+    float channelCompDb (int c) const;
+    float outputCompDb (int o) const;
+    float outputLimiterDb (int o) const;
+    /** Loudest the loops with no channel of their own got since the last call. */
+    float takeStrayPeak() noexcept                      { return strayPeak.exchange (0.0f); }
+    bool guardTripped() const noexcept                  { return guard.load(); }
+    void clearGuard() noexcept                          { guard.store (false); }
+    struct Load { double average = 0.0, busiest = 0.0; };
+    Load load() const noexcept                          { return { (double) loadAverage.load(), (double) loadBusiest.load() }; }
+
+    /** Frees old effect sets and saves the mixer's state if it changed. Call about 10 times a second. */
+    void tick();
+
+    /** The whole mixer as text, for the app's own memory (it comes back as it was left). */
+    juce::String stateText() const;
+    void loadStateText (const juce::String& text);
+    static juce::File stateFile();
+    void saveState();
+    void markChanged() noexcept                         { dirty = true; }
+
+    /** The mixer's part of the report. */
+    juce::String reportText() const;
+    /** Lines the report and the screen both show: anything that looks wrong in the set-up. */
+    juce::StringArray warnings (const std::function<juce::String (int socket)>& socketNote = nullptr) const;
+
+    //==============================================================================
+    // Audio thread.
+
+    void prepare (double sampleRate, int maxBlock);
+
+    /** Call first in every block. True if the mixer is mixing this block (it is on, or fading out). */
+    bool startBlock (int numSamples) noexcept;
+
+    /** Where the looper adds each loop: one bus per socket (null where no channel listens to that socket). */
+    float* const* laneBuses() noexcept                  { return busPtrs.data(); }
+    float* strayBus() noexcept                          { return stray.data(); }
+
+    /** raw = the sockets themselves; feed = the sockets as the looper hears them (after the effects). */
+    void process (const float* const* raw, const float* const* feed, int numIns, int numSamples) noexcept;
+
+    /** Adds the mixer's outputs to the returns. outputFor(r) gives return r's buffer or null. */
+    template <typename OutputFor>
+    void addOutputs (OutputFor&& outputFor, int numSamples) noexcept
+    {
+        for (int o = 0; o < numMixOutputs; ++o)
+        {
+            auto& out = outs[(size_t) o];
+            const int first = out.firstReturn.load (std::memory_order_relaxed);
+
+            if (first < 0)
+                continue;
+
+            if (auto* left = outputFor (first))
+                juce::FloatVectorOperations::add (left, out.buf[0].data(), numSamples);
+
+            if (out.pair.load (std::memory_order_relaxed))
+                if (auto* right = outputFor (first + 1))
+                    juce::FloatVectorOperations::add (right, out.buf[1].data(), numSamples);
+        }
+
+        for (int r = 0; r < 8; ++r)
+            if (directUsed[(size_t) r])
+                if (auto* to = outputFor (r))
+                    juce::FloatVectorOperations::add (to, directData.data() + (size_t) r * (size_t) capacity, numSamples);
+    }
+
+    void setTempo (double bpm) noexcept;
+
+    /** For the self-test: what an output carried in the last block. */
+    const float* outputBuffer (int o, int side) const noexcept  { return outs[(size_t) o].buf[(size_t) side].data(); }
+
+private:
+    /** A gain that moves towards its target at a steady pace, so nothing clicks. */
+    struct Glide
+    {
+        float now = 0.0f;
+        /** Works out this block's start value and per-sample step, and moves on. */
+        void advance (float target, float mostPerSample, int n, float& start, float& step) noexcept
+        {
+            start = now;
+            const float gap = target - now, most = mostPerSample * (float) n;
+            const float end = std::abs (gap) <= most ? target : now + (gap > 0.0f ? most : -most);
+            step = (end - now) / (float) n;
+            now = end;
+        }
+    };
+
+    struct Chan
+    {
+        fx::Chain strip;
+        std::atomic<bool> on { false }, mute { false };
+        std::atomic<int> socket { -1 }, record { 0 }, direct { -1 };
+        std::atomic<float> trim { 1.0f }, fader { 1.0f }, pan { 0.0f };
+        std::array<std::atomic<float>, numMixMonitors> mon {};
+        std::array<std::atomic<float>, numMixFx> fx {};
+        std::atomic<float> peak { 0.0f };
+
+        // audio thread
+        Glide trimG, mainL, mainR, directG;
+        std::array<Glide, numMixMonitors> monL, monR;
+        std::array<Glide, numMixFx> fxG;
+        bool wasOn = false;
+    };
+
+    struct Fx
+    {
+        fx::Chain chain;
+        fx::WetFilter filter;
+        std::atomic<bool> on { true };
+        std::atomic<float> ret { 1.0f };
+        std::array<std::atomic<float>, numMixMonitors> mon {};
+        std::atomic<float> peak { 0.0f };
+
+        Glide retG;
+        std::array<Glide, numMixMonitors> monG;
+        std::vector<float> in, wet;
+        bool live = false;
+    };
+
+    struct Out
+    {
+        // [set][side]. Only the main output uses the second set: a venue load builds the new
+        // chain there and the audio thread fades across.
+        std::array<std::array<fx::Chain, 2>, 2> chain;
+        std::atomic<float> level { 1.0f };
+        std::atomic<bool> mute { false }, mono { true }, preFader { true }, pair { true };
+        std::atomic<int> firstReturn { -1 };
+        std::array<std::atomic<float>, 2> peak {};
+
+        Glide levelG;
+        std::array<std::vector<float>, 2> bus, buf, other;
+    };
+
+    void pushChannel (int c, bool first = false);
+    void pushFx (int f, bool first = false);
+    void pushOutput (int o, bool first = false);
+    void rebuildBuses() noexcept;
+    juce::String applyVenue (const MixerSetup& from, const juce::String& name);
+    juce::StringArray venueList() const;
+
+    MixerSetup now;                                     // message thread's copy
+    juce::String act, venue, monitors;
+    bool actDirty = false, venueDirty = false, monitorsDirty = false;
+    bool dirty = false;
+    int ticksSinceChange = 0;
+    juce::File root;
+
+    // the venue encoder
+    int browseIndex = -1;
+    double browseAtMs = -1.0e12, armedAtMs = -1.0e12;
+    juce::String armedFor, lastVenueNote;
+
+    std::array<Chan, numMixChannels> chans;
+    std::array<Fx, numMixFx> fxs;
+    std::array<Out, numMixOutputs> outs;
+
+    std::atomic<bool> wanted { false };
+    std::atomic<int> mainSet { 0 };                     // which of the main output's two chain sets is in use
+    std::atomic<bool> slowLevel { false };              // the main level is fading to a venue's level
+    std::atomic<bool> guard { false };
+    std::atomic<float> strayPeak { 0.0f };
+    std::atomic<float> loadAverage { 0.0f }, loadBusiest { 0.0f };
+    std::atomic<int> socketMask { 0 };                  // sockets a channel that is on listens to
+
+    // audio thread
+    double rate = 48000.0;
+    int capacity = 0;
+    float master = 0.0f;                                // 0..1: the fade when the mixer is switched on or off
+    float mainMix = 0.0f;                               // 0 = set 0 .. 1 = set 1
+    float fastStep = 0.0f, slowStep = 0.0f, masterStep = 0.0f;
+    std::vector<float> laneData, stray, work, silence, directData;
+    std::array<bool, 8> directUsed {};
+    std::array<float*, numMixSockets> busPtrs {};
+    float guardWindowPeak = 0.0f;
+    int guardWindowLeft = 0, guardHotWindows = 0;
+    float loadPeakHold = 0.0f;
+    int loadHoldLeft = 0;
+
+    MixRecorder rec;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mixer)
+};
+
+} // namespace gigrig

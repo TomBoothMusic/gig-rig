@@ -7,6 +7,7 @@
 #include "DeviceCheckPanel.h"
 #include "EffectsPanel.h"
 #include "LooperPanel.h"
+#include "MixerPanel.h"
 #include "PedalPanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
@@ -43,6 +44,7 @@ private:
     LooperPanel looperPanel { engine, pedal, songBook };
     SongsPanel songsPanel { engine, songBook };
     EffectsPanel effectsPanel { engine };
+    MixerPanel mixerPanel { engine };
     AmpCapturePanel ampPanel { engine };
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first

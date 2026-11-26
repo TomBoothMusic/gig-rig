@@ -162,6 +162,29 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   press and 0 on release, sharing `rockPedal` with the whammy. A real expression pedal should
   set `pedal` directly; the toe switch is the slot's on/off.
 
+## The volume pedal (26 November 2026)
+
+- `src/effects/volume/`, id `volume`, group "Utility": settings `pedal` (0 heel to 100 toe),
+  `heel` (the heel's level in dB; -80 is silence) and `reverse` (heel loud, toe silent).
+- It is an effect so that it can sit anywhere in a chain. Between the drives and the amp it
+  cleans the amp up as it turns down, and wherever it sits it is before the looper, the mixer
+  and the direct outs.
+- The travel follows the ear (level = position to the power 2.5), and the level glides per
+  sample, so a swell never zips.
+- **The blend.** Tom's one pedal fades between the acoustic and the electric: the electric
+  chain has a volume pedal as it is, the acoustic chain has one with `reverse` on.
+  `EffectsRack::moveVolumePedals` moves the `pedal` of every volume pedal in every chain, and
+  the Effects tab calls it when either Pedal slider moves. A real expression pedal should
+  call the same thing. The toe switch (electric to full, acoustic muted, the song's wah or
+  whammy engaged) is not built yet.
+
+## The mixer's own blocks
+
+`src/effects/mixer/` holds the EQ, compressor, notches, limiter, speaker delay and wet filter
+the mixer uses (see `docs/mixer.md`). They follow `Effect.h` and pass the standard checks,
+but are registered in `mixerEffectTypes()`, not `effectTypes()`, so the Effects tab does not
+offer them and pedal-style effects stay out of the mixer.
+
 ## The acoustic, vocal and bass batch (25 November 2026)
 
 Ids: `plate`, `room`, `flanger`, `univibe`, `peq`, `body`, `ir`, `harmony`. Each folder's header

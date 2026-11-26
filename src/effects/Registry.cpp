@@ -9,6 +9,7 @@
 #include "tremolo/Tremolo.h"
 #include "vibrato/Vibrato.h"
 #include "wah/Wah.h"
+#include "volume/VolumePedal.h"
 #include "whammy/Whammy.h"
 #include "bass9/Bass9.h"
 #include "body/AcousticBody.h"
@@ -27,6 +28,7 @@
 #include "gate/NoiseGate.h"
 #include "klon/Klon.h"
 #include "marshall/MarshallBox.h"
+#include "mixer/MixerBlocks.h"
 #include "tubescreamer/TubeScreamer.h"
 
 namespace gigrig::fx
@@ -52,6 +54,8 @@ void responseChecks (const Check&);
 void harmonyChecks (const Check&);
 void whammyChecks (const Check&);
 void wahChecks (const Check&);
+void volumeChecks (const Check&);
+void mixerBlockChecks (const Check&);
 
 const std::vector<EffectType>& effectTypes()
 {
@@ -111,8 +115,32 @@ const std::vector<EffectType>& effectTypes()
           [] { return std::make_unique<Whammy>(); }, whammyChecks },
         { "wah",          "Wah pedal",             "Filter", "A Cry Baby style wah. Rock it with the Pedal slider or a held switch; set where the sweep starts and ends, how narrow the peak is (Q) and how deep.",
           [] { return std::make_unique<Wah>(); }, wahChecks },
+        { "volume",       "Volume pedal",          "Utility", "A volume pedal you can place anywhere: between the drives and the amp it cleans the amp up as it turns down. Heel level sets how quiet the heel is.",
+          [] { return std::make_unique<VolumePedal>(); }, volumeChecks },
         { "bass9",    "Bass9 PRECISION copy", "Bass", "Guitar in, P-bass out: the app's copy of the EHX Bass9 PRECISION patch.",
           [] { return std::make_unique<Bass9>(); }, bass9Checks },
+    };
+
+    return list;
+}
+
+const std::vector<EffectType>& mixerEffectTypes()
+{
+    // The mixer's own blocks (docs/mixer.md). Kept apart from the list above so the Effects
+    // tab does not offer them, but found by id like any other, so a Chain can hold them.
+    static const std::vector<EffectType> list {
+        { "mixeq",     "Mixer EQ",         "Mixer", "Low cut, low shelf, four sweepable bands, high shelf and high cut.",
+          [] { return std::make_unique<MixEq>(); }, mixerBlockChecks },
+        { "mixcomp",   "Mixer compressor", "Mixer", "Threshold, ratio, attack, release, knee and make-up gain.",
+          [] { return std::make_unique<MixComp>(); }, {} },
+        { "notches",   "Notch filters",    "Mixer", "Six narrow cuts for feedback notes and room booms.",
+          [] { return std::make_unique<Notches>(); }, {} },
+        { "limiter",   "Limiter",          "Mixer", "Nothing leaves louder than the ceiling. Adds no delay.",
+          [] { return std::make_unique<Limiter>(); }, {} },
+        { "linedelay", "Line delay",       "Mixer", "Holds an output back to line a far speaker up with the near ones.",
+          [] { return std::make_unique<LineDelay>(); }, {} },
+        { "wetfilter", "Wet filter",       "Mixer", "Low cut and high cut for the wet sound of a mixer reverb or delay.",
+          [] { return std::make_unique<WetFilter>(); }, {} },
     };
 
     return list;
@@ -121,6 +149,10 @@ const std::vector<EffectType>& effectTypes()
 const EffectType* findEffectType (const std::string& id)
 {
     for (const auto& t : effectTypes())
+        if (t.id == id)
+            return &t;
+
+    for (const auto& t : mixerEffectTypes())
         if (t.id == id)
             return &t;
 

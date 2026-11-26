@@ -1390,6 +1390,14 @@ void runEffectChecks (const Check& check)
         if (t.extraChecks)
             t.extraChecks (check);
     }
+
+    for (const auto& t : mixerEffectTypes())
+    {
+        standardChecks (t, check);
+
+        if (t.extraChecks)
+            t.extraChecks (check);
+    }
 }
 
 } // namespace gigrig::fx

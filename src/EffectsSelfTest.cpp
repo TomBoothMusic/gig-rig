@@ -213,6 +213,24 @@ void runEffectsSelfTest (const Check& check)
                    "effects: a held switch puts the whammy's pedal at the toe and letting go brings it back to the heel");
         }
 
+        // One pedal position moves the volume pedal in every chain (the electric's, and the acoustic's reversed one).
+        {
+            const auto before0 = rack.chain (0).model(), before1 = rack.chain (1).model();
+            fx::ChainModel electric, acoustic;
+            electric.slots.push_back ({ "boost", true, {}, {} });
+            electric.slots.push_back ({ "volume", true, {}, {} });
+            acoustic.slots.push_back ({ "volume", true, { { "reverse", 1.0f } }, {} });
+            rack.chain (0).setModel (electric);
+            rack.chain (1).setModel (acoustic);
+            const int moved = rack.moveVolumePedals (30.0f);
+            const float e = rack.chain (0).model().slots[1].param ("pedal", -1.0f), a = rack.chain (1).model().slots[0].param ("pedal", -1.0f);
+            const bool stillReversed = rack.chain (1).model().slots[0].param ("reverse", 0.0f) > 0.5f;
+            rack.chain (0).setModel (before0);
+            rack.chain (1).setModel (before1);
+            check (moved == 2 && std::abs (e - 30.0f) < 0.01f && std::abs (a - 30.0f) < 0.01f && stillReversed && rack.moveVolumePedals (50.0f) == 0,
+                   "effects: one pedal position moves the volume pedal in every chain, so the electric's and the acoustic's reversed one work as a blend");
+        }
+
         // A held switch rocks the wah: toe on the press, heel on the release.
         {
             const auto before = rack.chain (0).model();

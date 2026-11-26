@@ -6,6 +6,7 @@
 #include "GlitchWatch.h"
 #include "LatencyProbe.h"
 #include "Looper.h"
+#include "Mixer.h"
 
 #include <array>
 #include <atomic>
@@ -203,6 +204,10 @@ public:
     /** The effects (stage 6 onwards). They run before the looper, so loops record them. */
     EffectsRack& effects() noexcept                 { return fxRack; }
 
+    /** The mixer (docs/mixer.md). Off, the chains and loops go straight to the returns as before.
+        On, they go through its channels instead, and its outputs go to the returns. */
+    Mixer& mixer() noexcept                         { return mixCore; }
+
     /** Where the looper's timing correction comes from. */
     struct LoopTiming
     {
@@ -258,6 +263,7 @@ private:
     void makeAudioThreadRealtime() noexcept;
     LatencyProbe probe;
     EffectsRack fxRack;
+    Mixer mixCore;
     GlitchWatch glitch;
     std::atomic<int> pingMask { 0b00110000 };   // returns 5 and 6: the CQ's USB stereo channel
     std::atomic<int> playMode { (int) PlayThrough::off };

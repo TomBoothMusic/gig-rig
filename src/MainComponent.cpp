@@ -32,6 +32,7 @@ MainComponent::MainComponent()
     tabs.addTab ("Effects", style::background, &effectsPanel, false);
     tabs.addTab ("Amp capture", style::background, &ampPanel, false);
     tabs.addTab ("Device check", style::background, &devicePanel, false);
+    tabs.addTab ("Mixer", style::background, &mixerPanel, false);       // added last, so the tab numbers before it stay as they were
 
     // The pedal: MIDI from the RC-600 (and clicks on the on-screen switches) become
     // presses, holds and double-presses, and those go straight to the looper.
@@ -67,7 +68,7 @@ MainComponent::MainComponent()
 
     // The pedal and the looper add their parts to the report, and a glitch check
     // starts a fresh count of what the RC-600 sent while it ran.
-    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText() + "\n" + songBook.reportText() + "\n" + engine.effects().reportText() + "\n" + ampPanel.reportText(); };
+    engine.extraReport = [this] { return pedal.reportText() + "\n" + looperPanel.reportText() + "\n" + songBook.reportText() + "\n" + engine.effects().reportText() + "\n" + ampPanel.reportText() + "\n" + mixerPanel.reportText(); };
     engine.onGlitchCheckStarted = [this] { pedal.resetCounts(); };
 
     // ASIO drivers allow one user at a time, so the engine lets go of its
@@ -93,7 +94,7 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check).
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 

@@ -245,6 +245,18 @@ public:
     /** The audio thread. `outputs` holds numLoopOutputs pointers (null where a return does not exist); loops are added to them. */
     void process (const float* const* inputs, int numInputs, float* const* outputs, int numSamples) noexcept;
 
+    /** The mixer's way to hear loops (docs/mixer.md): while buses are set, every lane is added to
+        the bus of the input socket it was recorded from, instead of the returns, so each loop comes
+        back on the mixer channel it was recorded on. buses[socket] may be null (no channel listens
+        to that socket): such a lane, and one with no socket at all, goes to 'stray'.
+        Audio thread, before process(); null buses puts the loops back on the returns. */
+    void setLaneBuses (float* const* buses, int numBuses, float* stray) noexcept
+    {
+        laneBuses = buses;
+        numLaneBuses = buses != nullptr ? numBuses : 0;
+        strayBus = stray;
+    }
+
     LooperSnapshot snapshot() const;
     /** The tempo now, for the effects (0 = no loop has set it yet). Audio thread only. */
     double tempoNow() const noexcept    { return bar > 0 && rate > 0.0 ? activeSong.beatsPerBar * 60.0 * rate / (double) bar : 0.0; }
@@ -362,6 +374,10 @@ private:
     bool isActive (const Track&) const noexcept;
     void log (LoopLogEntry::Kind, int track, juce::int64 a = 0, double b = 0.0) noexcept;
     void publish() noexcept;
+
+    float* const* laneBuses = nullptr;
+    int numLaneBuses = 0;
+    float* strayBus = nullptr;
 
     double rate = 0.0;
     juce::int64 capacity = 0, ringSize = 0, ringMask = 0;

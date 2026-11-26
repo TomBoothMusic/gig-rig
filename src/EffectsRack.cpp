@@ -248,6 +248,29 @@ bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
     return false;
 }
 
+int EffectsRack::moveVolumePedals (float position)
+{
+    int moved = 0;
+
+    for (auto& slot : chains)
+    {
+        auto& ch = slot.chain;
+
+        for (int k = 0; k < (int) ch.model().slots.size(); ++k)
+            if (ch.model().slots[(size_t) k].type == "volume")
+                if (auto* fx = ch.effect (k))
+                {
+                    ch.setParam (k, fx->paramIndex ("pedal"), juce::jlimit (0.0f, 100.0f, position));
+                    ++moved;
+                }
+    }
+
+    if (moved > 0)
+        dirty = true;
+
+    return moved;
+}
+
 bool EffectsRack::bendWhammy (int c, bool toeDown)    { return rockPedal (c, "whammy", toeDown); }
 bool EffectsRack::sweepWah (int c, bool toeDown)      { return rockPedal (c, "wah", toeDown); }
 

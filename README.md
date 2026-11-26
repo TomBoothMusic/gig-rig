@@ -12,7 +12,9 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 1 | Audio through the CQ: a round-trip latency meter, buffer-size choice, play-through with a dropout watch, and a test tone for each return | Built |
 | 2 | The RC-600 as the pedal: every switch by name, and press, 2-second hold and double-press told apart | Built |
 | 3 | The looper: six tracks that copy how the RC-600 loops, driven by the RC-600's switches, for a side-by-side test | Built, first version |
-| 4 onward | Songs from the RC-600 backup, effects, tablet app | Planned |
+| 4 onward | Songs from the RC-600 backup and the effects | Built |
+| Mixer | The app's own mixer: channels with gate, EQ and compressors, reverbs and delays after the looper, monitor mixes, act and venue presets, recording. Off until you switch it on | Built, first version |
+| Later | Tablet app, the board itself | Planned |
 
 The rig computer itself runs Linux. [docs/linux-setup.md](docs/linux-setup.md) sets one up with a
 single script, including a free trial on the laptop from a USB stick.
@@ -684,6 +686,72 @@ Press **Copy report** after Part D and paste it. Say whether any tail was cut sh
 long, whether the amp switch should also change the amp's knobs, and send your list of which
 songs use which presets (the format is at the end of docs/songs.md) so Claude can write all the
 song files in one go.
+
+## The mixer (first build)
+
+The app now has its own mixer, on a new **Mixer** tab at the far right. The full guide is
+[docs/mixer.md](docs/mixer.md). **It starts switched off, and switched off nothing has
+changed**: use the app exactly as before until you want to try it.
+
+### Setting up (5 minutes)
+
+1. Plug in as for the effects tests: voice, acoustic and electric into the CQ sockets you
+   used last time (voice 6, acoustic 7, electric 8), and start the audio as usual.
+2. On the CQ, pull the faders **right down** on those three sockets, and on the channels
+   the effect chains used to arrive on (channels 9 and 10, and ST1). Leave only the **USB
+   stereo channel** up: that is where the app's main mix arrives.
+3. In the app, click the **Mixer** tab and tick **Mixer on**. You should hear yourself
+   through the app's mixer.
+4. If a channel is on the wrong socket: click its name in the row of strips, then choose the
+   socket under **Comes from**.
+
+### Part A: channels (10 minutes)
+
+1. Sing and play. Move the **Vocal**, **Acoustic** and **Electric** faders, and try **Mute**.
+2. Click **Vocal**. Under the strips, drag **Band 2** up and sweep **Band 2 at** to hear the
+   EQ move. Double-click a slider to put it back.
+3. Click **Compressor: off**, tick **This block on**, and lower **Threshold** until the thin
+   amber bar beside the Vocal meter moves when you sing loudly.
+4. Still on Vocal: raise **To Vocal plate** to about -10 dB. You should hear reverb on the
+   voice. Then click the **Vocal plate** strip and move **High cut on the wet sound** and
+   **Low cut on the wet sound**: the reverb gets darker or thinner, the voice itself does not.
+   (If your vocal effects chain still has its own Plate reverb switched on, switch that one
+   off on the Effects tab first, or you will hear two.)
+
+### Part B: loops come back on their own channel (5 minutes)
+
+1. Record a short vocal loop on the looper as usual.
+2. While it plays, move the **Vocal** fader: the loop and your live voice move together.
+   Mute Vocal: both go. The reverb send works on the loop too.
+3. Record a guitar loop and check it follows the guitar's channel, not the vocal's.
+
+### Part C: the venue knob (5 minutes)
+
+1. Press **Turn right** a few times: the line beside it shows venue names. Nothing changes.
+2. Stop on **Own PA (limiter catches peaks first)** and press **Push**. The main fades to
+   that venue over about a second (it is saved 6 dB quieter), with no click.
+3. Turn to **Starting point (flat)** and **Push**. It is saved louder, so the level stays put
+   and the line says by how much.
+4. Move any slider on the **Main** strip, then turn and push again: the first push warns that
+   tonight's changes are not saved, the second loads.
+
+### Part D: a recording (3 minutes)
+
+1. Press **Record**, play for half a minute with a loop running, press **Stop recording**.
+2. Press **Open recordings**. The newest folder should hold one file per channel and a
+   **Main mix** file. Play one channel's file: it should be you and your loops, with no reverb.
+
+### Part E: the volume pedal as a blend (5 minutes, Effects tab)
+
+1. On the **Effects** tab, in the electric chain, add **Volume pedal** and move it to sit
+   between the drives and the amp. In the acoustic chain add another and switch its **Reversed (heel is loud)** on.
+2. Move the **Pedal** slider of either one: both move. At 100 you should hear only the
+   electric, at 0 only the acoustic, and a blend between.
+
+### What to send Claude
+
+Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.
+The mixer's lines are near the end, starting with **MIXER**.
 
 ## The Device check tab
 
