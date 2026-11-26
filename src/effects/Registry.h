@@ -27,6 +27,9 @@ struct EffectType
 };
 
 const std::vector<EffectType>& effectTypes();
+/** The mixer's own blocks (EQ, compressor, notches, limiter, line delay, wet filter): found by
+    findEffectType and makeEffect, checked like every effect, but not offered on the Effects tab. */
+const std::vector<EffectType>& mixerEffectTypes();
 const EffectType* findEffectType (const std::string& id);
 std::unique_ptr<Effect> makeEffect (const std::string& id);
 

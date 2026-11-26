@@ -1618,9 +1618,27 @@ void Looper::render (juce::int64 from, juce::int64 to, float* const* outputs, in
             float* outs[numLoopOutputs];
             int numOuts = 0;
 
-            for (int r = 0; r < numLoopOutputs; ++r)
-                if ((lane.outputMask & (1u << r)) != 0 && outputs[r] != nullptr)
-                    outs[numOuts++] = outputs[r] + offset;
+            if (laneBuses != nullptr)
+            {
+                // The mixer is on: the lane returns to the channel of the socket it was recorded from.
+                float* bus = nullptr;
+
+                for (int socket = 0; socket < numLaneBuses && bus == nullptr; ++socket)
+                    if ((lane.inputMask & (1u << socket)) != 0)
+                        bus = laneBuses[socket];
+
+                if (bus == nullptr)
+                    bus = strayBus;
+
+                if (bus != nullptr)
+                    outs[numOuts++] = bus + offset;
+            }
+            else
+            {
+                for (int r = 0; r < numLoopOutputs; ++r)
+                    if ((lane.outputMask & (1u << r)) != 0 && outputs[r] != nullptr)
+                        outs[numOuts++] = outputs[r] + offset;
+            }
 
             for (int i = 0; i < count; ++i)
             {

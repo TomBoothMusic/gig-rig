@@ -109,6 +109,10 @@ target_sources(GigRig PRIVATE
     src/LooperPanel.cpp
     src/LooperSelfTest.cpp
     src/MidiMonitor.cpp
+    src/Mixer.cpp
+    src/MixerPanel.cpp
+    src/MixerSelfTest.cpp
+    src/MixRecorder.cpp
     src/Pedal.cpp
     src/PedalPanel.cpp
     src/SelfTest.cpp
@@ -151,6 +155,9 @@ target_sources(GigRig PRIVATE
     src/effects/harmony/HarmonyChecks.cpp
     src/effects/whammy/Whammy.cpp
     src/effects/wah/Wah.cpp
+    src/effects/volume/VolumePedal.cpp
+    src/effects/mixer/MixerBlocks.cpp
+    src/effects/mixer/MixerBlockChecks.cpp
     src/effects/amp/NamAmp.cpp
     src/effects/bass9/BassMachine.cpp
     src/effects/bass9/Bass9.cpp

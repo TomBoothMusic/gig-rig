@@ -338,6 +338,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     glitch.prepare (rate, ins, deviceIsCQ ? cqAnalogueInputs : ins);
     loopCore.prepare (rate, simulated ? loopSecondsSimulated : loopSecondsReal);
     fxRack.prepare (rate, scratchSize, ins);
+    mixCore.prepare (rate, scratchSize);
     updateLoopTiming();
     tonePhase = 0.0;
     hotSamples = 0;
@@ -728,7 +729,8 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 
     // ---- play-through (silent while measuring or checking, so nothing can loop round) ----
     const auto mode = (PlayThrough) playMode.load();
-    const bool playing = mode != PlayThrough::off && ! pinging && ! checking && ! measuring.load();
+    // The mixer listens to the sockets itself, so play-through stays quiet while it is on (it would double everything).
+    const bool playing = mode != PlayThrough::off && ! pinging && ! checking && ! measuring.load() && ! mixCore.isOn();
 
     if (playing && mode == PlayThrough::straight)
     {
@@ -802,8 +804,26 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
             loopOutputs[5] = output (1);
         }
 
-        loopCore.process (fxRack.looperInputs (inputs, numIns), numIns, loopOutputs, numSamples);
-        fxRack.addOutputs (output, numSamples);
+        // The mixer, when it is on, takes the chains and the loops in place of the returns. It stands
+        // aside while the amp capture plays its test sound, which must reach its return untouched.
+        const bool mixing = ! fxRack.isAmpCapturing() && mixCore.startBlock (numSamples);
+        const auto* heard = fxRack.looperInputs (inputs, numIns);
+
+        if (mixing)
+            loopCore.setLaneBuses (mixCore.laneBuses(), numMixSockets, mixCore.strayBus());
+        else
+            loopCore.setLaneBuses (nullptr, 0, nullptr);
+
+        loopCore.process (heard, numIns, loopOutputs, numSamples);
+
+        if (mixing)
+        {
+            mixCore.setTempo (fxRack.effectsTempo());
+            mixCore.process (inputs, heard, numIns, numSamples);
+            mixCore.addOutputs (output, numSamples);
+        }
+        else
+            fxRack.addOutputs (output, numSamples);
     }
 
     // ---- meters, clipping and the feedback guard ----------------------------

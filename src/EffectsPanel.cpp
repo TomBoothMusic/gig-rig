@@ -565,7 +565,12 @@ void EffectsPanel::rebuildEditor()
             slider->setTextValueSuffix (info.unit.empty() ? "" : " " + juce::String (info.unit));
             slider->setDoubleClickReturnValue (true, info.def);
             slider->setValue (fx->getParam (p), juce::dontSendNotification);
-            slider->onValueChange = [this, s, p, slider] { rack.chain (chainIndex).setParam (s, p, (float) slider->getValue()); rack.markChanged(); };
+            // A volume pedal's Pedal slider is the one pedal: it moves the volume pedal in every chain
+            // (the acoustic's is reversed), so the blend can be tried before a real pedal is wired in.
+            if (slot.type == "volume" && info.id == "pedal")
+                slider->onValueChange = [this, slider] { rack.moveVolumePedals ((float) slider->getValue()); };
+            else
+                slider->onValueChange = [this, s, p, slider] { rack.chain (chainIndex).setParam (s, p, (float) slider->getValue()); rack.markChanged(); };
             slider->getProperties().set ("param", p);
             addAndMakeVisible (slider);
         }

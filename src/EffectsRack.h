@@ -132,6 +132,12 @@ public:
     const fx::ChainModel& baseline (int chain) const;
     void setBaseline (int chain, const fx::ChainModel&);
 
+    /** Message thread: moves the Pedal of every volume pedal in every chain to one position
+        (0 heel .. 100 toe). Tom's one pedal is a blend: the electric chain's volume pedal as
+        it is and the acoustic chain's reversed both follow it. Where a real expression pedal
+        will arrive. Returns how many it moved. */
+    int moveVolumePedals (float position);
+
     /** Called on the message thread after a pedal press changed something (so the screen can follow). */
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
