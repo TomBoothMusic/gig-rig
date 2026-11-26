@@ -761,6 +761,21 @@ void runLooperSelfTest (const Check& check)
         check (rig.worst (rig.time - 20000, rig.time, [] (juce::int64) { return 0.0f; }) > 0.01f, "and it is heard there");
     }
 
+    // Three sources on one track (26 Nov 2026: vocal, a guitar and the stomp in one press): three lanes.
+    {
+        Rig rig (48000.0, 64, 150, 250, "Two sources per track");
+        rig.tap (7 - 1);                                // bank 2
+        const auto start = rig.tap (4);                 // track 6 rec/play: vocal (socket 6), acoustic (7) and electric (8)
+        rig.run (96000 - (rig.time - start));
+        rig.tap (4);
+        const auto length = rig.length (5);
+        rig.runSeconds (7.0);
+        check (length == 96000 && rig.track (5).lanes == 3, "a track that hears three sockets keeps three lanes, and one press records all three");
+        check (rig.worst (rig.time - 3 * length, rig.time, [&] (juce::int64 t) { return rig.loop (5, start, length, t) + rig.loop (6, start, length, t) + rig.loop (7, start, length, t); },
+                          [&] (juce::int64 t) { return rig.nearJoin (start, length, t); }) < exact,
+               "and the three lanes together are exactly the three sockets as they were played");
+    }
+
     // The default routing mixes the lanes back together, so nothing changes for a song that does not split.
     {
         Rig rig (48000.0, 64, 150, 250, "Two sources per track");

@@ -37,9 +37,10 @@ namespace
       { 4, 30, 56, 82, 108, 134, 193, 171, 186 },
       { 80, 89, 106, 115, 132, 141, 193, 171, 186 },
       { {  } }, 0 },
-    // For trying one track that keeps two sources apart: vocal + acoustic, acoustic + bass, vocal + electric, bass + electric.
+    // For trying one track that keeps its sources apart: vocal + acoustic, acoustic + bass, vocal + electric, bass + electric,
+    // vocal alone, and (track 6) three at once: vocal + acoustic + electric.
     { "Two sources per track", 0, 120.0, true, true,
-      { { { 5, 0, 0, 100, 2 }, { 20, 0, 0, 100, 2 }, { 33, 0, 0, 100, 2 }, { 48, 0, 0, 100, 2 }, { 1, 0, 0, 100, 2 }, { 4, 0, 0, 100, 2 } } },
+      { { { 5, 0, 0, 100, 2 }, { 20, 0, 0, 100, 2 }, { 33, 0, 0, 100, 2 }, { 48, 0, 0, 100, 2 }, { 1, 0, 0, 100, 2 }, { 37, 0, 0, 100, 2 } } },
       { 2, 11, 28, 37, 54, 63, 193, 171, 186 },
       { 80, 89, 106, 115, 132, 141, 193, 171, 186 },
       { {  } }, 0 },
