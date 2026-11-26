@@ -13,19 +13,32 @@ namespace
 
     // The built-in kick, to Tom's description of the one he uses (26 Nov 2026): a real-drum
     // kind of kick, strongest around 55 Hz to stay under the bass guitar, very little in the
-    // middle, and a click up high that still tells on speakers with no bass.
-    // Where the drum settles (55 Hz) and how long its body rings (0.17 s) are the Pitch and Length settings.
-    constexpr double sweepSeconds = 0.018;      // the pitch falls onto 55 Hz this quickly: the "thump"
-    constexpr double sweepSoftHz = 45.0;        // how far above 55 Hz a soft hit starts
-    constexpr double sweepHardHz = 120.0;       // and a hard one: a harder hit bends the head further
-    constexpr double clickHz = 3200.0;          // the beater
-    constexpr double clickSeconds = 0.0035;
-    constexpr double noiseSeconds = 0.0025;
+    // middle, and a beater sound up high that still tells on speakers with no bass.
+    //
+    // Reworked the same night after Tom played it from the SPD::ONE: the first one had a beater
+    // that rang at one note ("a wooden block") and a body that was one pure falling note ("an
+    // 808"). A real drum's beater is a soft slap with no note of its own, and its head makes
+    // more than one note: two short-lived higher ones that are not in tune with the main one,
+    // and a main one that sits a little sharp while the head is still stretched by the hit.
+    constexpr double sweepSeconds = 0.009;      // the thump of the hit itself: the pitch drops this quickly...
+    constexpr double sweepSoftHz = 22.0;        // ...from this far above the body for a soft hit
+    constexpr double sweepHardHz = 70.0;        // and this far for a hard one
+    constexpr double bendSeconds = 0.05;        // the stretched head relaxing: slower and much smaller
+    constexpr double bendSoft = 0.02, bendHard = 0.11;      // as a part of the body's pitch
+    constexpr double punchSeconds = 0.012;      // the first moment is louder than the ring that follows, as on a damped drum
+    constexpr float punchAmount = 0.45f;
+    constexpr double overtone1 = 1.59, overtone2 = 2.30;    // where a drum head's next notes lie (not in tune, which is the point)
+    constexpr double overtone1Seconds = 0.032, overtone2Seconds = 0.02;
+    constexpr float overtone1Level = 0.26f, overtone2Level = 0.13f;
+    constexpr float squash = 0.14f;             // a hard hit flattens the top of the wave a little, as a head pushed to its limit does
+    constexpr double slapSeconds = 0.0045;      // the beater: a soft slap of hiss with no note in it
+    constexpr double slapRiseSeconds = 0.0004;
+    constexpr double slapFloorHz = 900.0;       // nothing of the slap below this: the middle stays empty
     constexpr double lengthsPlayed = 5.3;       // the whole sound lasts this many times the Length setting; the last 20 ms fade to nothing
     constexpr double tailSeconds = 0.02;
     constexpr double fadeSeconds = 0.005;       // a kick still sounding when the next one lands fades out this fast
     constexpr double splitHz = 400.0;           // a recording: what lies above this is "the click"
-    constexpr float bodyLevel = 0.78f, clickLevel = 0.16f, noiseLevel = 0.10f;
+    constexpr float bodyLevel = 0.64f, slapLevel = 0.48f;
 
     float decayFor (double seconds, double rate) noexcept    { return (float) std::exp (-1.0 / (seconds * rate)); }
     float onePole (double hz, double rate) noexcept          { return (float) (1.0 - std::exp (-twoPi * hz / rate)); }
@@ -66,9 +79,13 @@ void KickPad::prepare (double sampleRate)
     fadeSamples = juce::jmax (1, (int) std::lround (fadeSeconds * rate));
     tailSamples = juce::jmax (1, (int) std::lround (tailSeconds * rate));
     sweepDecay = decayFor (sweepSeconds, rate);
-    clickDecay = decayFor (clickSeconds, rate);
-    noiseDecay = decayFor (noiseSeconds, rate);
-    noiseSplit = onePole (1500.0, rate);
+    bendDecay = decayFor (bendSeconds, rate);
+    punchDecay = decayFor (punchSeconds, rate);
+    overtone1Decay = decayFor (overtone1Seconds, rate);
+    overtone2Decay = decayFor (overtone2Seconds, rate);
+    slapDecay = decayFor (slapSeconds, rate);
+    slapRise = decayFor (slapRiseSeconds, rate);
+    noiseSplit = onePole (slapFloorHz, rate);
     sampleSplit = onePole (splitHz, rate);
 
     for (auto& v : voices)
@@ -89,13 +106,16 @@ void KickPad::startVoice (int strength) noexcept
     v.active = true;
     v.gain = kickGainForStrength (strength, touch.load (std::memory_order_relaxed)) * level.load (std::memory_order_relaxed);
     v.clickAmount = juce::jmin (2.0f, kickClickForStrength (strength) * click.load (std::memory_order_relaxed));
-    v.clickTone = onePole (2500.0 + 7000.0 * (double) hard, rate);
+    v.clickTone = onePole (2200.0 + 5300.0 * (double) hard, rate);
     v.bodyHz = pitch.load (std::memory_order_relaxed);
     v.bodyDecay = decayFor ((double) length.load (std::memory_order_relaxed), rate);
     v.lengthSamples = (int) std::lround (lengthsPlayed * (double) length.load (std::memory_order_relaxed) * rate);
     v.sweepHz = (float) (sweepSoftHz + (sweepHardHz - sweepSoftHz) * (double) hard);
-    v.sweepEnv = v.bodyEnv = v.clickEnv = v.noiseEnv = 1.0f;
-    v.noiseSeed = 0x9e3779b9u;          // the same click every time: a kick should not change from hit to hit
+    v.bend = (float) (bendSoft + (bendHard - bendSoft) * (double) hard);
+    v.overtones = 0.35f + 0.65f * hard;     // a soft hit wakes the higher notes of the head less
+    v.squash = squash * hard;
+    v.sweepEnv = v.bendEnv = v.bodyEnv = v.punchEnv = v.overtone1Env = v.overtone2Env = v.slapEnv = v.slapGate = 1.0f;
+    v.noiseSeed = 0x9e3779b9u;          // the same slap every time: a kick should not change from hit to hit
     v.usesSample = playing != nullptr && ! playing->data.empty();
     voices[0] = v;
 }
@@ -134,28 +154,45 @@ float KickPad::nextSample (Voice& v) noexcept
             return 0.0f;
         }
 
-        // The drum: a sine that falls quickly onto 55 Hz and dies away.
-        const auto body = (float) std::sin (v.bodyPhase) * v.bodyEnv;
-        v.bodyPhase += twoPi * (double) (v.bodyHz + v.sweepHz * v.sweepEnv) / rate;
+        // The drum head. Its main note starts sharp and settles: quickly from the thump of the
+        // hit, then slowly as the stretched head relaxes. Two higher notes of the head ring
+        // briefly with it, and the first moment is louder than what follows.
+        const auto hz = (double) (v.bodyHz * (1.0f + v.bend * v.bendEnv) + v.sweepHz * v.sweepEnv);
+        auto drum = (float) std::sin (v.bodyPhase) * v.bodyEnv * (1.0f + punchAmount * v.punchEnv)
+                      + v.overtones * (overtone1Level * (float) std::sin (v.overtone1Phase) * v.overtone1Env
+                                         + overtone2Level * (float) std::sin (v.overtone2Phase) * v.overtone2Env);
+        drum -= v.squash * drum * drum * drum;
 
-        if (v.bodyPhase > twoPi)
-            v.bodyPhase -= twoPi;
+        const auto step = twoPi * hz / rate;
+        v.bodyPhase += step;
+        v.overtone1Phase += step * overtone1;
+        v.overtone2Phase += step * overtone2;
 
-        // The beater: a few milliseconds of a high ring and a puff of hiss, darker for a soft hit.
+        if (v.bodyPhase > twoPi)        v.bodyPhase -= twoPi;
+        if (v.overtone1Phase > twoPi)   v.overtone1Phase -= twoPi;
+        if (v.overtone2Phase > twoPi)   v.overtone2Phase -= twoPi;
+
+        // The beater: a few milliseconds of hiss with the bottom taken off and the top rounded
+        // (twice over, and further for a soft hit). It swells in over a fraction of a millisecond
+        // instead of starting at full, which is the difference between a slap and a tick.
         v.noiseSeed = v.noiseSeed * 1664525u + 1013904223u;
         const auto white = (float) (int) (v.noiseSeed >> 8) * (1.0f / 8388608.0f) - 1.0f;
         v.noiseLow += noiseSplit * (white - v.noiseLow);
-        const auto raw = clickLevel * (float) std::sin (v.clickPhase) * v.clickEnv + noiseLevel * (white - v.noiseLow) * v.noiseEnv;
-        v.clickPhase += twoPi * clickHz / rate;
+        const auto raw = slapLevel * (white - v.noiseLow) * v.slapEnv * (1.0f - v.slapGate);
         v.clickLow += v.clickTone * (raw - v.clickLow);
+        v.clickLow2 += v.clickTone * (v.clickLow - v.clickLow2);
 
         v.sweepEnv *= sweepDecay;
+        v.bendEnv *= bendDecay;
         v.bodyEnv *= v.bodyDecay;
-        v.clickEnv *= clickDecay;
-        v.noiseEnv *= noiseDecay;
+        v.punchEnv *= punchDecay;
+        v.overtone1Env *= overtone1Decay;
+        v.overtone2Env *= overtone2Decay;
+        v.slapEnv *= slapDecay;
+        v.slapGate *= slapRise;
         v.position += 1.0;
 
-        out = bodyLevel * body + v.clickLow * v.clickAmount;
+        out = bodyLevel * drum + v.clickLow2 * v.clickAmount;
 
         if (const auto left = v.lengthSamples - n; left < tailSamples)
             out *= (float) left / (float) tailSamples;
@@ -358,17 +395,32 @@ void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int 
     // Called with the lock held, so two threads never write to the queue at once.
     strength = juce::jlimit (1, 127, strength);
 
-    int start1, size1, start2, size2;
-    fifo.prepareToWrite (1, start1, size1, start2, size2);
+    const auto nowMs = juce::Time::currentTimeMillis();
 
-    if (size1 + size2 > 0)
+    // One stomp can reach the pad twice a few milliseconds apart (Tom's SPD::ONE did it 9 times
+    // in 370 hits, 26 Nov 2026). No foot is that fast, so the weaker of such a pair is the
+    // bounce: it is counted for the report and not played. A stronger second one is played,
+    // and the first fades out under it.
+    const auto bounce = ! fromScreen && hits > 0 && nowMs - lastHitMs < doubleHitMs && strength <= lastHitStrength;
+
+    if (bounce)
     {
-        queue[(size_t) (size1 > 0 ? start1 : start2)] = { strength, juce::Time::getHighResolutionTicks() };
-        fifo.finishedWrite (1);
+        ++bounces;
+    }
+    else
+    {
+        int start1, size1, start2, size2;
+        fifo.prepareToWrite (1, start1, size1, start2, size2);
+
+        if (size1 + size2 > 0)
+        {
+            queue[(size_t) (size1 > 0 ? start1 : start2)] = { strength, juce::Time::getHighResolutionTicks() };
+            fifo.finishedWrite (1);
+        }
     }
 
     Hit hit;
-    hit.timeMs = juce::Time::currentTimeMillis();
+    hit.timeMs = nowMs;
     hit.strength = strength;
     hit.fromScreen = fromScreen;
 
@@ -397,6 +449,7 @@ void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int 
         ++strengthCounts[(size_t) strength];
         ++hits;
         lastHitMs = hit.timeMs;
+        lastHitStrength = strength;
     }
 
     recent.push_back (hit);
@@ -421,7 +474,7 @@ void KickPad::resetCounts()
 {
     const juce::ScopedLock sl (lock);
     recent.clear();
-    hits = screenHits = softest = hardest = doubles = noteOffs = otherMessages = otherNotes = 0;
+    hits = screenHits = softest = hardest = doubles = bounces = lastHitStrength = noteOffs = otherMessages = otherNotes = 0;
     closestGapMs = -1;
     strengthCounts.fill (0);
     otherKinds.clear();
@@ -447,7 +500,7 @@ juce::String KickPad::reportText() const
     lines.add ("  Kick pad: " + juce::String (on.load() ? "on" : "OFF")
                  + ". Sound: " + (sampleLabel.isEmpty() ? juce::String ("built-in kick") : "recording \"" + sampleLabel + "\"")
                  + ". Level " + juce::String (level.load(), 2) + ", touch " + juce::String (touch.load(), 2) + ", click " + juce::String (click.load(), 2)
-                 + ", pitch " + juce::String (pitch.load(), 0) + " Hz, length " + juce::String (length.load(), 2) + " s"
+                 + ", pitch " + juce::String (pitch.load(), 0) + " Hz, length " + juce::String (length.load(), 3) + " s"
                  + ". Plays on returns " + juce::String (returnPair.load() * 2 + 1) + " and " + juce::String (returnPair.load() * 2 + 2) + ".");
 
     if (device.isEmpty())
@@ -491,7 +544,8 @@ juce::String KickPad::reportText() const
 
         if (closestGapMs >= 0)
             lines.add ("  Closest two hits: " + juce::String (closestGapMs) + " ms apart. Hits under " + juce::String (doubleHitMs)
-                         + " ms apart (one stomp counted twice?): " + juce::String (doubles) + ".");
+                         + " ms apart (one stomp counted twice?): " + juce::String (doubles)
+                         + ". Of those, not played because they were the weaker of the pair: " + juce::String (bounces) + ".");
     }
 
     if (const auto started = startedHits.load(); started > 0)

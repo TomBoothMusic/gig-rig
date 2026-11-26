@@ -120,9 +120,10 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     style::body (pitchLabel, "Pitch");
     style::body (lengthLabel, "Length");
     setUpSlider (pitchSlider, 40.0, 90.0, kick.getPitch(), "The built-in kick only: the note the drum settles on, in Hz. 55 sits under the bass guitar.");
-    setUpSlider (lengthSlider, 0.05, 0.4, kick.getLength(), "The built-in kick only: how long the drum rings, in seconds. Shorter is tighter.");
+    setUpSlider (lengthSlider, 0.03, 0.2, kick.getLength(), "The built-in kick only: how long the drum rings, in seconds. Shorter is tighter.");
     pitchSlider.setRange (40.0, 90.0, 1.0);
     pitchSlider.onValueChange = [this] { engine.kick().setPitch ((float) pitchSlider.getValue()); saveSettings(); };
+    lengthSlider.setRange (0.03, 0.2, 0.005);
     lengthSlider.onValueChange = [this] { engine.kick().setLength ((float) lengthSlider.getValue()); saveSettings(); };
 
     style::body (soundLabel, "Sound");
@@ -378,7 +379,7 @@ void KickPadPanel::saveSettings()
     lines.add ("touch=" + juce::String (kick.getTouch(), 2));
     lines.add ("click=" + juce::String (kick.getClick(), 2));
     lines.add ("pitch=" + juce::String (kick.getPitch(), 0));
-    lines.add ("length=" + juce::String (kick.getLength(), 2));
+    lines.add ("length=" + juce::String (kick.getLength(), 3));
     lines.add ("returns=" + juce::String (kick.getReturnPair()));
     lines.add ("sound=" + kick.sampleName());
 
