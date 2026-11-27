@@ -65,6 +65,10 @@ MainComponent::MainComponent()
         looperPanel.songChanged();
         effectsPanel.refresh();
         songsPanel.refresh();
+        // A song (or the move to the mixer) may have changed sends and effects: the Mixer tab must show
+        // it, or a button that still reads "Off" gets pressed and switches the effect off (Tom, 27 Nov 2026).
+        // A moment later, because this can be called from one of that tab's own buttons.
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->mixerPanel.refresh(); });
     };
     devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
 
