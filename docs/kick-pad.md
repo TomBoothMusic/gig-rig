@@ -96,6 +96,49 @@ kick** in it. Within two seconds it appears in the **Sound** box. The app plays 
 softer hits and takes some of its click away, the same as the built-in kick. Recordings stay on
 your computer. They are never part of the app's code, which may be public.
 
+## The piezo pad test
+
+A second test of the same idea (27 Nov 2026): a home-built pad in place of the SPD::ONE. It is
+a plate with a rubber top and a **piezo disc** glued underneath. A knock makes the disc give out
+a short spike of electricity, taller for a harder knock. For this test the disc is plugged into
+a spare socket on the mixer with a guitar lead, and the app turns each spike into a hit with a
+strength from 1 to 127. In the finished board the disc would be wired to the controller inside
+the board, so it would not take up a socket.
+
+**Building the test pad**
+
+1. Glue the piezo disc flat to the middle of the underside of the plate (about 10 by 8 cm).
+2. Stick the rubber on top of the plate.
+3. Solder the disc's two wires to a 6.5 mm mono socket: one wire to the tip, the other to the
+   sleeve. Either way round works.
+4. Sit the plate on four small blocks of firm foam, on the floor.
+
+**Running the test**
+
+1. Plug a guitar lead from the pad into a **spare socket** on the mixer: one that nothing else
+   uses and that has no mixer channel on it in the app. Turn that socket's gain right down on
+   the mixer and its 48 V off.
+2. In the **Kick pad** tab, set **Piezo pad** to that socket.
+3. Stomp on the pad. The kick should play, and each hit shows in **The last hits** with
+   `(piezo ...)` beside it, which is how tall its spike was.
+4. If nothing plays, bring the socket's gain up on the mixer a little at a time until soft
+   taps start to count.
+5. Stomp from the softest tap to the hardest stomp, a fast double, and a steady run.
+6. Tap the floor right beside the pad, as hard as a footswitch press. It should **not** play.
+7. Click **Copy kick pad results** and paste them into the thread, with how it feels beside
+   the SPD::ONE. Click **Start again** between pads so the two sets of results stay apart.
+
+| Setting | What it does |
+| --- | --- |
+| Piezo pad | The socket the piezo is plugged into, or Off. |
+| Counts from | How tall a spike must be to count as a hit. Raise it if a knock beside the pad plays the kick. Lower it if soft taps are missed. |
+| Hardest at | A spike this tall is the hardest hit. Set it near the tallest spike your hardest stomp makes. The results list it. |
+
+The app watches each spike for 2 ms to find its top before the kick starts, then looks away
+for 40 ms while the plate rings, so one stomp is one hit. The results say how tall the
+smallest and tallest counted spikes were, and how tall the tallest ignored one was. Those
+three numbers are what the two sliders should be set from.
+
 ## What this test leaves out, on purpose
 
 - (Changed 27 Nov 2026, once Tom was happy with the sound.) The kick now joins a socket, so it

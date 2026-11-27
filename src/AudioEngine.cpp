@@ -789,6 +789,8 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         // A device with no USB stereo channel (anything smaller than the CQ) plays it on its first pair.
         // Its sound is made here and placed further down: on a socket (looper and mixer) or straight on the returns.
         juce::FloatVectorOperations::clear (kickBuf.data(), numSamples);
+        const int piezo = kickCore.getPiezoSocket();
+        kickCore.listen (piezo >= 0 && piezo < numIns ? inputs[piezo] : nullptr, numSamples, pinging || checking || measuring.load());
         kickCore.process (kickBuf.data(), nullptr, numSamples, pinging || checking || measuring.load());
     }
 

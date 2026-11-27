@@ -408,6 +408,124 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
         check (silentBefore && onlyThere, outs >= 16 ? "kick pad: on the mixer the kick plays on returns 5 and 6 only, and nothing plays before a hit"
                                                     : "kick pad: on a two-channel device the kick plays on its one pair");
     }
+
+    //==============================================================================
+    // The piezo pad test: knocks on an input socket become hits with a strength.
+    {
+        check (KickPad::piezoStrength (0.001f, -36.0f, -6.0f) == 0, "piezo pad: a spike under the threshold is not a hit");
+        check (KickPad::piezoStrength (juce::Decibels::decibelsToGain (-35.9f), -36.0f, -6.0f) <= 3, "piezo pad: a spike just over the threshold is the softest hit");
+        check (KickPad::piezoStrength (juce::Decibels::decibelsToGain (-6.0f), -36.0f, -6.0f) == 127 && KickPad::piezoStrength (1.0f, -36.0f, -6.0f) == 127,
+               "piezo pad: a spike at the hardest-hit level, or over it, is strength 127");
+
+        bool rising = true;
+        int last = 0;
+
+        for (float db = -35.0f; db <= -6.0f; db += 1.0f)
+        {
+            const auto s = KickPad::piezoStrength (juce::Decibels::decibelsToGain (db), -36.0f, -6.0f);
+            rising = rising && s > last;
+            last = s;
+        }
+
+        check (rising, "piezo pad: every decibel taller is a stronger hit");
+
+        KickPad p;
+        p.prepare (rate);
+        testSettings (p);
+        const int block = 64;
+
+        // One block at a time, as the engine does: listen to the socket, then make the sound.
+        const auto play = [&] (const std::vector<float>& socket, bool quiet = false)
+        {
+            std::vector<float> out (socket.size(), 0.0f);
+
+            for (size_t at = 0; at + (size_t) block <= socket.size(); at += (size_t) block)
+            {
+                p.listen (socket.data() + at, block, quiet);
+                p.process (out.data() + at, nullptr, block, quiet);
+            }
+
+            return out;
+        };
+
+        // A knock as a piezo gives it: a spike that rings down over a few milliseconds.
+        const auto knock = [] (std::vector<float>& socket, size_t at, float height)
+        {
+            for (size_t i = 0; i < 2400 && at + i < socket.size(); ++i)
+                socket[at + i] += height * std::exp (-(float) i / 300.0f) * std::cos ((float) i * 0.35f);
+        };
+
+        const size_t second = (size_t) rate;
+        std::vector<float> socket (second, 0.0f);
+        knock (socket, 9600, 0.3f);
+
+        check (peak (play (socket)) == 0.0f, "piezo pad: with no socket chosen, a knock plays nothing");
+
+        p.setPiezoSocket (10);
+        const auto out = play (socket);
+        size_t first = 0;
+
+        while (first < out.size() && out[first] == 0.0f)
+            ++first;
+
+        // The spike starts at sample 9600; its top is known 2 ms later (192 samples); the kick starts with that block.
+        const auto expected = (size_t) ((9600 + 192) / block) * (size_t) block;
+        check (first >= expected && first <= expected + 1, "piezo pad: the kick starts with the block in which the spike's top is known, 2 ms after it began (sample "
+                                                             + juce::String ((int) first) + ", expected " + juce::String ((int) expected) + ")");
+        p.collect();
+        check (p.hitCount() == 1 && p.recentHits().back().fromPiezo && std::abs (p.recentHits().back().peakDb - juce::Decibels::gainToDecibels (0.3f)) < 0.5f,
+               "piezo pad: one knock is one hit, however long the plate rings, and its height is written down");
+        check (p.reportText().contains ("Piezo pad: listening on socket 11") && p.reportText().contains ("Piezo hits: 1") && p.reportText().contains ("(piezo "),
+               "piezo pad: the report says which socket, how many hits, and how tall each spike was");
+
+        std::vector<float> three (second, 0.0f);
+        knock (three, 4800, 0.03f);
+        knock (three, 33600, 0.12f);
+        knock (three, 62400, 0.45f);
+        p.resetCounts();
+        play (three);
+        p.collect();
+        const auto hits = p.recentHits();
+        check (hits.size() == 3 && hits[0].strength < hits[1].strength && hits[1].strength < hits[2].strength,
+               "piezo pad: a harder knock is a stronger hit");
+        check (hits.size() == 3 && std::abs (hits[1].gapMs - 300) <= 1 && std::abs (hits[2].gapMs - 300) <= 1,
+               "piezo pad: the time between knocks is measured from the sound itself, to the millisecond");
+
+        const auto softOut = play ([&] { std::vector<float> s (second, 0.0f); knock (s, 4800, 0.03f); return s; }());
+        const auto hardOut = play ([&] { std::vector<float> s (second, 0.0f); knock (s, 4800, 0.45f); return s; }());
+        check (peak (softOut) > 0.0f && peak (softOut) < 0.5f * peak (hardOut), "piezo pad: a soft knock plays a softer kick");
+
+        // A knock beside the pad: too small to count, but the report says how close it came.
+        std::vector<float> beside (second, 0.0f);
+        knock (beside, 4800, 0.008f);
+        p.resetCounts();
+        check (peak (play (beside)) == 0.0f, "piezo pad: a knock under the threshold plays nothing");
+        p.collect();
+        check (p.hitCount() == 0 && p.reportText().contains ("Tallest thing ignored") && p.reportText().contains ("-4"), "piezo pad: the report says how tall the tallest ignored knock was");
+
+        p.setPiezoThresholdDb (-45.0f);
+        check (peak (play (beside)) > 0.0f, "piezo pad: lowering the threshold lets that knock count");
+        p.setPiezoThresholdDb (-36.0f);
+
+        // A steady offset on the socket is not a hit.
+        std::vector<float> offset (second, 0.2f);
+        std::fill (offset.begin(), offset.begin() + 4800, 0.0f);
+        for (size_t i = 4800; i < 4800 + 19200; ++i) offset[i] = 0.2f * (float) (i - 4800) / 19200.0f;
+        p.resetCounts();
+        play (offset);
+        p.collect();
+        check (p.hitCount() == 0, "piezo pad: a slow drift on the socket is not a hit");
+
+        p.resetCounts();
+        check (peak (play (socket, true)) == 0.0f, "piezo pad: silent while a measurement runs");
+        p.collect();
+        check (p.hitCount() == 0, "piezo pad: and nothing is counted then");
+
+        p.setOn (false);
+        check (peak (play (socket)) == 0.0f, "piezo pad: with the kick pad off a knock plays nothing");
+        p.collect();
+        check (p.hitCount() == 1, "piezo pad: but it is still counted");
+    }
 }
 
 } // namespace gigrig

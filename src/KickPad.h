@@ -42,6 +42,11 @@ public:
         (either may be null). With quiet true the hits are dropped: a measurement is running. */
     void process (float* left, float* right, int numSamples, bool quiet) noexcept;
 
+    /** The piezo pad test: looks at one block of the piezo's socket for knocks, and starts a kick
+        for each. Call it before process, every block; input may be null (nothing plugged in or
+        no socket chosen). With quiet true knocks are ignored: a measurement is running. */
+    void listen (const float* input, int numSamples, bool quiet) noexcept;
+
     //==============================================================================
     // Any thread but the audio thread.
 
@@ -85,6 +90,33 @@ public:
     void setSocket (int s) noexcept                 { socket.store (juce::jlimit (-1, 15, s)); }
     int getSocket() const noexcept                  { return socket.load(); }
 
+    //==============================================================================
+    // The piezo pad test (27 Nov 2026, docs/kick-pad.md): a bare piezo disc under a plate, plugged
+    // into an input socket with a guitar lead. A knock is a short spike on that socket; the app
+    // measures how tall the spike is and plays the kick at that strength, as it does for the
+    // SPD::ONE. In the finished board the disc would go to the controller, not to a socket.
+
+    /** The input socket the piezo is plugged into, 0-based; -1 = no piezo. */
+    void setPiezoSocket (int s) noexcept            { piezoSocket.store (juce::jlimit (-1, 15, s)); }
+    int getPiezoSocket() const noexcept             { return piezoSocket.load(); }
+
+    /** A spike has to reach this level to count as a hit (-60 to -10 dB). Anything under it is ignored. */
+    void setPiezoThresholdDb (float db) noexcept    { piezoThresholdDb.store (juce::jlimit (-60.0f, -10.0f, db)); }
+    float getPiezoThresholdDb() const noexcept      { return piezoThresholdDb.load(); }
+
+    /** A spike this tall, or taller, is the hardest hit, strength 127 (-30 to 0 dB). */
+    void setPiezoFullDb (float db) noexcept         { piezoFullDb.store (juce::jlimit (-30.0f, 0.0f, db)); }
+    float getPiezoFullDb() const noexcept           { return piezoFullDb.load(); }
+
+    /** The strength (0 = not a hit, else 1 to 127) of a spike of this height, 0..1 of full scale. */
+    static int piezoStrength (float peak, float thresholdDb, float fullDb) noexcept;
+
+    /** Brings the piezo's hits, counted on the audio thread, into the report. The screen calls it. */
+    void collect();
+
+    static constexpr double piezoScanMs = 2.0;      // after a spike starts, how long the app watches for its top
+    static constexpr double piezoHoldMs = 40.0;     // then how long it looks away, while the plate rings
+
     /** A recording to play in place of the built-in kick (mono, at the file's own rate).
         An empty vector goes back to the built-in kick. */
     void setSample (std::vector<float> samples, double sampleRate, const juce::String& name);
@@ -97,6 +129,8 @@ public:
         int strength = 0;
         int gapMs = -1;         // since the hit before; -1 for the first
         bool fromScreen = false;
+        bool fromPiezo = false;
+        float peakDb = 0.0f;    // a piezo hit: how tall its spike was
     };
 
     /** The most recent hits, oldest first (at most 32). */
@@ -153,7 +187,18 @@ private:
     // Where a fresh install starts: the settings Tom settled on with the SPD::ONE on his studio
     // monitors (27 Nov 2026, build 103, "we'll lock that sound in"). A big PA may move them.
     std::atomic<float> level { 0.8f }, touch { 1.1f }, click { 0.86f }, pitch { 49.0f }, length { 0.155f };
-    std::atomic<int> returnPair { 2 }, socket { 9 };
+    std::atomic<int> returnPair { 2 }, socket { 9 }, piezoSocket { -1 };
+    std::atomic<float> piezoThresholdDb { -36.0f }, piezoFullDb { -6.0f };
+
+    // ---- the piezo listener (audio thread) and its hits on their way to the report ----
+    struct PiezoHit { int strength = 0; float peak = 0.0f; juce::int64 timeMs = 0; };
+    float piezoLow = 0.0f, piezoPeak = 0.0f, piezoCut = 0.0f;
+    int piezoScanLeft = 0, piezoHoldLeft = 0, piezoScanSamples = 192, piezoHoldSamples = 3840;
+    juce::int64 piezoClock = 0, piezoBaseMs = 0;
+    std::atomic<float> piezoIgnoredPeak { 0.0f };       // the tallest thing under the threshold since Start again
+    static constexpr int piezoQueueSize = 64;
+    juce::AbstractFifo piezoFifo { piezoQueueSize };
+    std::array<PiezoHit, piezoQueueSize> piezoQueue {};
 
     // ---- hits on their way to the audio thread ----
     static constexpr int queueSize = 64;
@@ -182,6 +227,8 @@ private:
     bool foundByName = false, learned = false;
     juce::String sampleLabel;
     std::vector<Hit> recent;
+    int piezoHits = 0;
+    float piezoSoftestDb = 0.0f, piezoHardestDb = 0.0f;
     int hits = 0, screenHits = 0, softest = 0, hardest = 0, doubles = 0, bounces = 0, lastHitStrength = 0, closestGapMs = -1;
     std::array<int, 128> strengthCounts {};
     int noteOffs = 0, otherMessages = 0, otherNotes = 0;

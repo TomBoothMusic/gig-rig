@@ -35,7 +35,7 @@ public:
 
     /** Where Tom puts a recording of his own kick to try it in place of the built-in one. */
     static juce::File soundFolder();
-    juce::String reportText() const             { return engine.kick().reportText(); }
+    juce::String reportText() const             { engine.kick().collect(); return engine.kick().reportText(); }
 
 private:
     void timerCallback() override;
@@ -48,10 +48,10 @@ private:
     AudioEngine& engine;
 
     StatusRow status;
-    juce::Label help, levelLabel, touchLabel, clickLabel, pitchLabel, lengthLabel, soundLabel, returnLabel, graphHeading, logHeading;
+    juce::Label help, levelLabel, touchLabel, clickLabel, pitchLabel, lengthLabel, soundLabel, returnLabel, piezoLabel, piezoFromLabel, piezoFullLabel, graphHeading, logHeading;
     juce::ToggleButton onBox { "Kick pad on" };
-    juce::Slider levelSlider, touchSlider, clickSlider, pitchSlider, lengthSlider;
-    juce::ComboBox soundBox, returnBox;
+    juce::Slider levelSlider, touchSlider, clickSlider, pitchSlider, lengthSlider, piezoFromSlider, piezoFullSlider;
+    juce::ComboBox soundBox, returnBox, piezoBox;
     juce::TextButton softButton { "Soft hit" }, mediumButton { "Medium hit" }, hardButton { "Hard hit" },
                      learnButton { "Learn pad" }, forgetButton { "Forget pad" }, folderButton { "Open kick sounds folder" },
                      resetButton { "Start again" }, copyButton { "Copy kick pad results" };

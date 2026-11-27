@@ -90,6 +90,138 @@ void KickPad::prepare (double sampleRate)
 
     for (auto& v : voices)
         v = {};
+
+    piezoScanSamples = juce::jmax (1, (int) std::lround (piezoScanMs * 0.001 * rate));
+    piezoHoldSamples = juce::jmax (1, (int) std::lround (piezoHoldMs * 0.001 * rate));
+    piezoCut = onePole (20.0, rate);        // takes any steady offset off the socket, leaves the spike
+    piezoLow = piezoPeak = 0.0f;
+    piezoScanLeft = piezoHoldLeft = 0;
+    piezoClock = 0;
+    piezoBaseMs = juce::Time::currentTimeMillis();
+}
+
+int KickPad::piezoStrength (float peak, float thresholdDb, float fullDb) noexcept
+{
+    const auto low = juce::Decibels::decibelsToGain (thresholdDb);
+    const auto high = juce::jmax (low * 1.5f, juce::Decibels::decibelsToGain (fullDb));
+
+    if (peak < low)
+        return 0;
+
+    // Between the threshold and the hardest-hit level the strength follows the square root of
+    // the spike's height: a spike's height grows faster than a stomp feels harder. A first guess
+    // (27 Nov 2026), to be refitted from the spike heights the report lists once Tom has a pad.
+    const auto part = juce::jlimit (0.0f, 1.0f, (peak - low) / (high - low));
+    return juce::jlimit (1, 127, 1 + (int) std::lround (126.0f * std::sqrt (part)));
+}
+
+void KickPad::listen (const float* input, int numSamples, bool quiet) noexcept
+{
+    const auto clockAtStart = piezoClock;
+    piezoClock += numSamples;
+
+    if (input == nullptr || piezoSocket.load (std::memory_order_relaxed) < 0)
+    {
+        piezoScanLeft = piezoHoldLeft = 0;
+        return;
+    }
+
+    const auto thresholdDb = piezoThresholdDb.load (std::memory_order_relaxed), fullDb = piezoFullDb.load (std::memory_order_relaxed);
+    const auto threshold = juce::Decibels::decibelsToGain (thresholdDb);
+    auto ignored = piezoIgnoredPeak.load (std::memory_order_relaxed);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        piezoLow += piezoCut * (input[i] - piezoLow);
+        const auto a = std::abs (input[i] - piezoLow);
+
+        if (piezoHoldLeft > 0)
+        {
+            --piezoHoldLeft;        // the plate is still ringing from the hit just counted
+        }
+        else if (piezoScanLeft > 0)
+        {
+            piezoPeak = juce::jmax (piezoPeak, a);
+
+            if (--piezoScanLeft == 0)
+            {
+                piezoHoldLeft = piezoHoldSamples;
+                const auto strength = piezoStrength (piezoPeak, thresholdDb, fullDb);
+
+                if (strength > 0 && ! quiet)
+                {
+                    // The kick starts with this block: the block's sound has not been made yet.
+                    if (on.load (std::memory_order_relaxed))
+                        startVoice (strength);
+
+                    int start1, size1, start2, size2;
+                    piezoFifo.prepareToWrite (1, start1, size1, start2, size2);
+
+                    if (size1 + size2 > 0)
+                    {
+                        piezoQueue[(size_t) (size1 > 0 ? start1 : start2)] = { strength, piezoPeak, piezoBaseMs + (juce::int64) ((double) (clockAtStart + i) * 1000.0 / rate) };
+                        piezoFifo.finishedWrite (1);
+                    }
+                }
+            }
+        }
+        else if (a >= threshold)
+        {
+            piezoPeak = a;
+            piezoScanLeft = piezoScanSamples;
+        }
+        else
+        {
+            ignored = juce::jmax (ignored, a);
+        }
+    }
+
+    piezoIgnoredPeak.store (ignored, std::memory_order_relaxed);
+}
+
+void KickPad::collect()
+{
+    const juce::ScopedLock sl (lock);
+    const auto ready = piezoFifo.getNumReady();
+
+    if (ready <= 0)
+        return;
+
+    int start1, size1, start2, size2;
+    piezoFifo.prepareToRead (ready, start1, size1, start2, size2);
+
+    for (int i = 0; i < size1 + size2; ++i)
+    {
+        const auto& q = piezoQueue[(size_t) (i < size1 ? start1 + i : start2 + i - size1)];
+
+        Hit hit;
+        hit.timeMs = q.timeMs;
+        hit.strength = q.strength;
+        hit.fromPiezo = true;
+        hit.peakDb = juce::Decibels::gainToDecibels (q.peak, -100.0f);
+
+        if (hits > 0)
+        {
+            hit.gapMs = (int) juce::jlimit ((juce::int64) 0, (juce::int64) 999999, hit.timeMs - lastHitMs);
+            closestGapMs = closestGapMs < 0 ? hit.gapMs : juce::jmin (closestGapMs, hit.gapMs);
+        }
+
+        softest = hits == 0 ? q.strength : juce::jmin (softest, q.strength);
+        hardest = juce::jmax (hardest, q.strength);
+        piezoSoftestDb = piezoHits == 0 ? hit.peakDb : juce::jmin (piezoSoftestDb, hit.peakDb);
+        piezoHardestDb = piezoHits == 0 ? hit.peakDb : juce::jmax (piezoHardestDb, hit.peakDb);
+        ++strengthCounts[(size_t) q.strength];
+        ++hits;
+        ++piezoHits;
+        lastHitMs = hit.timeMs;
+        lastHitStrength = q.strength;
+        recent.push_back (hit);
+
+        if ((int) recent.size() > maxRecent)
+            recent.erase (recent.begin());
+    }
+
+    piezoFifo.finishedRead (size1 + size2);
 }
 
 void KickPad::startVoice (int strength) noexcept
@@ -474,6 +606,14 @@ void KickPad::resetCounts()
 {
     const juce::ScopedLock sl (lock);
     recent.clear();
+    piezoHits = 0;
+    piezoSoftestDb = piezoHardestDb = 0.0f;
+    piezoIgnoredPeak.store (0.0f);
+
+    // Piezo hits already counted on the audio thread but not yet brought over belong to the test before this one.
+    if (const auto waiting = piezoFifo.getNumReady(); waiting > 0)
+        piezoFifo.finishedRead (waiting);
+
     hits = screenHits = softest = hardest = doubles = bounces = lastHitStrength = noteOffs = otherMessages = otherNotes = 0;
     closestGapMs = -1;
     strengthCounts.fill (0);
@@ -511,6 +651,22 @@ juce::String KickPad::reportText() const
         lines.add ("  Pad: \"" + device + "\" " + (foundByName ? "(found by its name)" : "(learned)")
                      + (note >= 0 ? ", note " + noteName (note) + " only" : juce::String (", any note"))
                      + (channel > 0 ? ", MIDI channel " + juce::String (channel) : juce::String()) + ".");
+
+    if (const auto ps = piezoSocket.load(); ps >= 0)
+    {
+        const auto ignoredDb = juce::Decibels::gainToDecibels (piezoIgnoredPeak.load(), -100.0f);
+        lines.add ("  Piezo pad: listening on socket " + juce::String (ps + 1) + ". A spike counts as a hit from " + juce::String (piezoThresholdDb.load(), 0)
+                     + " dB, and " + juce::String (piezoFullDb.load(), 0) + " dB or more is the hardest hit. The app watches each spike for "
+                     + juce::String (piezoScanMs, 0) + " ms before the kick starts, then looks away for " + juce::String (piezoHoldMs, 0) + " ms.");
+        lines.add ("  Piezo hits: " + juce::String (piezoHits)
+                     + (piezoHits > 0 ? ". Smallest spike counted " + juce::String (piezoSoftestDb, 1) + " dB, tallest " + juce::String (piezoHardestDb, 1) + " dB" : juce::String())
+                     + ". Tallest thing ignored (a knock beside the pad, a footswitch, hum): "
+                     + (ignoredDb <= -99.0f ? juce::String ("nothing yet") : juce::String (ignoredDb, 1) + " dB") + ".");
+    }
+    else
+    {
+        lines.add ("  Piezo pad: off (no socket chosen).");
+    }
 
     if (hits == 0)
     {
@@ -570,6 +726,7 @@ juce::String KickPad::reportText() const
         for (const auto& h : recent)
         {
             row << " " << juce::String (h.strength).paddedLeft (' ', 3)
+                << (h.fromPiezo ? " (piezo " + juce::String (h.peakDb, 1) + " dB)" : juce::String())
                 << (h.fromScreen ? " (screen)" : h.gapMs >= 0 ? " +" + juce::String (h.gapMs) + "ms" : juce::String (" first")) << "  |";
 
             if (++inRow == 6)
