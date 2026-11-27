@@ -157,4 +157,6 @@ Built 26 Nov 2026 as a **test** of an undecided idea (design doc, Effects, "Buil
 the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was hit.
 **`docs/kick-pad.md` is the guide. Keep it true.** Logic in `src/KickPad.*` (no screen, checked by
 `src/KickPadSelfTest.cpp`), screen in `src/KickPadPanel.*`. Kick recordings are Tom's own files in
-`Documents/GigRig/Kick sounds`: never commit one.
+`Documents/GigRig/Kick sounds`: never commit one. Since 27 Nov 2026 the same tab can also listen
+to an input socket for a bare piezo pad (the cheap bench test of the pad that could replace the
+SPD::ONE): `KickPad::listen` on the audio thread, off unless a socket is chosen.

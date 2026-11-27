@@ -174,6 +174,27 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     mediumButton.setTooltip ("Plays the kick as a medium hit (strength " + juce::String (mediumStrength) + ")");
     hardButton.setTooltip ("Plays the kick as the hardest hit (strength " + juce::String (hardStrength) + ")");
 
+    // The piezo pad test: a bare piezo disc under a plate, plugged into a spare socket.
+    style::body (piezoLabel, "Piezo pad");
+    style::combo (piezoBox);
+    piezoBox.addItem ("Off", 1);
+
+    for (int s = 0; s < 16; ++s)
+        piezoBox.addItem ("Socket " + juce::String (s + 1), 2 + s);
+
+    piezoBox.setTooltip ("The piezo pad test: the socket a bare piezo disc is plugged into. Each knock on that socket plays the kick, by how hard it was. Pick a socket nothing else uses, with no mixer channel on it.");
+    piezoBox.onChange = [this] { engine.kick().setPiezoSocket (piezoBox.getSelectedId() - 2); saveSettings(); };
+
+    style::body (piezoFromLabel, "Counts from");
+    setUpSlider (piezoFromSlider, -60.0, -10.0, kick.getPiezoThresholdDb(), "Piezo pad: how tall a spike must be to count as a hit, in dB. Raise it if a knock beside the pad plays the kick; lower it if soft taps are missed.");
+    piezoFromSlider.setRange (-60.0, -10.0, 1.0);
+    piezoFromSlider.onValueChange = [this] { engine.kick().setPiezoThresholdDb ((float) piezoFromSlider.getValue()); saveSettings(); };
+
+    style::body (piezoFullLabel, "Hardest at");
+    setUpSlider (piezoFullSlider, -30.0, 0.0, kick.getPiezoFullDb(), "Piezo pad: a spike this tall is the hardest hit, in dB. Set it near the tallest spike your hardest stomp makes (the results list it).");
+    piezoFullSlider.setRange (-30.0, 0.0, 1.0);
+    piezoFullSlider.onValueChange = [this] { engine.kick().setPiezoFullDb ((float) piezoFullSlider.getValue()); saveSettings(); };
+
     learnButton.setTooltip ("For a pad the app does not know by name: press this, then hit the pad once");
     learnButton.onClick = [this] { engine.kick().learnNextNote(); };
     forgetButton.setTooltip ("Forgets the pad, so the app looks for an SPD::ONE by name again");
@@ -185,6 +206,7 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     copyButton.setTooltip ("Copies what the pad sent, ready to paste to Claude (Copy report at the top includes it too)");
     copyButton.onClick = [this]
     {
+        engine.kick().collect();
         juce::SystemClipboard::copyTextToClipboard (engine.kick().reportText());
         copyButton.setButtonText ("Copied");
         copiedTicks = 20;
@@ -195,7 +217,7 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     style::readOnlyEditor (logView);
 
     for (auto* c : std::initializer_list<juce::Component*> { &status, &help, &onBox, &levelLabel, &levelSlider, &touchLabel, &touchSlider, &clickLabel, &clickSlider, &pitchLabel, &pitchSlider, &lengthLabel, &lengthSlider,
-                                                             &soundLabel, &soundBox, &folderButton, &returnLabel, &returnBox, &softButton, &mediumButton, &hardButton,
+                                                             &soundLabel, &soundBox, &folderButton, &returnLabel, &returnBox, &piezoLabel, &piezoBox, &piezoFromLabel, &piezoFromSlider, &piezoFullLabel, &piezoFullSlider, &softButton, &mediumButton, &hardButton,
                                                              &learnButton, &forgetButton, &resetButton, &copyButton, &graphHeading, &graph, &logHeading, &logView })
         addAndMakeVisible (c);
 
@@ -252,6 +274,17 @@ void KickPadPanel::resized()
     row.removeFromLeft (20);
     returnLabel.setBounds (row.removeFromLeft (62));
     returnBox.setBounds (row.removeFromLeft (juce::jmin (330, row.getWidth())));
+
+    area.removeFromTop (8);
+    row = area.removeFromTop (28);
+    piezoLabel.setBounds (row.removeFromLeft (70));
+    piezoBox.setBounds (row.removeFromLeft (110));
+    row.removeFromLeft (16);
+    piezoFromLabel.setBounds (row.removeFromLeft (84));
+    piezoFromSlider.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth() / 2 - 90)));
+    row.removeFromLeft (16);
+    piezoFullLabel.setBounds (row.removeFromLeft (78));
+    piezoFullSlider.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth())));
 
     area.removeFromTop (8);
     row = area.removeFromTop (30);
@@ -364,6 +397,9 @@ void KickPadPanel::loadSettings()
     if (values.containsKey ("length"))  kick.setLength (values["length"].getFloatValue());
     if (values.containsKey ("returns")) kick.setReturnPair (values["returns"].getIntValue());
     if (values.containsKey ("socket"))  kick.setSocket (values["socket"].getIntValue());
+    if (values.containsKey ("piezoSocket")) kick.setPiezoSocket (values["piezoSocket"].getIntValue());
+    if (values.containsKey ("piezoFrom"))   kick.setPiezoThresholdDb (values["piezoFrom"].getFloatValue());
+    if (values.containsKey ("piezoFull"))   kick.setPiezoFullDb (values["piezoFull"].getFloatValue());
 
     if (values["pad"].isNotEmpty())
         kick.setPad (values["pad"], values.containsKey ("note") ? values["note"].getIntValue() : -1);
@@ -376,6 +412,9 @@ void KickPadPanel::loadSettings()
     pitchSlider.setValue (kick.getPitch(), juce::dontSendNotification);
     lengthSlider.setValue (kick.getLength(), juce::dontSendNotification);
     returnBox.setSelectedId (kick.getSocket() >= 0 ? 101 + kick.getSocket() : kick.getReturnPair() + 1, juce::dontSendNotification);
+    piezoBox.setSelectedId (kick.getPiezoSocket() + 2, juce::dontSendNotification);
+    piezoFromSlider.setValue (kick.getPiezoThresholdDb(), juce::dontSendNotification);
+    piezoFullSlider.setValue (kick.getPiezoFullDb(), juce::dontSendNotification);
     loading = false;
 
     if (values["sound"].isNotEmpty() && soundFolder().getChildFile (values["sound"]).existsAsFile())
@@ -399,6 +438,9 @@ void KickPadPanel::saveSettings()
     lines.add ("length=" + juce::String (kick.getLength(), 3));
     lines.add ("returns=" + juce::String (kick.getReturnPair()));
     lines.add ("socket=" + juce::String (kick.getSocket()));
+    lines.add ("piezoSocket=" + juce::String (kick.getPiezoSocket()));
+    lines.add ("piezoFrom=" + juce::String (kick.getPiezoThresholdDb(), 0));
+    lines.add ("piezoFull=" + juce::String (kick.getPiezoFullDb(), 0));
     lines.add ("sound=" + kick.sampleName());
 
     // A pad found by its name is found again next time; only a learned one is written down.
@@ -415,6 +457,7 @@ void KickPadPanel::saveSettings()
 void KickPadPanel::timerCallback()
 {
     auto& kick = engine.kick();
+    kick.collect();
 
     if (engine.isOpen() && engine.sampleRate() > 0.0)
         kick.setBlockInfo (engine.bufferSize() * 1000.0 / engine.sampleRate(), engine.driverLatencySamples() * 1000.0 / engine.sampleRate());
