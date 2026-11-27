@@ -101,7 +101,7 @@ jobs:
     name: Linux install script
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
@@ -146,6 +146,18 @@ jobs:
           linux/rollback.sh ci-older
           test "$(readlink "$HOME/gigrig/current")" = "builds/ci-older"
           linux/rollback.sh ci-test
+
+      - name: The one-step update switches builds, asks for no password and leaves icons
+        run: |
+          linux/rollback.sh ci-older
+          sudo -k
+          linux/update.sh --no-restart ci-test
+          test "$(readlink "$HOME/gigrig/current")" = "builds/ci-test"
+          test -f "$HOME/.local/share/applications/gigrig-update.desktop"
+          test -x "$HOME/.local/bin/gigrig-run"
+
+      - name: The phone sound script reports without changing anything
+        run: linux/break-music.sh --status
 
   release:
     name: Publish download

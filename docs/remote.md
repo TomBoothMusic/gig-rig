@@ -37,15 +37,16 @@ recording loops in time at a gig.
 
 ## The screens
 
-The six buttons along the bottom (down the left side when a phone is on its side):
+The seven buttons along the bottom (down the left side when a phone is on its side):
 
 | Screen | What it does |
 | --- | --- |
 | **Looper** | The six tracks (colour and word for what each is doing, how far through its loop, how many lanes, an UNDONE mark), and the nine switches plus CTL3 and CTL4. Touching a switch is the same as a foot on the real one, hold and double-press included. Each switch says what it does in the song's layout and in the bank that is showing. **Clear all loops** asks first. |
 | **Songs** | The same list as the Songs tab. Tap a song to load it (it asks first if loops are running). **Keep these sounds for this song**, **Put the song's sounds back** and **New song** do what the same buttons on the Songs tab do. |
 | **Build** | The looper arrangement builder. See the next part. |
-| **Effects** | The four chains. Switch a chain or one effect on and off, open an effect to move its settings, load a preset onto a chain. Adding, removing and reordering effects is still done on the app's own Effects tab. |
-| **Mixer** | Faders with meters. The row of buttons above them chooses what the faders send to: the main mix, a monitor, or one of the four reverbs and delays. Drag a fader from anywhere on it (it never jumps to your finger). Tap a channel's name for its Trim, pan, every send and its own processing. **Set-ups** loads an act, a venue or a monitor set-up. If the mixer is off the screen says so and offers to switch it on. |
+| **Effects** | The four chains. Switch a chain or one effect on and off, open an effect to move its settings, load a preset onto a chain. **Add an effect** lists every effect the rig has, by kind, and puts the one you tap on the end of the chain. Open an effect for **Move earlier**, **Move later** and **Remove** (its settings travel with it). **Save as a preset** saves the whole chain under a name you type. **Update its presets** saves the chain's changes back into the preset or presets it was made from, exactly as the same button on the Effects tab does. |
+| **Mixer** | Faders with meters. The row of buttons above them chooses what the faders send to: the main mix, a monitor, or one of the four reverbs and delays. Drag a fader from anywhere on it (it never jumps to your finger). Tap a channel's name for its Trim, pan, every send and its own processing. **Set-ups** loads an act, a venue or a monitor set-up, and saves each one: **Save over** the one that is loaded, or **Save as a new one** under a name you type. If the mixer is off the screen says so and offers to switch it on. |
+| **Tools** | **Tuner**: on and off, a big note and needle, which input it listens to, what A is, and whether the main mix goes silent (`docs/tuner.md`). **Break music**: choose a mix, Play, From the start, Stop, Bring the music up, Fade it down, its level, the fade times and what counts as starting to play (`docs/break-music.md`). **The venue knob (ENC 5)**: Turn left, Turn right, Push and Hold, with the line the board's screen would show. |
 | **Rig** | Whether audio is running, the warnings, and **Copy report**: the same text as the Copy report button in the app. |
 
 The dot at the top left is green when the page is talking to the rig and audio is running,
@@ -148,20 +149,43 @@ at the top.
 The Copy report text has a "Remote screen" part: on or off, the port, the addresses, how many
 requests were answered, how many commands were carried out, and when a page last asked.
 
+## What the second phase added (27 Nov 2026)
+
+The state gained `fxCatalogue` (every effect that can be added: `id`, `name`, `group`),
+`fxMaxSlots`, `breakMusic` and `tuner`; the live part gained `breakMusic` (playing, up, how far
+through the fade, the status line, the knob's line) and `tuner` (on, heard, the note, cents,
+Hz, the socket). `fxCatalogue` and `fxMaxSlots` sit at the top of the state, not inside
+`effects`, because a song's sounds replace `effects` whole.
+
+The state never holds a folder path or anything else from the computer's own disk layout: the
+demo's data is a copy of a real state and is committed to a repository that may be public.
+
+When the state gains a part and the self-test says the demo lacks it, and the machine at hand
+does not have Tom's songs, run a throwaway app and top the demo's data up instead of capturing
+it again (a capture would replace Tom's songs with whatever that machine has):
+
+```
+HOME=/some/empty/folder GIGRIG_REMOTE=8080 xvfb-run -a build/GigRig_artefacts/Release/GigRig &
+python3 tools/remote_demo.py top-up http://127.0.0.1:8080
+```
+
+It keeps everything `remote/demo-data.js` has, adds only the parts it lacks, and describes
+every effect in `fxCatalogue` so the demo can add any of them.
+
 ## Not built yet
 
 - A password or a "look but do not touch" mode.
-- Adding, removing and reordering effects from the page; saving presets and mixer set-ups.
 - The recordings and virtual soundcheck screens of the mock-up.
 - The page as the rig's own built-in touchscreen (it is the same page in a browser on the rig).
-- Tuner and tap tempo.
+- Tap tempo (a tap over Wi-Fi arrives late by a different amount each time, so it belongs on a foot switch).
+- Choosing which effect goes where in one go (drag and drop); for now an effect moves one place at a time.
 
 ## For developers
 
 ```
 remote/index.html, app.css      the page and its look
 remote/core.js                  what every screen shares: talking to the rig, drawing, faders, sheets
-remote/screens.js               Looper, Songs, Effects, Mixer, Rig
+remote/screens.js               Looper, Songs, Effects, Mixer, Tools, Rig
 remote/builder.js               the arrangement builder
 remote/demo.js                  the pretend rig (answers the same three questions as the real one)
 remote/demo-data.js             the demo's copy of a real state. MADE BY tools/remote_demo.py, never by hand
@@ -170,7 +194,7 @@ src/RemoteServer.*              the small web server (off by default) and the fi
 src/RemotePanel.*               the Remote screen tab
 src/LooperLayout.*              a layout as song-file lines and as numbers for the page
 src/RemoteSelfTest.cpp          the checks for all of the above
-tools/remote_demo.py            captures the demo's data from a running app; builds the one-file demo page
+tools/remote_demo.py            captures the demo's data from a running app (or tops it up); builds the one-file demo page
 ```
 
 The page is plain JavaScript with no libraries and no build step, so the rig serves it with no
@@ -205,13 +229,26 @@ The orders (`RemoteApi::command`; the demo answers the same ones in `remote/demo
 | `fx.enabled`, `fx.chainOn` | `on`; `chain`, `on` |
 | `fx.preset` | `chain`, `name` |
 | `fx.slotOn`, `fx.param` | `chain`, `slot`, `on`; `chain`, `slot`, `id`, `value` |
+| `fx.add` | `chain`, `type` (an `id` from the state's `fxCatalogue`), `at` (the place, 0 first; left out = the end). Refused when the chain holds `fxMaxSlots` |
+| `fx.remove` | `chain`, `slot` |
+| `fx.move` | `chain`, `slot`, `to` (the place it ends up in) |
+| `fx.save` | `chain`, `name`: the whole chain as one preset |
+| `fx.update` | `chain`: the chain's changes back into the presets it was made from |
 | `mix.on` | `on` |
 | `mix.ch` | `c`, `key` (`fader`, `mute`, `pan`, `trim`, `on`, `mon0`, `mon1`, `fx0` to `fx3`), `value` |
 | `mix.out` | `o`, `key` (`level`, `mute`), `value` |
 | `mix.fx` | `f`, `key` (`ret`, `on`, `mon0`, `mon1`, `lowCut`, `highCut`), `value` |
 | `mix.param` | `where` (`ch`, `out`, `fx`, `fxeq`), `i`, `slot`, `id` (`on` switches the block), `value` |
 | `mix.preset` | `kind` (`act`, `venue`, `monitors`), `name` |
+| `mix.save` | `kind` (`act`, `venue`, `monitors`), `name` |
 | `mix.keepFx` | `f` |
+| `break.play` | `name` (a mix from the state's `breakMusic.mixes`; left out = the last one), `fromStart` |
+| `break.stop`, `break.up`, `break.down` | |
+| `break.level` | `value` (dB) |
+| `break.set` | `key` (`fadeDown`, `fadeUp`, `onSwitch`, `onSong`, `onSound`, `soundDb`), `value` |
+| `knob` | `do` (`left`, `right`, `push`, `hold`): the venue knob, ENC 5 |
+| `tuner.on` | `on` |
+| `tuner.set` | `key` (`socket`: 0-based, -1 = whichever input is played; `reference`: Hz; `mutes`), `value` |
 
 Every value is checked and limited by the rig, whatever the page sends. A venue loaded from
 the page goes through the same safe load as on the Mixer tab (it fades in and never jumps up).

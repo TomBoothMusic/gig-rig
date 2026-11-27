@@ -269,8 +269,12 @@ settings), so after closing the app or a power cut it comes back as it was.
 
 ## The venue knob (ENC 5)
 
-Three buttons stand in for the board's fifth knob until the board exists: **Turn left**,
-**Turn right** and **Push**. The line beside them is what the board's main screen would show.
+Four buttons stand in for the board's fifth knob until the board exists: **Turn left**,
+**Turn right**, **Push** and **Hold**. The line beside them is what the board's main screen would show.
+
+**Hold** hands the knob to the break music (turn = its level, push = fade it up or down) and a
+second hold hands it back; it also comes back by itself when playing fades the music down. The
+knob always rests on the venue list, and everything below is unchanged. See `docs/break-music.md`.
 
 - **Turning only browses.** It shows a venue's name; nothing about the sound changes. After
   5 seconds without a push it gives up.
@@ -317,6 +321,17 @@ through the travel (in the middle each is 3 dB down). Until a real pedal is wire
 the **Pedal position** slider of either one moves both (`EffectsRack::moveExpressionPedal`, which is
 where a real expression pedal will arrive).
 
+### A real expression pedal (27 Nov 2026)
+
+An expression pedal that arrives as MIDI now works the blend, and the wah or whammy under the
+toe switch, exactly as the **Pedal position** sliders do. On the **Pedal (RC-600)** tab: plug
+the pedal in (into the RC-600's expression socket, or any MIDI device), click **Learn pedal**,
+rock the pedal fully heel to toe twice, and click **Done**. The line beside the button says
+which controller it found and where the heel and toe are. **Swap heel and toe** turns it
+round; **Forget pedal** forgets it. Foot switches are never taken for a pedal (a pedal sends
+many different values, a switch two). What it learned is kept in `expression-pedal.txt` in the
+app's settings folder. Code: `src/ExpressionPedal.*`, checks in `src/ExpressionSelfTest.cpp`.
+
 ### The toe switch
 
 On the Effects tab, give a switch the action **toe switch** (Tom's choice for now: **CTL4**)
@@ -328,7 +343,7 @@ file the words are `switch CTL4 = chain 2 / toe switch`.
 
 ## Not built yet
 
-- A real expression pedal and its real toe switch (they need the board; CTL4 stands in).
+- The pedal's real toe switch (it needs the board; CTL4 stands in). The pedal itself works now, over MIDI.
 - Partial recall (only a venue's room EQ, say), and backing presets up.
 - Virtual soundcheck and the Recordings tab (copy to USB, delete).
 - More than two monitor mixes (Tom: two is enough), spare sends for delay speakers, stereo

@@ -16,7 +16,11 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 5 and 6 | The effects: four chains (electric, acoustic, bass, vocal) of drives, amp models, compressors, EQs, delays, reverbs, modulation, wah, whammy, vocal harmony and the Bass9 copy | Built |
 | Mixer | The app's own mixer: channels with gate, EQ and compressors, reverbs and delays after the looper, monitor mixes, act and venue presets, recording. Off until you switch it on | Built, first version |
 | Kick pad | A test: the SPD::ONE Kick over USB plays a kick made inside the app | Built as a test |
-| Later | Tablet app wired to the app, the rig computer, the board itself | Planned |
+| Remote screen | The rig on a phone or tablet: looper, songs, the arrangement builder, effects, mixer, tools. Off until you switch it on | Built, two phases |
+| Break music | Music between sets played by the rig itself: fades down when you start playing, comes back only by hand | Built, first version |
+| Tuner | Reads the note on any input; with the mixer on the main mix is silent while tuning | Built, first version |
+| Expression pedal | A real pedal over MIDI works the blend, the wah and the whammy | Built, first version |
+| Later | The rig computer, the board itself | Planned |
 
 **New here, or back after a break?** Go straight to
 [Start here: play your songs through the whole rig](#start-here-play-your-songs-through-the-whole-rig).
@@ -98,6 +102,141 @@ name and what you heard.
 | Loops are early or late | First tab, **Measure latency**, then record the loop again |
 | A song loads with the wrong sounds | **Songs** tab: the left box shows that song's file, and any line it could not use is marked **PROBLEM:** |
 | Loops doubled or drifting | A second copy of an older build may be open. Close every Gig Rig window and open one |
+
+## The big batch (27 Nov 2026): one long test session
+
+One build with a lot in it, so one sitting can cover it: **break music**, a **tuner**, a
+**real expression pedal**, the **phone app's second phase**, and a **one-step install and
+update** for the mini PC. Everything new is off, silent or out of the way until you use it.
+If anything is wrong, go back to the build you had: on Windows open the old `.exe`; on the rig
+run `linux/rollback.sh`.
+
+Allow about two and a half hours for parts A to F. Each part stands alone, so stop anywhere.
+**After each part click Copy report and paste it into the chat with a line or two on what you
+heard.** Guides: [docs/break-music.md](docs/break-music.md), [docs/tuner.md](docs/tuner.md),
+[docs/remote.md](docs/remote.md), [docs/mixer.md](docs/mixer.md), [docs/linux-setup.md](docs/linux-setup.md).
+
+### Part A: nothing old has changed (10 minutes)
+
+1. Plug in as usual (CQ, RC-600) and open the new build.
+2. On the first tab start the audio the way you always do.
+3. Leave the **Mixer** tab's **Mixer on** box as you normally have it.
+4. Load a song you know well and play it through, loops and all.
+5. It should sound and feel exactly as the last build did. If anything at all is different,
+   stop here and say what.
+
+### Part B: the tuner (15 minutes)
+
+1. At the top right of the window, next to **Copy report**, click **Tuner**. It turns green
+   and a strip appears beside it.
+2. Play the electric's open low E and let it ring. The strip shows **E2**, a needle and words
+   such as **6 flat**. Left of the middle is flat, right is sharp, green is in tune.
+3. Tune all six strings: **E2, A2, D3, G3, B3, E4**.
+4. Check it against the tuner you trust: tune one string with that one, then read the rig's.
+   Write down any string where they disagree by more than two cents.
+5. Do the same on the acoustic and on the bass (**E1, A1, D2, G2**). The low bass strings are
+   the hardest for any tuner: say whether the needle is steady or wanders.
+6. Play a string on one instrument, then one on another. Under the note it says which input it
+   is listening to. It should follow whichever you play.
+7. Click **Options**, then **Listen to**, and choose one input. Now only that input is read.
+   Put it back to **Whichever input is being played**.
+8. Now the silence. On the **Mixer** tab tick **Mixer on** and play so the **Main** meter moves.
+9. Click **Tuner**. The Main meter should drop to nothing with no click, while the monitor
+   meters keep moving. Click **Tuner** again: the main mix comes back as loud as it was.
+10. Untick **Mixer on** again if you normally run without it. Click **Copy report** and paste.
+
+### Part C: break music (25 minutes)
+
+1. Click the **Break music** tab (the last one), then **Open the break music folder**.
+2. Copy two long music files into the folder that opens (WAV, FLAC or MP3). Close that window.
+3. Within a couple of seconds the files are in the **Play** list by name. Choose one and
+   click **Play**.
+4. **With the mixer off**, the music comes out on the CQ's **USB stereo channel** (returns 5
+   and 6). Bring that channel up on the CQ. It should fade in over four seconds.
+5. Set **Level** to suit.
+6. Press any RC-600 foot switch. The music should fade down over two seconds.
+7. Play a whole song with loops. The music must stay down the whole time, and must not be in
+   any loop.
+8. Click **Bring the music up**. It should come back over four seconds, further on in the mix.
+9. Click **Stop**, then **Play**: it carries on from where it stopped. **Play from the start**
+   begins it again.
+10. Tick **a song loads**, bring the music up, and load a song. It should fade down. Untick it.
+11. If you like, tick **an input is louder than**, bring the music up, and play a chord. It
+    should fade down. Untick it again if a live microphone would set it off in a noisy room.
+12. Now tick **Mixer on** (Mixer tab) and bring the music up. It should be in the **main mix
+    only**: listen to a monitor mix, where it must be silent.
+13. On the Mixer tab click **Record**, talk or play for ten seconds with the music up, and
+    click **Record** again to stop. Open the recording: the break music must **not** be in it.
+14. Close the app and open it again. **Nothing should play** until you press Play, and Play
+    should carry on from where the mix was.
+15. Click **Copy report** and paste, with a note on the fade times: too fast, too slow, right?
+
+### Part D: the venue knob's hold (5 minutes)
+
+1. On the **Break music** tab find the row **Knob (ENC 5)**. The line beside the buttons is
+   what the board's screen will show. It starts on the venue.
+2. Click **Hold**. The line changes to the break music.
+3. Click **Turn left** a few times: the level drops one dB a click. **Turn right** raises it,
+   and also brings the music back up if it was faded down.
+4. Click **Push**: the music fades down. **Push** again: it comes back.
+5. Click **Hold**: the line is back on the venue, and **Turn** and **Push** browse and load
+   venues as before.
+6. Click **Hold** again, then press a foot switch. The music fades and the knob goes back to
+   the venue by itself. Say whether that is what you want it to do.
+
+### Part E: a real expression pedal (15 minutes, only if you have one to plug in)
+
+The pedal has to arrive as MIDI. The simplest way is the RC-600's own expression socket, with
+the RC-600 set to send the pedal as a controller (in the RC-600's ASSIGN settings: source
+**EXP1 pedal**, target a **CC** number that is not 20 to 30).
+
+1. Plug the pedal in. Click the **Pedal (RC-600)** tab.
+2. Click **Learn pedal**. Rock the pedal fully heel to toe twice. Click **Done**.
+3. The line beside the button says which controller it found, and the heel and toe values. If
+   it says nothing arrived, the RC-600 is not sending the pedal: paste the report and stop here.
+4. On the **Effects** tab put a **Volume pedal** in the electric chain. Rock the real pedal:
+   the volume should follow it smoothly, with no zipper noise and no steps.
+5. If heel and toe are the wrong way round, click **Swap heel and toe**.
+6. With the blend set up as in the mixer guide (a Volume pedal in the acoustic chain with
+   **Reversed** on), the pedal should cross from acoustic to electric.
+7. Press the **toe switch** (CTL4 for now) on a chain with a wah: the pedal should now rock the
+   wah. Press it again: the pedal is the blend again.
+8. Click **Copy report** and paste.
+
+### Part F: the phone app, second phase (30 minutes)
+
+1. On the **Remote screen** tab tick the box and open the address on your phone, as before.
+2. Tap **Effects** at the bottom, then a chain. Tap **Add an effect**, then **Tremolo**. It
+   appears at the end of the chain, opened, and you should hear it.
+3. In the opened effect tap **Move earlier** twice. It moves up the list and the sound changes
+   to match. Look at the laptop's **Effects** tab: it shows the same order.
+4. Tap **Remove**, then **Remove it**. It is gone on both screens.
+5. Change a setting or two, then tap **Save as a preset**, type `Phone test` and tap **Save
+   it**. On the laptop the preset is in the list. Load it onto another chain to prove it.
+6. Load one of your own presets from the phone, change one setting, and tap **Update its
+   preset**. Read the question carefully (every song that uses the preset gets the change),
+   then tap **Update**. If you would rather not change a real preset, do this on `Phone test`.
+7. Tap **Mixer** (switch the mixer on if asked). Move a fader, tap **Set-ups**, and under
+   **Act** tap **Save as a new one**, type `Phone act`, **Save it**. It should be in the list
+   on both screens.
+8. Tap **Tools**. Switch the **Tuner** on and play a string: a big note and a needle. It runs a
+   moment behind the laptop's, which is normal over Wi-Fi. Say whether it is usable.
+9. Still on **Tools**: choose a mix, **Play**, **Fade it down**, **Bring the music up**, move
+   **Level**, **Stop**. Each should do on the rig what the same button on the laptop does.
+10. Try the four knob buttons at the bottom of **Tools**, as in Part D.
+11. Click **Copy report** on the laptop and paste.
+
+### Part G: the mini PC, when you set it up (not part of this sitting)
+
+1. **One line installs everything.** While the code is private, use the long line in
+   `docs/linux-setup.md`, step B3, as before. Once the repository is public it is this:
+   `wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash`
+2. **Updating is one click.** Press the Super key (the one with the Windows logo), type
+   `Gig`, and click **Gig Rig: update**. It fetches the newest build, checks it, switches to
+   it and asks before it closes the app. **Gig Rig: go back a build** undoes it.
+3. **The phone as break music** (Bluetooth): `~/gig-rig-code/linux/break-music.sh`, then
+   follow the four steps it prints. This one was written without hardware to try it on, so
+   expect to paste what it says back to Claude.
 
 ## Stage 1: the latency and audio test
 
@@ -1054,6 +1193,10 @@ GigRig --report report.txt      # write the device report, no window
 | `src/AmpModels.*`, `src/Responses.*` | The built-in amp models, and response files made from a capture |
 | `src/Mixer.*`, `src/MixerPanel.*`, `src/MixRecorder.*`, `src/MixerSelfTest.cpp` | The mixer, its tab, recording and its checks ([docs/mixer.md](docs/mixer.md)) |
 | `src/KickPad.*`, `src/KickPadPanel.*`, `src/KickPadSelfTest.cpp` | The kick pad test ([docs/kick-pad.md](docs/kick-pad.md)) |
+| `src/BreakMusic.*`, `src/BreakMusicPanel.*`, `src/BreakMusicSelfTest.cpp` | Break music and the venue knob's hold ([docs/break-music.md](docs/break-music.md)) |
+| `src/Tuner.*`, `src/TunerStrip.*`, `src/TunerSelfTest.cpp` | The tuner ([docs/tuner.md](docs/tuner.md)) |
+| `src/ExpressionPedal.*`, `src/ExpressionSelfTest.cpp` | A real expression pedal over MIDI ([docs/mixer.md](docs/mixer.md)) |
+| `src/RemoteApi.*`, `src/RemoteServer.*`, `src/RemotePanel.*`, `src/LooperLayout.*`, `src/RemoteSelfTest.cpp`, `remote/` | The remote screen for a phone or tablet ([docs/remote.md](docs/remote.md)) |
 | `src/ReconnectWatch.h` | Notices a lost audio device and opens it again |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |
@@ -1065,6 +1208,9 @@ GigRig --report report.txt      # write the device report, no window
 | `linux/install.sh` | Sets up the Linux rig computer: realtime tuning, the app, start-up straight into it |
 | `linux/rig-check.sh` | Health check of the rig computer; changes nothing |
 | `linux/rollback.sh` | Switches the rig back to an earlier build |
+| `linux/update.sh` | Updates the rig's app in one step (the **Gig Rig: update** icon runs it) |
+| `linux/bootstrap.sh` | Sets up a fresh Ubuntu computer from one pasted line |
+| `linux/break-music.sh` | Lets a phone play the break music over Bluetooth (not proven on hardware yet) |
 | `docs/linux-setup.md` | Step-by-step guide to the rig computer, and the laptop USB-stick trial |
 | `CLAUDE.md` | Notes for Claude: working rules, the rig computer, and how to add an effect |
 
