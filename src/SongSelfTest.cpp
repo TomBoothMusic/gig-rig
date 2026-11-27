@@ -715,6 +715,36 @@ void runSongSelfTest (const Check& check)
             book.load (book.entryNamed ("Dreams"), "test");
             book.load (book.entryNamed ("Wicked Game"), "test");
         }
+
+        // Tidy unused presets: list first, move on the second press, nothing a song names is touched, and one press puts them back.
+        {
+            presetDir.getChildFile ("Spare one.txt").replaceWithText ("slot=boost\non=1\n");
+            presetDir.getChildFile ("Spare two.txt").replaceWithText ("slot=boost\non=1\n");
+            const auto countHere = [&presetDir] { return presetDir.findChildFiles (juce::File::findFiles, false, "*.txt").size(); };
+            const int before = countHere();
+            const auto unused = book.unusedPresets();
+            const auto listed = book.tidyPresets();
+            const int afterFirst = countHere();
+            const auto moved = book.tidyPresets();
+            const int afterSecond = countHere();
+            const auto asideFolders = presetDir.findChildFiles (juce::File::findDirectories, false, "Not used*");
+            const bool inAside = asideFolders.size() == 1 && asideFolders[0].getChildFile ("Spare one.txt").existsAsFile();
+            book.load (book.entryNamed ("Dreams"), "test");
+            const bool dreamsFine = book.statusLine().isNotEmpty() && ! book.reportText().contains ("is not in the Effect presets folder");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            const bool wickedFine = ! book.reportText().contains ("is not in the Effect presets folder");
+            const auto nothingLeft = book.tidyPresets();
+            const auto back = book.restoreTidiedPresets();
+            check (unused.contains ("Spare one") && unused.contains ("Spare two") && ! unused.contains ("Comp and EQ") && ! unused.contains ("Screamer") && ! unused.contains ("Clean amp")
+                     && listed.contains ("Spare one") && listed.contains ("again") && afterFirst == before
+                     && moved.startsWith ("Moved " + juce::String (unused.size())) && afterSecond == before - unused.size() && inAside && dreamsFine && wickedFine && nothingLeft.startsWith ("Nothing to tidy")
+                     && back.startsWith ("Put " + juce::String (unused.size())) && countHere() == before
+                     && presetDir.findChildFiles (juce::File::findDirectories, false, "Not used*").isEmpty(),
+                   "song book: Tidy unused presets lists them first, moves them aside on the second press, leaves every preset a song names, and Put the presets back undoes it ("
+                     + listed.upToFirstOccurrenceOf (".", true, false) + " / " + moved.upToFirstOccurrenceOf (".", true, false) + " / " + back + ")");
+            presetDir.getChildFile ("Spare one.txt").deleteFile();
+            presetDir.getChildFile ("Spare two.txt").deleteFile();
+        }
         EffectsRack reopened;
         reopened.loadStateText (rack.stateText());
         check (reopened.baseline (0).toText() == rack.baseline (0).toText() && reopened.baseline (0).slots.size() == 8,

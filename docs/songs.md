@@ -123,6 +123,17 @@ saves (`SongBook::applySounds`).
 **Save** refuses to write a chain stacked from several presets under the name of one of them:
 that would put the other presets' effects inside it and every song would get them twice.
 
+## Tidying presets that nothing uses
+
+On the Songs tab, **Tidy unused presets** looks at every song file, the default sounds and the four
+chains on screen, and finds the presets in `Documents/GigRig/Effect presets` that none of them names.
+The first press only lists them. A second press within a minute moves them into a folder called
+`Not used (moved <date and time>)` inside the presets folder. Nothing is deleted. **Put the presets
+back** moves the newest such folder's presets back (never over a preset of the same name made since).
+A starter preset that was tidied away is not copied in again at the next start. Old song backups are
+not looked at: a song put back from a backup may name a preset that was tidied, and the Songs tab
+then says which one is missing. `SongBook::tidyPresets`, `restoreTidiedPresets`, `unusedPresets`.
+
 ## Program changes
 
 Any MIDI input the app has open is listened to, on any channel. Program change `pp` on the wire
