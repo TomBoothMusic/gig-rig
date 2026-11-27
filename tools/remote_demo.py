@@ -69,7 +69,10 @@ def build(out):
         return "<script>\n" + code + "\n</script>"
 
     body = re.sub(r'<script src="([^"]+)"></script>', script, body)
-    body = body.replace("<script>GR.start();</script>", "<script>window.GIGRIG_DEMO_ONLY = true; GR.start();</script>")
+    # Demo-only extras (not in index.html, so not in the rig's own page): the gear look sample.
+    extras = "".join("<script>\n" + f.read_text(encoding="utf-8").replace("</script", "<\\/script") + "\n</script>\n"
+                     for f in [ROOT / "gear-sample.js"] if f.exists())
+    body = body.replace("<script>GR.start();</script>", extras + "<script>window.GIGRIG_DEMO_ONLY = true; GR.start();</script>")
     css = (ROOT / "app.css").read_text(encoding="utf-8")
     html = title + '\n<meta name="claude:viewport-fit-sides" content="cover">\n<style>\n' + css + "\n</style>\n" + body.strip() + "\n"
     pathlib.Path(out).write_text(html, encoding="utf-8")
