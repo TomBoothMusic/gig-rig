@@ -1,6 +1,7 @@
 #include "SelfTest.h"
 #include "AudioEngine.h"
 #include "DeviceReport.h"
+#include "ExpressionPedal.h"
 #include "LatencyProbe.h"
 #include "MidiMonitor.h"
 
@@ -14,6 +15,7 @@ void runSongSelfTest (const std::function<void (bool, const juce::String&)>& che
 void runMixerSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runBreakMusicSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runExpressionSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
 {
@@ -49,6 +51,7 @@ juce::String runSelfTest (bool& passed)
     Mixer::memoryOnDisk = false;
     EffectsRack::memoryOnDisk = false;
     BreakMusic::memoryOnDisk = false;
+    ExpressionInput::memoryOnDisk = false;
 
     juce::StringArray log;
     int failures = 0;
@@ -66,6 +69,7 @@ juce::String runSelfTest (bool& passed)
     if (const auto only = juce::SystemStats::getEnvironmentVariable ("GIGRIG_SELFTEST_ONLY", {}); only.isNotEmpty())
     {
         if (only == "break")        runBreakMusicSelfTest (check);
+        else if (only == "pedal")   runExpressionSelfTest (check);
         else if (only == "remote")  runRemoteSelfTest (check);
         else if (only == "mixer")   runMixerSelfTest (check);
         else if (only == "songs")   runSongSelfTest (check);
@@ -557,6 +561,7 @@ juce::String runSelfTest (bool& passed)
     runMixerSelfTest (check);
     runRemoteSelfTest (check);
     runBreakMusicSelfTest (check);
+    runExpressionSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

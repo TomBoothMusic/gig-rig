@@ -53,6 +53,7 @@ MainComponent::MainComponent()
     devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message)
     {
         pedal.handleMidi (deviceName, message);
+        expression.handleMidi (deviceName, message);        // a real expression pedal, once one has been learned on the Pedal tab
         engine.kick().handleMidi (deviceName, message);     // the kick pad test: a note from the SPD::ONE plays the kick
 
         if (message.isProgramChange())
@@ -128,6 +129,16 @@ MainComponent::MainComponent()
         songsPanel.refresh();
         mixerPanel.refresh();
     };
+
+    // The expression pedal: each move goes where the on-screen Pedal sliders already go (the blend, or the wah or whammy under the toe switch).
+    if (ExpressionInput::memoryOnDisk.load() && ExpressionInput::stateFile().existsAsFile())
+        expression.loadStateText (ExpressionInput::stateFile().loadFileAsString());
+
+    expression.onMove = [this] (float position)
+    {
+        engine.effects().moveExpressionPedal (position);
+    };
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + expression.reportText(); };
 
     // Break music: its tab goes after the remote screen's, so the tab numbers before it stay as they were.
     tabs.addTab ("Break music", style::background, &breakPanel, false);

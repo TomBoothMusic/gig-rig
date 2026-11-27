@@ -123,9 +123,49 @@ void layOutSwitches (juce::Rectangle<int> area, juce::OwnedArray<SwitchTile>& ti
 }
 
 //==============================================================================
-PedalPanel::PedalPanel (PedalInput& pedalToUse)
-    : pedal (pedalToUse)
+PedalPanel::PedalPanel (PedalInput& pedalToUse, ExpressionInput& expressionToUse)
+    : pedal (pedalToUse), expression (expressionToUse)
 {
+    // ---- a real expression pedal (docs/songs.md, "The expression pedal") ----
+    style::body (expLabel, "Expression pedal");
+    expLabel.setTooltip ("Any pedal that arrives as MIDI: one in the RC-600's EXP jack given a CC number there, or a USB one. It works the blend (every Volume pedal effect), and the wah or whammy while the toe switch is on.");
+    expStatus.setFont (style::monoFont (13.0f));
+    expStatus.setColour (juce::Label::textColourId, style::textMain);
+    expStatus.setColour (juce::Label::backgroundColourId, style::panel);
+    expStatus.setMinimumHorizontalScale (0.6f);
+    learnButton.setTooltip ("Press, rock the pedal all the way back and all the way forward a couple of times, then press Done");
+    learnButton.onClick = [this]
+    {
+        if (expression.isLearning())
+        {
+            expression.finishLearning();
+            expression.saveState();
+        }
+        else
+            expression.startLearning();
+
+        shownExp.clear();
+    };
+    swapButton.setTooltip ("For a pedal that works backwards: toe down becomes heel down");
+    swapButton.onClick = [this]
+    {
+        auto s = expression.setup();
+        std::swap (s.heel, s.toe);
+        expression.setSetup (s);
+        expression.saveState();
+        shownExp.clear();
+    };
+    forgetButton.setTooltip ("Forgets the pedal, so no MIDI controller moves the blend");
+    forgetButton.onClick = [this]
+    {
+        expression.setSetup ({});
+        expression.saveState();
+        shownExp.clear();
+    };
+
+    for (auto* c : std::initializer_list<juce::Component*> { &expLabel, &expStatus, &learnButton, &swapButton, &forgetButton })
+        addAndMakeVisible (c);
+
     style::body (help, "On the RC-600 choose memory 65 (MIDI CTRL). Then, one switch at a time: press it once, press it twice "
                        "quickly, and hold it down for 2 seconds. Each tile fills in as the app sees it. You can also click a tile with the mouse.");
     help.setColour (juce::Label::textColourId, style::textDim);
@@ -217,12 +257,32 @@ void PedalPanel::resized()
     resetButton.setBounds (row.removeFromRight (110));
 
     area.removeFromTop (8);
+    row = area.removeFromTop (26);
+    expLabel.setBounds (row.removeFromLeft (120));
+    forgetButton.setBounds (row.removeFromRight (104));
+    row.removeFromRight (4);
+    swapButton.setBounds (row.removeFromRight (136));
+    row.removeFromRight (4);
+    learnButton.setBounds (row.removeFromRight (100));
+    row.removeFromRight (8);
+    expStatus.setBounds (row);
+
+    area.removeFromTop (8);
     logHeading.setBounds (area.removeFromTop (24));
     logView.setBounds (area);
 }
 
 void PedalPanel::timerCallback()
 {
+    if (const auto line = expression.statusLine() + (expression.isLearning() ? "L" : ""); line != shownExp)
+    {
+        shownExp = line;
+        expStatus.setText (expression.statusLine(), juce::dontSendNotification);
+        learnButton.setButtonText (expression.isLearning() ? "Done" : "Learn pedal");
+        swapButton.setEnabled (expression.isSetUp() && ! expression.isLearning());
+        forgetButton.setEnabled (expression.isSetUp() && ! expression.isLearning());
+    }
+
     const auto seen = pedal.seen();
     int complete = 0, started = 0;
 

@@ -7,6 +7,7 @@
 #include "BreakMusicPanel.h"
 #include "DeviceCheckPanel.h"
 #include "EffectsPanel.h"
+#include "ExpressionPedal.h"
 #include "KickPadPanel.h"
 #include "LooperPanel.h"
 #include "MixerPanel.h"
@@ -35,6 +36,7 @@ private:
 
     AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
     PedalInput pedal;       // the RC-600's switches; feeds the looper inside the engine
+    ExpressionInput expression;     // a real expression pedal arriving as MIDI; feeds the blend, the wah and the whammy
 
     SongBook songBook { engine, SongBook::defaultSongFolder(), EffectsPanel::presetFolder() };     // the song list: looper layouts and sounds
 
@@ -43,7 +45,7 @@ private:
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     AudioPanel audioPanel { engine };
     DeviceCheckPanel devicePanel;
-    PedalPanel pedalPanel { pedal };
+    PedalPanel pedalPanel { pedal, expression };
     KickPadPanel kickPanel { engine };
     LooperPanel looperPanel { engine, pedal, songBook };
     SongsPanel songsPanel { engine, songBook };

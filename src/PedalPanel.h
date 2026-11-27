@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "ExpressionPedal.h"
 #include "Pedal.h"
 #include "Style.h"
 
@@ -39,7 +40,7 @@ class PedalPanel final : public juce::Component,
                          private juce::Timer
 {
 public:
-    explicit PedalPanel (PedalInput&);
+    PedalPanel (PedalInput&, ExpressionInput&);
     ~PedalPanel() override;
 
     void resized() override;
@@ -48,6 +49,10 @@ private:
     void timerCallback() override;
 
     PedalInput& pedal;
+    ExpressionInput& expression;
+    juce::Label expLabel, expStatus;
+    juce::TextButton learnButton { "Learn pedal" }, swapButton { "Swap heel and toe" }, forgetButton { "Forget pedal" };
+    juce::String shownExp;
 
     StatusRow status;
     juce::Label help, windowLabel, windowNow, logHeading;
