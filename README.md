@@ -949,6 +949,58 @@ are not heard at all, so press **Put the songs back** before going back to the m
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.
 The mixer's lines are near the end, starting with **MIXER**.
 
+## The remote screen: the rig on your phone or tablet
+
+This build adds the control app, as a page the rig app serves to a phone, tablet or laptop on
+the same Wi-Fi. Nothing is installed on the phone. The full guide is
+[docs/remote.md](docs/remote.md). It is **off until you tick the box**, and off it changes nothing.
+
+It has six screens: **Looper** (the tracks and the switches), **Songs**, **Build** (the looper
+arrangement builder), **Effects**, **Mixer** and **Rig**.
+
+### Setting up (5 minutes)
+
+1. Put your phone or tablet on the same Wi-Fi as the laptop.
+2. Open GigRig. Click the **Remote screen** tab (the last tab).
+3. Tick **Let a phone or tablet on the same network control the rig**. If Windows asks whether
+   GigRig may use the network, click **Allow**.
+4. The tab shows an address like `http://192.168.1.20:8080`. Type it into the browser on the
+   phone or tablet, exactly as shown.
+5. The tab should now say **A phone, tablet or browser is connected**.
+
+### Part A: the looper and the songs (10 minutes)
+
+1. On the phone tap **Songs**, then tap **Wicked Game**. The app's own Song box should change too.
+2. Tap **Looper**. Touch switch **1**, play a bar or two, touch **1** again. Track 1 should go
+   red, then green, and you should hear the loop.
+3. Press the real RC-600 switches. The tracks on the phone should follow.
+4. Hold switch **1** for two seconds (undo). The track should show **UNDONE**.
+5. Tap **Clear all loops**, then **Clear all loops** again in the box that asks.
+
+### Part B: build a layout (15 minutes)
+
+1. Tap **Build**. The draft is a copy of the loaded song's layout.
+2. On **Tracks**, change what track 2 records (tap the source buttons) and set its length to **4 bars**.
+3. Tap **Switches**, tap switch **5**, and choose a different action and track. Tap **Close**.
+4. Tap **Try it** (and **Try it** again in the box that asks). Go to **Looper** and play it.
+5. Back on **Build**, tap **Save as a new song**, give it a name, tap **Save the new song**.
+6. On the laptop, open the Songs tab: the new song should be in the list.
+7. If you want the old layout back on a song you saved over: **Go back to the built-in layout**.
+
+### Part C: the mixer and effects (10 minutes, mixer on)
+
+1. Tap **Mixer**. Drag a fader: the same fader on the laptop's Mixer tab should move, and the
+   level you hear should change.
+2. Tap **Vocal plate** in the row above the faders. The faders are now the sends to that reverb.
+3. Tap a channel's name. Move its Trim and open one of its processing blocks.
+4. Tap **Effects**, choose a chain, open an effect and move a setting while you play.
+5. Turn the phone on its side and check every screen is still usable.
+
+### What to send Claude
+
+On the phone tap **Rig**, then **Copy report**, and paste it into the chat. Add anything that
+felt slow, small, confusing or wrong, and which phone or tablet it was on.
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.

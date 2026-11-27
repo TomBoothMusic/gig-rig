@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11151a">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Rig Control</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- The remote screen (docs/remote.md). The rig serves these files; tools/remote_demo.py joins them into the one-file demo. -->
+<div id="app"><p class="hint pad">Starting. If this stays, the page needs JavaScript switched on.</p></div>
+<script src="core.js"></script>
+<script src="screens.js"></script>
+<script src="builder.js"></script>
+<script src="demo.js"></script>
+<script src="demo-data.js"></script>
+<script>GR.start();</script>
+</body>
+</html>

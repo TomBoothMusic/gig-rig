@@ -171,6 +171,10 @@ public:
     void loadStateText (const juce::String& text);
     static juce::File stateFile();
     void saveState();
+
+    /** False while the self-test runs, so its pretend rigs never write over the real memory file
+        (found 27 Nov 2026: a self-test run on a real machine left the test's settings behind). */
+    static inline std::atomic<bool> memoryOnDisk { true };
     void markChanged() noexcept                         { dirty = true; }
 
     // ---- meters and figures ----

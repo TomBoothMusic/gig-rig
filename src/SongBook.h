@@ -48,6 +48,8 @@ struct SongSounds
     std::vector<AmpList> amps;
     std::vector<Send> sends;            // on top of the act while this song is loaded; never changes the venue
     std::vector<MixerEffect> mixerEffects;  // on top of the venue while this song is loaded (Tom, 27 Nov 2026); the venue keeps its EQ, cuts and levels
+    juce::StringArray layoutLines;      // the song's own looper layout: every "looper <something> = ..." line as written (LooperLayout.h).
+                                        // Empty = the layout comes from 'looper' above or the general one.
     juce::StringArray notUnderstood;    // lines the reader could not use, for the report
 
     bool saysAnything() const noexcept  { return ! chains.empty() || ! settings.empty() || hasSwitches || ! amps.empty() || ! sends.empty() || ! mixerEffects.empty(); }
@@ -214,6 +216,24 @@ public:
         name and program number (0 = none). Returns an error, or an empty string. */
     juce::String addEntry (const juce::String& name, int program);
 
+    // ---- a song's own looper layout (27 Nov 2026: the arrangement builder on the remote screen) ----
+    /** Hands the looper a layout to try without saving anything. Every loop is cleared, as when a
+        song loads. The song keeps its name; loading the song again brings its saved layout back. */
+    void tryLayout (const SongSetup&);
+    /** True while the looper holds a layout that was tried and not saved. */
+    bool layoutIsTried() const noexcept             { return tried; }
+    /** Writes a layout into the loaded song's file as "looper ..." lines (LooperLayout.h); every
+        other line in the file stays. 'withTempo' also writes the layout's tempo as the song's
+        "tempo =" line. Loops are left alone when the looper already holds this layout (it was
+        tried first); otherwise the song loads afresh. Returns an error, or an empty string. */
+    juce::String saveLayout (const SongSetup&, bool withTempo);
+    /** A new entry with this layout and the sounds as they stand. Returns an error, or an empty string. */
+    juce::String addEntryWithLayout (const juce::String& name, int program, const SongSetup&, bool withTempo);
+    /** Takes the loaded song's own layout lines out of its file, so it goes back to the layout it had before. */
+    juce::String forgetLayout();
+    /** The layout a song would load, without loading it (for the builder's "start from a copy of"). */
+    SongSetup layoutOf (int index) const;
+
     /** Writes one mixer reverb or delay as it is now (which it is, every setting) into the loaded
         song's file, or into the default sounds, and nothing else: the chains are not touched. */
     juce::String keepMixerEffect (int fx, bool asDefault);
@@ -243,6 +263,7 @@ public:
         so two folders can be compared sound for sound. */
 
     juce::File folder() const                       { return songFolder; }
+    juce::File presetsFolder() const                { return presetFolder; }
     PresetLoader loader() const;
 
 private:
@@ -258,6 +279,7 @@ private:
     SongSounds defaultSounds;
     int current = 0;
     SongSetup loadedSong;
+    bool tried = false;
     juce::String note, soundsFrom, folderStamp;
     juce::StringArray problems, programLog, moveLog;
     std::array<int, EffectsRack::numChains> chainFrom {};   // 0 = left alone, 1 = the song's own lines, 2 = the default sounds
