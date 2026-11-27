@@ -540,18 +540,22 @@ MovedToMixer moveToMixer (const SongSounds& song, const juce::StringArray& chain
 
     // The mixer reverb or delay a channel's effect goes to: a vocal's to the one with "vocal" in
     // its name, anything else's to the one without.
-    const auto target = [&mixer] (bool vocal, bool delay)
+    const bool namesTell = std::any_of (mixer.fx.begin(), mixer.fx.end(), [] (const MixFxSetup& x) { return x.name.containsIgnoreCase ("vocal"); });
+    const auto target = [&mixer, namesTell] (bool vocal, bool delay)
     {
-        for (int f = 0; f < numMixFx; ++f)
+        for (int f = 0; namesTell && f < numMixFx; ++f)
         {
             const auto& x = mixer.fx[(size_t) f];
 
-            if (x.on && ! x.effect.slots.empty() && x.name.containsIgnoreCase ("vocal") == vocal
+            if (! x.effect.slots.empty() && x.name.containsIgnoreCase ("vocal") == vocal
                 && (delay ? isMixerDelay (x.effect.slots[0].type) : isMixerReverb (x.effect.slots[0].type)))
                 return f;
         }
 
-        return -1;
+        // Renamed, or set to something else in this venue: the places the mixer starts with
+        // (1 the vocal's reverb, 2 the vocal's delay, 3 the instruments' room). The song's line
+        // says what the effect is, so what the venue has there does not matter.
+        return vocal ? (delay ? 1 : 0) : 2;
     };
     for (int c = 0; c < EffectsRack::numChains; ++c)
     {
@@ -1756,14 +1760,35 @@ juce::String SongBook::moveSoundsToMixer()
     std::array<int, numChains> chainChannel;
     chainChannel.fill (-1);
 
+    juce::StringArray feeds;
+
     for (int c = 0; c < numChains; ++c)
-        if (rack.routing (c).on)
+    {
+        const auto route = rack.routing (c);
+
+        if (! route.on)
+            continue;
+
+        for (int ch = numMixChannels - 1; ch >= 0; --ch)
+            if (setup.channel[(size_t) ch].on && setup.channel[(size_t) ch].socket == route.source)
+                chainChannel[(size_t) c] = ch;
+
+        // No channel on its socket: the channel that has the chain's own name.
+        if (chainChannel[(size_t) c] < 0 && route.name.trim().isNotEmpty())
             for (int ch = numMixChannels - 1; ch >= 0; --ch)
-                if (setup.channel[(size_t) ch].on && setup.channel[(size_t) ch].socket == rack.routing (c).source)
+                if (setup.channel[(size_t) ch].on && setup.channel[(size_t) ch].name.trim().equalsIgnoreCase (route.name.trim()))
                     chainChannel[(size_t) c] = ch;
 
+        const int ch = chainChannel[(size_t) c];
+        feeds.add ("chain " + juce::String (c + 1) + " (" + route.name + ", socket " + juce::String (route.source + 1) + ") "
+                   + (ch >= 0 ? "feeds the mixer's " + setup.channel[(size_t) ch].name + " channel"
+                              : juce::String ("feeds no mixer channel that is on, so nothing of it was moved")));
+    }
+
+    moveLog.add ("How the chains meet the mixer: " + feeds.joinIntoString ("; ") + ".");
+
     if (std::all_of (chainChannel.begin(), chainChannel.end(), [] (int ch) { return ch < 0; }))
-        return note = "Nothing was moved: no effects chain that is on feeds a mixer channel that is on. Load your act on the Mixer tab first.";
+        return note = "Nothing was moved: no effects chain that is on feeds a mixer channel that is on. On the Mixer tab, each channel's 'Comes from' box must say the socket its chain is on. " + feeds.joinIntoString ("; ") + ".";
 
     const auto backup = songFolder.getParentDirectory().getChildFile (songFolder.getFileName() + " backup " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S"));
 
@@ -1830,6 +1855,25 @@ juce::String SongBook::moveSoundsToMixer()
         opened.add (mixer.setup().channel[(size_t) ch].name + " to " + mixer.setup().fx[(size_t) f].name);
     }
 
+    // A mixer reverb or delay that is switched off would leave the moved sound unheard too.
+    juce::StringArray switchedOn;
+
+    for (const auto& pair : sends)
+    {
+        const int f = pair.second;
+
+        if (mixer.setup().fx[(size_t) f].on)
+            continue;
+
+        auto next = mixer.setup().fx[(size_t) f];
+        next.on = true;
+        mixer.setFx (f, next);
+        switchedOn.add (next.name);
+    }
+
+    if (! switchedOn.isEmpty())
+        moveLog.add ("Mixer effects switched on (they were off): " + switchedOn.joinIntoString (", ") + ". Save your venue on the Mixer tab to keep them on.");
+
     if (! opened.isEmpty())
         moveLog.add ("Sends opened at 0 dB (they were off): " + opened.joinIntoString (", ") + ". Save your act on the Mixer tab to keep them.");
 
@@ -1837,6 +1881,8 @@ juce::String SongBook::moveSoundsToMixer()
     applySounds ("reverbs and delays were moved to the mixer");
     note = "Moved to the mixer in " + juce::String (moved) + " song file" + (moved == 1 ? "" : "s") + "."
          + (failed > 0 ? " " + juce::String (failed) + " could not be written." : juce::String())
+         + (moved == 0 ? " " + feeds.joinIntoString ("; ") + "." + (sends.empty() ? juce::String (" No song names a preset with a reverb or delay switched on for the vocal or the acoustic.") : juce::String (" The songs already had their mixer lines.")) : juce::String())
+         + (switchedOn.isEmpty() ? juce::String() : " Switched on in the mixer: " + switchedOn.joinIntoString (", ") + " (save your venue to keep them on).")
          + (opened.isEmpty() ? juce::String() : " Sends opened at 0 dB: " + opened.joinIntoString (", ") + " (save your act on the Mixer tab to keep them).")
          + " The files as they were are in \"" + backup.getFileName() + "\" beside the songs folder; 'Put the songs back' undoes it."
          + (mixer.isOn() ? juce::String() : " The mixer is switched OFF: these reverbs and delays are only heard with the mixer on.");
