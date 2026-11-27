@@ -106,8 +106,17 @@ set again.
 On the Effects tab, **Update its presets** writes the knobs turned since the chain was loaded
 back into the presets the chain was built from, each preset getting its own effects. This is the
 "edit once, every song follows" button. It only saves what was turned since loading, so a song's
-own `set` changes never leak into a shared preset. It refuses if effects were added, removed or
-moved (use **Save as** then).
+own `set` changes never leak into a shared preset.
+
+It also copes with an effect that was **added or taken out** (from 27 Nov 2026). Effects that were
+there when the chain loaded stay with the preset they came from. A new effect joins the first
+preset (the base); if it sits between two effects of one other preset it joins that one; and if
+the base cannot hold it where it is, the preset of the effect after it, then of the one before.
+Nothing is written unless stacking the presets again gives exactly the chain on screen
+(`saveNewShapeToPresets` in `src/SongBook.cpp`); otherwise it says so and **Save as** is the way.
+
+**Save** refuses to write a chain stacked from several presets under the name of one of them:
+that would put the other presets' effects inside it and every song would get them twice.
 
 ## Program changes
 

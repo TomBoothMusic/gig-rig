@@ -688,6 +688,15 @@ void EffectsPanel::savePreset()
         return;
     }
 
+    // A chain stacked from several presets must not be saved whole under the name of one of them:
+    // the others' effects would end up inside it, and every song would get them twice.
+    if (const auto recipe = rack.recipe (chainIndex); recipe.size() > 1 && recipe.contains (name, true))
+    {
+        captureNote = "Not saved: this chain is made of " + recipe.joinIntoString (" + ") + ", and saving all of it as \"" + name
+                    + "\" would put the other presets' effects inside it. Press Update its presets instead, or type a new name.";
+        return;
+    }
+
     presetFolder().createDirectory();
     const auto file = presetFolder().getChildFile (name + ".txt");
     const bool ok = file.replaceWithText ("# GigRig effect preset \"" + name + "\" (build " + juce::String (GIGRIG_BUILD_LABEL) + ")\n"

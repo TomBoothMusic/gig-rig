@@ -939,13 +939,7 @@ std::vector<int> slotOwners (const juce::StringArray& recipe, const PresetLoader
             continue;
         }
 
-        auto at = built.slots.size();
-        for (size_t k = 0; k < built.slots.size(); ++k)
-            if (built.slots[k].type == "amp")
-            {
-                at = k;
-                break;
-            }
+        const auto at = built.stackPoint();
 
         if (built.addFrom (m, fx::Chain::maxSlots) < (int) m.slots.size())
             return {};
@@ -955,6 +949,187 @@ std::vector<int> slotOwners (const juce::StringArray& recipe, const PresetLoader
 
     return owners;
 }
+
+// "Update its presets" after an effect was added to or taken out of a chain built from presets.
+// Each effect that was there when the chain loaded stays with the preset it came from. A new
+// effect joins the first preset (the base), unless it sits between two effects of one other
+// preset. The presets are only written if stacking them again gives exactly the chain on screen.
+static juce::String saveNewShapeToPresets (EffectsRack& rack, int c, const juce::File& presetFolder, const juce::StringArray& recipe,
+                                           const std::vector<int>& owners, const PresetLoader& load)
+{
+    const auto& model = rack.chain (c).model();
+    const auto& base = rack.baseline (c);
+    const juce::String cannot = "Nothing was saved: ";
+    const juce::String useSaveAs = " Use Save as for a new preset.";
+
+    if (owners.empty() || owners.size() != base.slots.size())
+        return cannot + "the presets this chain was built from have changed on disk since it was loaded. Load the song again first.";
+
+    // Line the chain on screen up with the chain as loaded (longest run of the same effects in the same order).
+    const auto n = base.slots.size(), m = model.slots.size();
+    std::vector<std::vector<int>> len (n + 1, std::vector<int> (m + 1, 0));
+
+    for (size_t i = n; i-- > 0;)
+        for (size_t j = m; j-- > 0;)
+            len[i][j] = base.slots[i].type == model.slots[j].type ? len[i + 1][j + 1] + 1 : juce::jmax (len[i + 1][j], len[i][j + 1]);
+
+    std::vector<int> wasAt (m, -1);
+
+    for (size_t i = 0, j = 0; i < n && j < m;)
+    {
+        if (base.slots[i].type == model.slots[j].type && len[i][j] == len[i + 1][j + 1] + 1)
+            wasAt[j++] = (int) i++;
+        else if (len[i + 1][j] >= len[i][j + 1])
+            ++i;
+        else
+            ++j;
+    }
+
+    std::vector<fx::ChainModel> next;
+    std::vector<bool> touched;
+
+    // Returns an empty string when the presets, stacked again, give the chain on screen.
+    auto attempt = [&] (int mode) -> juce::String
+    {
+    std::vector<int> owner (m, 0);
+
+    for (size_t j = 0; j < m; ++j)
+        if (wasAt[j] >= 0)
+            owner[j] = owners[(size_t) wasAt[j]];
+
+    for (size_t j = 0; j < m; ++j)
+    {
+        if (wasAt[j] >= 0)
+            continue;
+
+        int before = -1, after = -1;
+        for (size_t k = j; k-- > 0 && before < 0;)
+            if (wasAt[k] >= 0) before = owner[k];
+        for (size_t k = j + 1; k < m && after < 0; ++k)
+            if (wasAt[k] >= 0) after = owner[k];
+
+        // Between two presets: the base first, then the preset of the effect after it, then of the one before.
+        owner[j] = before >= 0 && after >= 0 ? (before == after ? before : (mode == 0 ? 0 : mode == 1 ? after : before)) : 0;
+    }
+
+    // The presets as they would be saved.
+    next.assign ((size_t) recipe.size(), {});
+    touched.assign ((size_t) recipe.size(), false);
+    std::vector<size_t> kept ((size_t) recipe.size(), 0);
+
+    for (int i = 0; i < recipe.size(); ++i)
+    {
+        fx::ChainModel onDisk;
+
+        if (! load (recipe[i], onDisk))
+            return cannot + "the preset \"" + recipe[i] + "\" is no longer in the folder.";
+
+        for (size_t j = 0; j < m; ++j)
+        {
+            if (owner[j] != i)
+                continue;
+
+            const auto& is = model.slots[j];
+
+            if (wasAt[j] < 0)
+            {
+                next[(size_t) i].slots.push_back (is);       // a new effect, as it is set now
+                touched[(size_t) i] = true;
+                continue;
+            }
+
+            // An effect that was there: the preset's own copy, plus only what was changed since loading.
+            size_t inPreset = 0;
+            for (int k = 0; k < wasAt[j]; ++k)
+                inPreset += owners[(size_t) k] == i ? 1 : 0;
+
+            if (inPreset >= onDisk.slots.size() || onDisk.slots[inPreset].type != is.type)
+                return cannot + "the preset \"" + recipe[i] + "\" has changed on disk since the chain was loaded. Load the song again first.";
+
+            auto into = onDisk.slots[inPreset];
+            const auto& was = base.slots[(size_t) wasAt[j]];
+            const auto& facts = factsFor (is.type);
+
+            if (was.on != is.on)
+            {
+                into.on = is.on;
+                touched[(size_t) i] = true;
+            }
+
+            for (const auto& p : facts.params)
+                if (const float v = is.param (p.id, p.def); std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
+                {
+                    into.setParam (p.id, v);
+                    touched[(size_t) i] = true;
+                }
+
+            for (const auto& key : facts.textKeys)
+                if (const auto v = is.text (key); ! v.empty() && v != was.text (key))
+                {
+                    into.setText (key, v);
+                    touched[(size_t) i] = true;
+                }
+
+            next[(size_t) i].slots.push_back (into);
+            ++kept[(size_t) i];
+        }
+
+        if (kept[(size_t) i] != onDisk.slots.size())
+            touched[(size_t) i] = true;                      // an effect was taken out of this preset
+
+        if (next[(size_t) i].slots.empty())
+            return cannot + "every effect of the preset \"" + recipe[i] + "\" was taken out of the chain, so the chain is no longer made of it." + useSaveAs;
+    }
+
+    // Would loading the presets again give the chain on screen? If not, nothing is written.
+    fx::ChainModel again = next[0];
+    bool fits = true;
+
+    for (int i = 1; i < recipe.size() && fits; ++i)
+        fits = again.addFrom (next[(size_t) i], fx::Chain::maxSlots) == (int) next[(size_t) i].slots.size();
+
+    fits = fits && again.slots.size() == m;
+
+    for (size_t j = 0; fits && j < m; ++j)
+        fits = again.slots[j].type == model.slots[j].type;
+
+    if (fits)
+        return {};
+
+    return cannot + "with the effects where they are now, the chain no longer splits into " + recipe.joinIntoString (" + ")
+               + " (a stacked preset always lands in front of the amp, and of a volume pedal right before it)." + useSaveAs;
+    };
+
+    juce::String problem;
+
+    for (int mode = 0; mode < 3; ++mode)
+        if (problem = attempt (mode); problem.isEmpty())
+            break;
+
+    if (problem.isNotEmpty())
+        return problem;
+
+    juce::StringArray changed;
+
+    for (int i = 0; i < recipe.size(); ++i)
+    {
+        if (! touched[(size_t) i])
+            continue;
+
+        const auto file = presetFolder.getChildFile (juce::File::createLegalFileName (recipe[i]) + ".txt");
+
+        if (! file.replaceWithText ("# GigRig effect preset \"" + recipe[i] + "\" (build " + juce::String (GIGRIG_BUILD_LABEL) + ")\n" + juce::String (next[(size_t) i].toText())))
+            return "Could not write " + file.getFullPathName();
+
+        changed.add ("\"" + recipe[i] + "\"");
+    }
+
+    rack.setBaseline (c, model);
+
+    return "Saved the chain's new line-up into " + changed.joinIntoString (" and ") + ". Every song that names " + (changed.size() == 1 ? "it" : "them")
+           + " gets the change when it is next loaded.";
+}
+
 
 juce::String saveBackToPresets (EffectsRack& rack, int c, const juce::File& presetFolder)
 {
@@ -979,7 +1154,7 @@ juce::String saveBackToPresets (EffectsRack& rack, int c, const juce::File& pres
         sameShape = base.slots[k].type == model.slots[k].type;
 
     if (! sameShape)
-        return cannot + "effects were added, removed or moved since the presets were loaded, so the chain no longer splits into them. Use Save as for a new preset.";
+        return saveNewShapeToPresets (rack, c, presetFolder, recipe, owners, load);
 
     // Only what was changed since the chain was loaded goes into the presets. What a song set
     // on top of a preset (its own 'set' lines) was already there when it loaded, so it stays out.
