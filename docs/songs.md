@@ -115,6 +115,11 @@ the base cannot hold it where it is, the preset of the effect after it, then of 
 Nothing is written unless stacking the presets again gives exactly the chain on screen
 (`saveNewShapeToPresets` in `src/SongBook.cpp`); otherwise it says so and **Save as** is the way.
 
+A volume pedal's `pedal` position is never taken from a preset or a song: a chain that is
+loaded gets its volume pedals where the expression pedal is now (or, until it has moved, where
+the volume pedals on screen were), and moving the pedal is not a change that Update its presets
+saves (`SongBook::applySounds`).
+
 **Save** refuses to write a chain stacked from several presets under the name of one of them:
 that would put the other presets' effects inside it and every song would get them twice.
 

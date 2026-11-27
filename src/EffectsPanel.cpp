@@ -943,6 +943,7 @@ void EffectsPanel::timerCallback()
 
         if (levelNote.isNotEmpty()) s << levelNote << "\n";
         if (captureNote.isNotEmpty()) s << captureNote << "\n";
+        rack.panelNote = captureNote;       // for the Copy report: this line cannot be selected on screen
 
         if (rack.takeNote.isNotEmpty()) s << rack.takeNote << "\n";
 

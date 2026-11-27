@@ -663,6 +663,34 @@ void runSongSelfTest (const Check& check)
             rack.chain (0).setModel (without);
             saveBackToPresets (rack, 0, presetDir);
         }
+
+        // A volume pedal's place is the pedal's, never the one a preset saved (Tom, 27 Nov 2026).
+        {
+            const auto file = presetDir.getChildFile ("Comp and EQ.txt");
+            const auto original = file.loadFileAsString();
+            file.replaceWithText (original.trimEnd() + "\nslot=volume\non=1\npedal=100\n");
+            const auto pedalOf = [&rack]
+            {
+                for (const auto& sm : rack.chain (0).model().slots)
+                    if (sm.type == "volume")
+                        return sm.param ("pedal", -1.0f);
+                return -2.0f;
+            };
+            book.load (book.entryNamed ("Dreams"), "test");
+            rack.moveExpressionPedal (30.0f);
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            const float loadedAt = pedalOf();
+            const auto nothing = saveBackToPresets (rack, 0, presetDir);
+            rack.moveExpressionPedal (0.0f);
+            const auto stillNothing = saveBackToPresets (rack, 0, presetDir);
+            book.load (book.entryNamed ("Dreams"), "test");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            check (std::abs (loadedAt - 30.0f) < 0.01f && nothing.contains ("nothing to save") && stillNothing.contains ("nothing to save") && std::abs (pedalOf()) < 0.01f,
+                   "song book: a song loads its volume pedal where the pedal is now (30, then 0), not at the 100 its preset saved, and moving the pedal is not a change to save");
+            file.replaceWithText (original);
+            book.load (book.entryNamed ("Dreams"), "test");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+        }
         EffectsRack reopened;
         reopened.loadStateText (rack.stateText());
         check (reopened.baseline (0).toText() == rack.baseline (0).toText() && reopened.baseline (0).slots.size() == 8,

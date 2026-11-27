@@ -1067,7 +1067,7 @@ static juce::String saveNewShapeToPresets (EffectsRack& rack, int c, const juce:
             }
 
             for (const auto& p : facts.params)
-                if (const float v = is.param (p.id, p.def); std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
+                if (const float v = is.param (p.id, p.def); p.id != std::string ("pedal") && std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
                 {
                     into.setParam (p.id, v);
                     touched[(size_t) i] = true;
@@ -1200,7 +1200,7 @@ juce::String saveBackToPresets (EffectsRack& rack, int c, const juce::File& pres
             }
 
             for (const auto& p : facts.params)
-                if (const float v = is.param (p.id, p.def); std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
+                if (const float v = is.param (p.id, p.def); p.id != std::string ("pedal") && std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
                 {
                     into.setParam (p.id, v);
                     touched = true;
@@ -1427,8 +1427,33 @@ void SongBook::applySounds (const juce::String& why)
     for (int c = 0; c < numChains; ++c)
         now[(size_t) c] = rack.chain (c).model();
 
-    const auto r = resolveSounds (e.sounds, hasDefault() ? &defaultSounds : nullptr, chainNames(), now, loader());
+    auto r = resolveSounds (e.sounds, hasDefault() ? &defaultSounds : nullptr, chainNames(), now, loader());
     int moved = 0, rebuilt = 0;
+
+    // Where a volume pedal sits is where the pedal is, never what a preset or song happened to
+    // save (Tom, 27 Nov 2026: some songs loaded with the electric pedal at 100 and the acoustic's
+    // at 0, so both played at full until the pedal moved). Once the pedal has moved, its place;
+    // before that, where the volume pedals on screen are now.
+    float pedalAt = rack.livePedal();
+
+    if (! rack.pedalHasMoved())
+    {
+        bool found = false;
+
+        for (int c = 0; c < numChains && ! found; ++c)
+            for (const auto& slot : now[(size_t) c].slots)
+                if (slot.type == "volume")
+                {
+                    pedalAt = slot.param ("pedal", pedalAt);
+                    found = true;
+                    break;
+                }
+    }
+
+    for (int c = 0; c < numChains; ++c)
+        for (auto& slot : r.model[(size_t) c].slots)
+            if (slot.type == "volume")
+                slot.setParam ("pedal", pedalAt);
 
     for (int c = 0; c < numChains; ++c)
     {
