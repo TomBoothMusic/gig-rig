@@ -298,6 +298,7 @@ namespace
 void EffectsRack::moveExpressionPedal (float position)
 {
     position = juce::jlimit (0.0f, 100.0f, position);
+    pedalMoved = true;
 
     if (toeOn)
     {
@@ -1661,6 +1662,9 @@ juce::String EffectsRack::reportText() const
 
     t << pedalText();
     t << takeText() << "\n";
+
+    if (panelNote.isNotEmpty())
+        t << "Effects tab last said: " << panelNote << "\n";
 
     if (lastCapture != juce::File())
         t << "Last capture: " << lastCapture.getFullPathName() << "\n";

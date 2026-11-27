@@ -138,6 +138,9 @@ public:
         it is and the acoustic chain's reversed both follow it. Where a real expression pedal
         will arrive. Returns how many it moved. */
     int moveVolumePedals (float position);
+    /** Where the expression pedal is now, for volume pedals in a chain that is just being loaded. */
+    float livePedal() const noexcept                    { return toeOn ? 100.0f : blendPosition; }
+    bool pedalHasMoved() const noexcept                 { return pedalMoved; }
 
     /** Message thread: the one expression pedal (0 heel .. 100 toe). It is the blend (every
         volume pedal follows it) until the toe switch is on; then it rocks the wah or whammy
@@ -243,6 +246,7 @@ public:
     juce::String takeStep();
     /** The last thing takeStep() or a pedal press did, for the screen. */
     juce::String takeNote;
+    juce::String panelNote;         // the Effects tab's last message (a save, a load), so the report can carry it
     TakeState takeState() const noexcept;
     /** How long the take is (or how much has been recorded so far). */
     double takeSeconds() const noexcept;
@@ -365,6 +369,7 @@ private:
     bool dirty = false, tails = true;
     bool toeOn = false;             // the toe switch: the pedal works a wah or whammy, not the blend
     int toeChain = 0;
+    bool pedalMoved = false;        // the pedal (or a switch standing in for it) has been moved since the app started
     float blendPosition = 100.0f;   // where the blend was left when the toe switch went on
     int ticksSinceChange = 0;
 

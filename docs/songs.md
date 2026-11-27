@@ -116,8 +116,24 @@ the base cannot hold it where it is, the preset of the effect after it, then of 
 Nothing is written unless stacking the presets again gives exactly the chain on screen
 (`saveNewShapeToPresets` in `src/SongBook.cpp`); otherwise it says so and **Save as** is the way.
 
+A volume pedal's `pedal` position is never taken from a preset or a song: a chain that is
+loaded gets its volume pedals where the expression pedal is now (or, until it has moved, where
+the volume pedals on screen were), and moving the pedal is not a change that Update its presets
+saves (`SongBook::applySounds`).
+
 **Save** refuses to write a chain stacked from several presets under the name of one of them:
 that would put the other presets' effects inside it and every song would get them twice.
+
+## Tidying presets that nothing uses
+
+On the Songs tab, **Tidy unused presets** looks at every song file, the default sounds and the four
+chains on screen, and finds the presets in `Documents/GigRig/Effect presets` that none of them names.
+The first press only lists them. A second press within a minute moves them into a folder called
+`Not used (moved <date and time>)` inside the presets folder. Nothing is deleted. **Put the presets
+back** moves the newest such folder's presets back (never over a preset of the same name made since).
+A starter preset that was tidied away is not copied in again at the next start. Old song backups are
+not looked at: a song put back from a backup may name a preset that was tidied, and the Songs tab
+then says which one is missing. `SongBook::tidyPresets`, `restoreTidiedPresets`, `unusedPresets`.
 
 ## Program changes
 
