@@ -110,7 +110,7 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
     };
     addAndMakeVisible (onButton);
 
-    for (auto* b : { &recordButton, &recordFolderButton, &resetButton, &copyButton, &folderButton, &turnLeft, &turnRight, &push })
+    for (auto* b : { &recordButton, &recordFolderButton, &resetButton, &copyButton, &folderButton, &turnLeft, &turnRight, &push, &hold })
     {
         styleButton (*b);
         addAndMakeVisible (b);
@@ -213,7 +213,7 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
 
     // ---- the venue knob ----
     style::body (venueKnobLabel, "Venue knob (ENC 5)");
-    venueKnobLabel.setTooltip ("These three buttons stand in for the fifth knob on the board. Turning only shows names; nothing changes until Push.");
+    venueKnobLabel.setTooltip ("These buttons stand in for the fifth knob on the board. Turning only shows names; nothing changes until Push. Hold hands the knob to the break music (Turn is then its level, Push fades it up or down); Hold again, or starting to play, hands it back.");
     venueScreen.setFont (style::monoFont (13.0f));
     venueScreen.setColour (juce::Label::textColourId, style::textMain);
     venueScreen.setColour (juce::Label::backgroundColourId, style::panel);
@@ -223,9 +223,10 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
         lastKnobMs = juce::Time::getMillisecondCounterHiRes();
         refresh();
     };
-    turnLeft.onClick = [this, knob]   { knob (mixer.turnVenue (-1, juce::Time::getMillisecondCounterHiRes())); };
-    turnRight.onClick = [this, knob]  { knob (mixer.turnVenue (1, juce::Time::getMillisecondCounterHiRes())); };
-    push.onClick = [this, knob]       { knob (mixer.pushVenue (juce::Time::getMillisecondCounterHiRes())); };
+    turnLeft.onClick = [this, knob]   { knob (engine.venueKnob().turn (-1, juce::Time::getMillisecondCounterHiRes())); };
+    turnRight.onClick = [this, knob]  { knob (engine.venueKnob().turn (1, juce::Time::getMillisecondCounterHiRes())); };
+    push.onClick = [this, knob]       { knob (engine.venueKnob().push (juce::Time::getMillisecondCounterHiRes())); };
+    hold.onClick = [this, knob]       { knob (engine.venueKnob().hold (juce::Time::getMillisecondCounterHiRes())); };
 
     // ---- the strips ----
     for (int i = 0; i < numStrips; ++i)
@@ -1013,7 +1014,7 @@ void MixerPanel::timerCallback()
         warningLabel.setText (text, juce::dontSendNotification);
 
         const double nowMs = juce::Time::getMillisecondCounterHiRes();
-        venueScreen.setText (nowMs - lastKnobMs < Mixer::browseTimeoutMs && lastKnobLine.isNotEmpty() ? lastKnobLine : mixer.venueScreen (nowMs), juce::dontSendNotification);
+        venueScreen.setText (nowMs - lastKnobMs < Mixer::browseTimeoutMs && lastKnobLine.isNotEmpty() ? lastKnobLine : engine.venueKnob().screen (nowMs), juce::dontSendNotification);
 
         if (++noteTicks > 60)
             note.clear();
@@ -1144,6 +1145,8 @@ void MixerPanel::resized()
     turnRight.setBounds (row.removeFromLeft (84));
     row.removeFromLeft (4);
     push.setBounds (row.removeFromLeft (56));
+    row.removeFromLeft (4);
+    hold.setBounds (row.removeFromLeft (56));
     row.removeFromLeft (8);
     venueScreen.setBounds (row);
 

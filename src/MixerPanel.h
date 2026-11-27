@@ -103,7 +103,7 @@ private:
     std::array<PresetRow, 3> presets;
 
     juce::Label venueKnobLabel, venueScreen;
-    juce::TextButton turnLeft { "Turn left" }, turnRight { "Turn right" }, push { "Push" };
+    juce::TextButton turnLeft { "Turn left" }, turnRight { "Turn right" }, push { "Push" }, hold { "Hold" };
     juce::String lastKnobLine;
     double lastKnobMs = -1.0e12;
 

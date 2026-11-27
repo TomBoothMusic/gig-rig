@@ -4,6 +4,7 @@
 
 #include "AudioEngine.h"
 #include "AudioPanel.h"
+#include "BreakMusicPanel.h"
 #include "DeviceCheckPanel.h"
 #include "EffectsPanel.h"
 #include "KickPadPanel.h"
@@ -52,6 +53,7 @@ private:
     RemoteApi remoteApi { engine, pedal, songBook };        // the remote screen (docs/remote.md): what a phone or tablet can see and do
     RemoteServer remoteServer { remoteApi };                // off until the Remote screen tab switches it on
     RemotePanel remotePanel { remoteServer };
+    BreakMusicPanel breakPanel { engine };
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 

@@ -1709,6 +1709,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
     const float masterStart = master;
     master = masterTarget > master ? juce::jmin (masterTarget, master + masterStep * (float) n) : juce::jmax (masterTarget, master - masterStep * (float) n);
     const float masterInc = (master - masterStart) / (float) n;
+    float mainStart = 0.0f, mainStep = 0.0f;
 
     for (int o = 0; o < numMixOutputs; ++o)
     {
@@ -1766,6 +1767,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         if (slow && out.levelG.now == levelTarget)
             slowLevel.store (false, std::memory_order_relaxed);
 
+        if (o == 0)
+        {
+            mainStart = start;
+            mainStep = step;
+        }
+
         for (int s = 0; s < 2; ++s)
         {
             const float* from = bus[mono ? 0 : s];
@@ -1780,6 +1787,26 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
 
     if (rec.wants (numMixChannels))
         rec.write (numMixChannels, outs[0].buf[0].data(), outs[0].buf[1].data(), n);
+
+    // ---- the break music: main output only, and only after the main mix was recorded ----
+    if (breakL != nullptr && breakR != nullptr)
+    {
+        auto& out = outs[0];
+        const bool mono = out.mono.load (std::memory_order_relaxed);
+
+        for (int s = 0; s < 2; ++s)
+        {
+            float* to = out.buf[(size_t) s].data();
+            const float* from = s == 0 ? breakL : breakR;
+
+            for (int i = 0; i < n; ++i)
+                to[i] += (mono ? 0.5f * (breakL[i] + breakR[i]) : from[i]) * (mainStart + mainStep * (float) i) * (masterStart + masterInc * (float) i);
+
+            raise (out.peak[(size_t) s], peakOf (to, n));
+        }
+
+        breakL = breakR = nullptr;
+    }
 
     rec.endBlock (n);
 

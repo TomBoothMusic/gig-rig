@@ -300,6 +300,11 @@ public:
 
     void setTempo (double bpm) noexcept;
 
+    /** The break music for this block (BreakMusic.h), or nulls when there is none. Call before
+        process(). It joins the main output only, after the main mix has been recorded, so it is
+        never in a recording, a loop or a monitor. It follows the main output's level and mute. */
+    void setBreakFeed (const float* left, const float* right) noexcept  { breakL = left; breakR = right; }
+
     /** For the self-test: what an output carried in the last block. */
     const float* outputBuffer (int o, int side) const noexcept  { return outs[(size_t) o].buf[(size_t) side].data(); }
 
@@ -417,6 +422,8 @@ private:
     int guardWindowLeft = 0, guardHotWindows = 0;
     float loadPeakHold = 0.0f;
     int loadHoldLeft = 0;
+    const float* breakL = nullptr;
+    const float* breakR = nullptr;
 
     MixRecorder rec;
 

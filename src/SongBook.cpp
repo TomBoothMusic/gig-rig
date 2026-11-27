@@ -1416,6 +1416,9 @@ void SongBook::load (int index, const juce::String& why, bool withSounds)
         applySounds (why);
     else
         changed();
+
+    if (onLoaded != nullptr)
+        onLoaded();
 }
 
 SongSetup SongBook::layoutOf (int index) const
@@ -1651,6 +1654,9 @@ void SongBook::programChange (int program, const juce::String& from)
     {
         line << " (already loaded: the loops were left alone and the sounds set afresh)";
         applySounds ("program " + juce::String (program) + " again");
+
+        if (onLoaded != nullptr)
+            onLoaded();
     }
     else
     {

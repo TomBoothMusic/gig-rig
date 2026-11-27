@@ -355,6 +355,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     tonePhase = 0.0;
     hotSamples = 0;
     kickCore.prepare (rate);
+    breakCore.prepare (rate, scratchSize);
     resetDropoutStats();
 }
 
@@ -829,6 +830,11 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         // The mixer, when it is on, takes the chains and the loops in place of the returns. It stands
         // aside while the amp capture plays its test sound, which must reach its return untouched.
         const bool mixing = ! fxRack.isAmpCapturing() && mixCore.startBlock (numSamples);
+
+        // The break music (between sets): with the mixer on it joins the main output, after the
+        // main mix is recorded; with it off it goes straight to a pair of returns. Silent, it adds nothing.
+        breakCore.hear (inputs, numIns, numSamples);
+        const bool music = ! fxRack.isAmpCapturing() && breakCore.render (numSamples);
         const auto* afterEffects = fxRack.looperInputs (inputs, numIns);
 
         // The kick pad's kick joins its socket here, as a stomp box plugged in there would: after
@@ -862,6 +868,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         if (mixing)
         {
             mixCore.setTempo (fxRack.effectsTempo());
+            mixCore.setBreakFeed (music ? breakCore.left() : nullptr, music ? breakCore.right() : nullptr);
             mixCore.process (inputs, afterEffects, numIns, numSamples);
             mixCore.addOutputs (output, numSamples);
         }
@@ -872,6 +879,16 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
             // Nothing plays a bare socket while the mixer is off, so the kick goes to its returns as before.
             if (kickJoins)
                 kickToReturns();
+
+            if (music)
+            {
+                const auto first = numOuts >= 16 ? breakCore.returnPair() * 2 : 0;
+
+                if (auto* out = output (first))
+                    juce::FloatVectorOperations::add (out, breakCore.left(), numSamples);
+                if (auto* out = output (first + 1))
+                    juce::FloatVectorOperations::add (out, breakCore.right(), numSamples);
+            }
         }
 
         if (! kickJoins)

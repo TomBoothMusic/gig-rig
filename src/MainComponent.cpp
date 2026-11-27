@@ -39,6 +39,10 @@ MainComponent::MainComponent()
     // A switch the Effects tab has taken goes to the effects instead.
     pedal.onEvent = [this] (const PedalEvent& event)
     {
+        // A foot on any switch is Tom starting to play: the break music fades down (if that is ticked on its tab).
+        if (event.kind == PedalEvent::Kind::down)
+            engine.breakMusic().startedPlaying (BreakMusic::Started::footswitch);
+
         if (engine.effects().takePedal (event.sw, event.kind == PedalEvent::Kind::down, event.kind == PedalEvent::Kind::hold))
             return;
 
@@ -104,10 +108,6 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen).
-    if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
-        tabs.setCurrentTabIndex (tab.getIntValue());
-
     // The same for a program change: GIGRIG_PROGRAM=11 does what Songbook Pro's program 11 does, a moment after the start.
     if (const auto program = juce::SystemStats::getEnvironmentVariable ("GIGRIG_PROGRAM", {}).getIntValue(); program > 0)
         juce::Timer::callAfterDelay (1500, [safe = juce::Component::SafePointer<MainComponent> (this), program]
@@ -129,10 +129,19 @@ MainComponent::MainComponent()
         mixerPanel.refresh();
     };
 
+    // Break music: its tab goes after the remote screen's, so the tab numbers before it stay as they were.
+    tabs.addTab ("Break music", style::background, &breakPanel, false);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + breakPanel.reportText(); };
+    songBook.onLoaded = [this] { engine.breakMusic().startedPlaying (BreakMusic::Started::song); };
+
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
     if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
         juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->moveSongsPanel (true); });
+
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen, 10 break music).
+    if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
+        tabs.setCurrentTabIndex (tab.getIntValue());
 
     setSize (980, 790);
     devicePanel.requestScan();

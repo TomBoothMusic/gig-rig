@@ -268,6 +268,8 @@ public:
 
     /** After anything changed (a song loaded, the list rescanned), so the screens can follow. */
     std::function<void()> onChanged;
+    /** After a song was loaded by a program change or from a list (not after a rescan): the break music can take it as "started playing". */
+    std::function<void()> onLoaded;
 
     /** Loads every entry in turn and lists what each one says is wrong ("PROBLEM" lines), for
         checking a whole folder of songs in one go: GigRig --check-songs <songs> <presets> <result>.

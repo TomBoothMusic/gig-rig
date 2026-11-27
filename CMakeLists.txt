@@ -103,6 +103,9 @@ target_sources(GigRig PRIVATE
     src/AmpModels.cpp
     src/AudioEngine.cpp
     src/AudioPanel.cpp
+    src/BreakMusic.cpp
+    src/BreakMusicPanel.cpp
+    src/BreakMusicSelfTest.cpp
     src/DeviceCheckPanel.cpp
     src/DeviceReport.cpp
     src/EffectsPanel.cpp
@@ -185,6 +188,7 @@ target_sources(GigRig PRIVATE
 target_compile_definitions(GigRig PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
+    JUCE_USE_MP3AUDIOFORMAT=1      # break music: Tom's mixes may be MP3 files
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:GigRig,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:GigRig,JUCE_VERSION>"
     GIGRIG_BUILD_LABEL="${GIGRIG_BUILD_LABEL}")
