@@ -729,6 +729,11 @@ void runEffectsSelfTest (const Check& check)
         const auto kept = mine.loadFileAsString();
         check (wrote == 4 && wroteAgain == 0 && kept.contains ("slot=peq") && ! kept.contains ("slot=harmony"),
                "starter presets: copied into the presets folder once; a starter preset Tom has changed is never overwritten");
+        const auto aside = folder.getChildFile ("Not used (moved 2026-11-27 120000)");
+        aside.createDirectory();
+        const bool movedAside = mine.moveFileTo (aside.getChildFile (mine.getFileName()));
+        check (movedAside && starterpresets::setUp (folder) == 0 && ! mine.existsAsFile(),
+               "starter presets: a starter that was tidied away into a Not used folder is not copied in again at the next start");
         folder.deleteRecursively();
     }
 

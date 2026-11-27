@@ -1079,7 +1079,7 @@ static juce::String saveNewShapeToPresets (EffectsRack& rack, int c, const juce:
             }
 
             for (const auto& p : facts.params)
-                if (const float v = is.param (p.id, p.def); std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
+                if (const float v = is.param (p.id, p.def); p.id != std::string ("pedal") && std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
                 {
                     into.setParam (p.id, v);
                     touched[(size_t) i] = true;
@@ -1212,7 +1212,7 @@ juce::String saveBackToPresets (EffectsRack& rack, int c, const juce::File& pres
             }
 
             for (const auto& p : facts.params)
-                if (const float v = is.param (p.id, p.def); std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
+                if (const float v = is.param (p.id, p.def); p.id != std::string ("pedal") && std::abs (v - was.param (p.id, p.def)) > 1.0e-4f * juce::jmax (1.0f, p.max - p.min))
                 {
                     into.setParam (p.id, v);
                     touched = true;
@@ -1555,8 +1555,33 @@ void SongBook::applySounds (const juce::String& why)
     for (int c = 0; c < numChains; ++c)
         now[(size_t) c] = rack.chain (c).model();
 
-    const auto r = resolveSounds (e.sounds, hasDefault() ? &defaultSounds : nullptr, chainNames(), now, loader());
+    auto r = resolveSounds (e.sounds, hasDefault() ? &defaultSounds : nullptr, chainNames(), now, loader());
     int moved = 0, rebuilt = 0;
+
+    // Where a volume pedal sits is where the pedal is, never what a preset or song happened to
+    // save (Tom, 27 Nov 2026: some songs loaded with the electric pedal at 100 and the acoustic's
+    // at 0, so both played at full until the pedal moved). Once the pedal has moved, its place;
+    // before that, where the volume pedals on screen are now.
+    float pedalAt = rack.livePedal();
+
+    if (! rack.pedalHasMoved())
+    {
+        bool found = false;
+
+        for (int c = 0; c < numChains && ! found; ++c)
+            for (const auto& slot : now[(size_t) c].slots)
+                if (slot.type == "volume")
+                {
+                    pedalAt = slot.param ("pedal", pedalAt);
+                    found = true;
+                    break;
+                }
+    }
+
+    for (int c = 0; c < numChains; ++c)
+        for (auto& slot : r.model[(size_t) c].slots)
+            if (slot.type == "volume")
+                slot.setParam ("pedal", pedalAt);
 
     for (int c = 0; c < numChains; ++c)
     {
@@ -2080,6 +2105,129 @@ juce::String SongBook::restoreSongsBackup()
     rescan();
     applySounds ("the song files were put back from a backup");
     note = "Put back " + juce::String (count) + " song files from \"" + backup.getFileName() + "\".";
+    changed();
+    return note;
+}
+
+juce::StringArray SongBook::unusedPresets() const
+{
+    juce::StringArray used;
+
+    const auto take = [&used] (const SongSounds& sounds)
+    {
+        for (const auto& line : sounds.chains)
+            for (const auto& name : line.presets)
+                used.addIfNotAlreadyThere (juce::File::createLegalFileName (name.trim()), true);
+    };
+
+    take (defaultSounds);
+
+    for (const auto& e : entries)
+        take (e.sounds);
+
+    for (int c = 0; c < numChains; ++c)
+        for (const auto& name : engine.effects().recipe (c))
+            used.addIfNotAlreadyThere (juce::File::createLegalFileName (name.trim()), true);
+
+    juce::StringArray unused;
+
+    for (const auto& f : presetFolder.findChildFiles (juce::File::findFiles, false, "*.txt"))
+        if (! used.contains (f.getFileNameWithoutExtension(), true))
+            unused.add (f.getFileNameWithoutExtension());
+
+    unused.sortNatural();
+    return unused;
+}
+
+namespace
+{
+    const char* const notUsedPrefix = "Not used (moved ";
+
+    juce::File newestNotUsedFolder (const juce::File& presetFolder)
+    {
+        juce::File newest;
+
+        for (const auto& d : presetFolder.findChildFiles (juce::File::findDirectories, false, juce::String (notUsedPrefix) + "*"))
+            if (! newest.isDirectory() || d.getFileName().compareNatural (newest.getFileName()) > 0)
+                newest = d;
+
+        return newest;
+    }
+}
+
+juce::String SongBook::tidyPresets()
+{
+    rescan();       // the song files as they are on disk right now
+    const auto unused = unusedPresets();
+    const auto now = juce::Time::currentTimeMillis();
+
+    if (unused.isEmpty())
+    {
+        tidyOffered.clear();
+        return note = "Nothing to tidy: every preset in the folder is named by a song, by the default sounds or by a chain on screen.";
+    }
+
+    if (unused != tidyOffered || now - tidyOfferedAt > 60000)
+    {
+        tidyOffered = unused;
+        tidyOfferedAt = now;
+        return note = juce::String (unused.size()) + " preset" + (unused.size() == 1 ? " is" : "s are") + " not named by any song, by the default sounds or by a chain on screen: "
+                    + unused.joinIntoString (", ") + ". Press 'Tidy unused presets' again within a minute to move "
+                    + (unused.size() == 1 ? "it" : "them") + " into a 'Not used' folder inside the presets folder. Nothing is deleted, and 'Put the presets back' undoes it.";
+    }
+
+    tidyOffered.clear();
+    const auto folder = presetFolder.getChildFile (juce::String (notUsedPrefix) + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H%M%S") + ")");
+
+    if (! folder.createDirectory())
+        return note = "Nothing was moved: could not make the folder " + folder.getFullPathName();
+
+    int moved = 0;
+    juce::StringArray stuck;
+
+    for (const auto& name : unused)
+    {
+        const auto from = presetFolder.getChildFile (name + ".txt");
+
+        if (from.moveFileTo (folder.getChildFile (from.getFileName())))
+            ++moved;
+        else
+            stuck.add (name);
+    }
+
+    note = "Moved " + juce::String (moved) + " unused preset" + (moved == 1 ? "" : "s") + " into \"" + folder.getFileName() + "\" inside the presets folder. "
+         + juce::String (presetFolder.findChildFiles (juce::File::findFiles, false, "*.txt").size()) + " presets are left. 'Put the presets back' undoes this."
+         + (stuck.isEmpty() ? juce::String() : " Could not move: " + stuck.joinIntoString (", ") + ".");
+    changed();
+    return note;
+}
+
+juce::String SongBook::restoreTidiedPresets()
+{
+    const auto folder = newestNotUsedFolder (presetFolder);
+
+    if (! folder.isDirectory())
+        return note = "There is nothing to put back: 'Tidy unused presets' has not moved any presets aside.";
+
+    int back = 0;
+    juce::StringArray kept;
+
+    for (const auto& f : folder.findChildFiles (juce::File::findFiles, false, "*.txt"))
+    {
+        const auto to = presetFolder.getChildFile (f.getFileName());
+
+        if (to.existsAsFile())
+            kept.add (f.getFileNameWithoutExtension());     // a preset of that name was made since: both are kept
+        else if (f.moveFileTo (to))
+            ++back;
+    }
+
+    if (folder.getNumberOfChildFiles (juce::File::findFilesAndDirectories) == 0)
+        folder.deleteFile();
+
+    note = "Put " + juce::String (back) + " preset" + (back == 1 ? "" : "s") + " back from \"" + folder.getFileName() + "\"."
+         + (kept.isEmpty() ? juce::String() : " Left where they are, because a preset of the same name exists now: " + kept.joinIntoString (", ") + ".");
+    rescan();
     changed();
     return note;
 }

@@ -249,6 +249,15 @@ public:
     juce::String restoreSongsBackup();
     juce::File newestBackup() const;
 
+    /** The presets in the Effect presets folder that no song, not the default sounds and no chain
+        on screen names, in name order. */
+    juce::StringArray unusedPresets() const;
+    /** "Tidy unused presets". The first press only lists them; a second press within a minute
+        moves them into a "Not used ..." folder inside the presets folder. Nothing is deleted. */
+    juce::String tidyPresets();
+    /** Moves the presets of the newest "Not used ..." folder back (never over a preset that is there now). */
+    juce::String restoreTidiedPresets();
+
     /** One line for the screen: "Wicked Game (program 11): its own sounds on chains 1 and 3, default on chain 2." */
     juce::String statusLine() const;
     juce::String lastNote() const                   { return note; }
@@ -286,7 +295,8 @@ private:
     SongSetup loadedSong;
     bool tried = false;
     juce::String note, soundsFrom, folderStamp;
-    juce::StringArray problems, programLog, moveLog;
+    juce::StringArray problems, programLog, moveLog, tidyOffered;
+    juce::int64 tidyOfferedAt = 0;
     std::array<int, EffectsRack::numChains> chainFrom {};   // 0 = left alone, 1 = the song's own lines, 2 = the default sounds
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SongBook)

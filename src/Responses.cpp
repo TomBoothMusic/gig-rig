@@ -112,6 +112,11 @@ int setUp (const juce::File& presetFolder)
     for (const auto& [name, text] : all())
     {
         const auto file = presetFolder.getChildFile (name + ".txt");
+
+        // A starter that 'Tidy unused presets' moved into a "Not used" folder stays tidied away.
+        if (! presetFolder.findChildFiles (juce::File::findFiles, true, name + ".txt").isEmpty())
+            continue;
+
         if (! file.existsAsFile() && file.replaceWithText (text))
             ++wrote;
     }
