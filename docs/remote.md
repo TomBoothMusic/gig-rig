@@ -244,3 +244,25 @@ python3 tools/remote_demo.py build demo.html      # the one-file demo page
 ```
 
 `GIGRIG_REMOTE=<port>` switches the server on for that run without touching the saved tick.
+
+### The gear look sample (demo only)
+
+Tom's idea (27 Nov 2026) is that each effect should look like the gear it copies. One sample
+exists so he can judge the look: `remote/gear-sample.js` draws the 1176 style compressor
+(effect id `comp`) as a black studio face with knobs that turn by dragging, ratio buttons and
+a backlit VU meter whose needle follows the gain reduction.
+
+- It is **in the demo only**. It is not in `index.html` and not in the app's built-in files;
+  `tools/remote_demo.py build` adds it to the one-file demo page when the file exists.
+- It changes no other file: it wraps `GR.block` and brings its own styles. Taking it out is
+  deleting the file.
+- In the demo the needle follows a pretend signal, because the demo has no sound. A real
+  version reads the figure the engine already reports (`live.mix.gr` for a mixer channel).
+  A compressor in an effects chain has no such figure in `RemoteApi::live` yet: it would need
+  one, read from a value the effect already keeps and passed across without any work on the
+  audio thread.
+- The drawing costs the audio nothing: it is done in the browser, one needle turn per screen
+  frame, only while a meter is on screen and the page is showing.
+- To make it real: move the look into the page proper, give every effect type a face (or a
+  plain rack face for ones that copy nothing), print each knob's scale as the real gear does,
+  and take the names shown from Tom's local names file (design doc, "Real gear names").
