@@ -203,7 +203,12 @@ report lists what moved, song by song, on lines starting **Moved to the mixer**.
 
 Which mixer effect is which is worked out from names: a channel with "vocal" in its name goes
 to the reverb and the delay with "vocal" in their names, any other channel to the reverb
-without. With the mixer off the moved effects are not heard.
+without. If no mixer effect has "vocal" in its name, the places the mixer starts with are used:
+effect 1 for the vocal's reverb, 2 for the vocal's delay, 3 for the instruments' room. A mixer
+effect that is switched off is switched on (save the venue to keep it on). A chain meets the
+channel whose **Comes from** socket is the chain's socket, or failing that the channel with the
+chain's name. The line under **What happened** and the report say how each chain met the mixer,
+and why when nothing moved. With the mixer off the moved effects are not heard.
 
 An effect set the same way in an effects chain and in the mixer sounds the same: send 0 dB,
 return 0 dB, and the effect's own **Mix** does the same job in both places.

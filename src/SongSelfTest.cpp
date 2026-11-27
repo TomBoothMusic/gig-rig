@@ -218,6 +218,19 @@ void runSongSelfTest (const Check& check)
         const auto odd = moveToMixer (SongSounds::fromText ("chain 4 = Vocal\nsend = Vocal\n"), names, feeds, mixer, load);
         check (! follows.changed && ! odd.changed && odd.notes.size() == 1, "move to the mixer: a song with no chains of its own is left to follow the default sounds, and a file with a line the app cannot read is left alone");
 
+        // A venue whose reverbs and delays are switched off or renamed still gets the songs' effects, in the places the mixer starts with
+        // (Tom, 27 Nov 2026: the button moved nothing, because his mixer reverbs were off while the chains still did the job).
+        auto bare = defaultMixerSetup();
+        for (auto& x : bare.fx)
+            x.on = false;
+        bare.fx[0].name = "Plate";
+        bare.fx[1].name = "Echo";
+        bare.fx[2].name = "Hall";
+        const auto offVenue = moveToMixer (song, names, feeds, bare, load);
+        check (offVenue.changed && offVenue.song.mixerEffects.size() == 3 && offVenue.song.mixerEffects[0].effect == "Hall" && offVenue.song.mixerEffects[1].effect == "Plate"
+               && offVenue.song.mixerEffects[2].effect == "Echo" && offVenue.sends.size() == 3,
+               "move to the mixer: mixer reverbs and delays that are switched off or have been renamed are still used (" + juce::String (offVenue.song.mixerEffects.size()) + " lines)");
+
         // Saving one mixer effect into a song replaces the line for that effect only.
         auto kept = m.song;
         fx::ChainModel echo;
