@@ -905,7 +905,7 @@ Added after Tom's test of build 103.
 4. **Kick pad** tab: **Plays on** should say **Socket 10: through its mixer channel, and into
    loops**. Stomp the pad: on the Mixer tab the **Stomp** channel's meter moves. Shape it with
    that channel's EQ and compressor.
-5. **Looper** tab: set the **Stomp** input socket to **10** (once; it is remembered).
+5. **Looper** tab: the **Stomp** input socket reads **socket 10** by itself while the kick pad is on. There is nothing to set.
 6. Load a song and record track 1 while playing the acoustic and stomping. The track tile says
    **(kept apart)**. On playback, pull the Mixer's **Stomp** fader down: the looped kick goes,
    the looped guitar stays.
