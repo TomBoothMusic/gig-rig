@@ -241,6 +241,30 @@ void runSongSelfTest (const Check& check)
         check (kept.mixerEffects.size() == 3 && kept.mixerEffects[2].type == "analogdelay" && valueOf (kept.mixerEffects[2], "time") == 99.0f && kept.mixerEffects[1].type == "plate"
                && kept.settings.size() == m.song.settings.size() && mixerEffectFromWords ("fx 2", mixer) == 1 && mixerEffectFromWords ("vocal delay", mixer) == 1,
                "save to this song: one mixer reverb or delay saved into a song replaces that effect's line and nothing else in the file");
+
+        // Back to default: the song's own line for one effect goes, the others and the rest of the file stay,
+        // and the song then resolves to the default sounds' effect.
+        auto back = kept;
+        SongSounds defaults;
+        fx::ChainModel slap;
+        slap.slots.resize (1);
+        slap.slots[0].type = "tapedelay";
+        slap.slots[0].setParam ("time", 250.0f);
+        putMixerEffect (defaults, mixerEffectLine (1, slap, mixer), mixer);
+        juce::StringArray none;
+        const auto resolvedFx = [&] (const SongSounds& song)
+        {
+            for (const auto& x : resolveMixerEffects (song, &defaults, mixer, none))
+                if (x.fx == 1 && ! x.effect.slots.empty())
+                    return juce::String (x.effect.slots[0].type) + " " + juce::String (x.effect.slots[0].param ("time", 0.0f), 0);
+
+            return juce::String ("none");
+        };
+        const auto before = resolvedFx (back);
+        const bool dropped = dropMixerEffect (back, 1, mixer);
+        check (dropped && ! dropMixerEffect (back, 1, mixer) && back.mixerEffects.size() == 2 && back.settings.size() == kept.settings.size()
+               && before == "analogdelay 99" && resolvedFx (back) == "tapedelay 250",
+               "back to default: a song's own mixer reverb or delay is taken out of its file alone, and the song then follows the default sounds (" + before + " then " + resolvedFx (back) + ")");
     }
 
     // ---- delays and reverbs ring out when a chain's effects are changed ----

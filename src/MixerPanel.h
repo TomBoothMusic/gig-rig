@@ -25,6 +25,8 @@ public:
 
     /** "Save to this song" and "Save as default" on a mixer reverb or delay: writes it into the song's file (or the default sounds) and returns a line for the screen. */
     std::function<juce::String (int fx, bool asDefault)> onKeepEffect;
+    /** "Back to default for this song": takes the song's own copy out of its file and returns a line for the screen. */
+    std::function<juce::String (int fx)> onDropEffect;
     ~MixerPanel() override;
 
     void paint (juce::Graphics&) override;

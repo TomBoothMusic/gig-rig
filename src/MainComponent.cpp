@@ -60,6 +60,7 @@ MainComponent::MainComponent()
     };
 
     mixerPanel.onKeepEffect = [this] (int fx, bool asDefault) { return songBook.keepMixerEffect (fx, asDefault); };
+    mixerPanel.onDropEffect = [this] (int fx) { return songBook.dropMixerEffect (fx); };
     songBook.onChanged = [this]
     {
         looperPanel.songChanged();
