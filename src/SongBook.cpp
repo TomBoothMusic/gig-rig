@@ -1767,6 +1767,50 @@ juce::String SongBook::keepMixerEffect (int f, bool asDefault)
     return note;
 }
 
+bool dropMixerEffect (SongSounds& s, int f, const MixerSetup& mixer)
+{
+    return std::erase_if (s.mixerEffects, [&] (const SongSounds::MixerEffect& x) { return mixerEffectFromWords (x.effect, mixer) == f; }) > 0;
+}
+
+juce::String SongBook::dropMixerEffect (int f)
+{
+    auto& mixer = engine.mixer();
+
+    if (f < 0 || f >= numMixFx)
+        return note = "There is no reverb or delay there.";
+
+    const auto name = mixer.setup().fx[(size_t) f].name;
+    const auto e = currentEntry();
+    auto s = e.sounds;
+    const auto unread = s.notUnderstood;
+    s.notUnderstood.clear();
+
+    if (e.hasFile && ! unread.isEmpty())
+        return note = "\"" + e.name + "\" has a line the app does not understand, so its file was left alone. See the Songs tab.";
+
+    const bool had = e.hasFile && gigrig::dropMixerEffect (s, f, mixer.setup());
+
+    if (had && ! writeSong (e.name, s))
+        return note = "Could not write the file in " + songFolder.getFullPathName();
+
+    if (had)
+        rescan();
+
+    // What this effect is now: the default sounds' where they have one, else the venue's own.
+    juce::StringArray unused;
+    const auto fromDefault = resolveMixerEffects (SongSounds(), hasDefault() ? &defaultSounds : nullptr, mixer.setup(), unused);
+    const auto it = std::find_if (fromDefault.begin(), fromDefault.end(), [f] (const Mixer::SongFx& x) { return x.fx == f; });
+
+    if (it != fromDefault.end())    mixer.setSongFx (f, it->effect);
+    else                            mixer.clearSongFx (f);
+
+    const juce::String now = it != fromDefault.end() ? "the default sounds' " + name : "the venue's own " + name + " (the default sounds have none)";
+    note = had ? "\"" + e.name + "\" no longer has its own " + name + ", so it follows " + now + ". Nothing else in the song's file was changed."
+               : "\"" + e.name + "\" had no " + name + " of its own in its file. It is set back to " + now + ".";
+    changed();
+    return note;
+}
+
 juce::File SongBook::newestBackup() const
 {
     auto folders = songFolder.getParentDirectory().findChildFiles (juce::File::findDirectories, false, songFolder.getFileName() + " backup *");
