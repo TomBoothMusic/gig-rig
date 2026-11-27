@@ -91,6 +91,8 @@ SongSounds::MixerEffect mixerEffectLine (int fx, const fx::ChainModel& effect, c
 
 /** Puts a mixer effect line into a song's sounds in place of any line for the same reverb or delay. */
 void putMixerEffect (SongSounds&, const SongSounds::MixerEffect&, const MixerSetup&);
+/** Takes a song's own line for one mixer effect out again, so the song follows the default. True when there was one. */
+bool dropMixerEffect (SongSounds&, int fx, const MixerSetup&);
 
 /** Moves one song's vocal reverb, vocal delay and acoustic room out of its effects chains and into
     the mixer (Tom, 27 Nov 2026): for each chain the song names itself that feeds a mixer channel,
@@ -217,6 +219,9 @@ public:
     /** Writes one mixer reverb or delay as it is now (which it is, every setting) into the loaded
         song's file, or into the default sounds, and nothing else: the chains are not touched. */
     juce::String keepMixerEffect (int fx, bool asDefault);
+    /** "Back to default for this song": takes the loaded song's own line for one mixer reverb or
+        delay out of its file, and nothing else, so the song follows the default sounds again. */
+    juce::String dropMixerEffect (int fx);
     /** Moves every song's vocal reverb, vocal delay and acoustic room into the mixer (moveToMixer),
         after copying the whole songs folder to a backup folder beside it. */
     juce::String moveSoundsToMixer();

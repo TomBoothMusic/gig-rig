@@ -179,6 +179,13 @@ mixer has are `plate`, `room`, `spring`, `tapedelay`, `analogdelay` and `digital
 effect in one press: the effect as it is now is written into the loaded song's file (or the
 Default sounds file) and nothing else in the file changes.
 
+**Back to default for this song**, beside them, is the way back: it takes the loaded song's own
+line for that one effect out of its file, and nothing else, so the song follows the Default
+sounds again (or the venue's own effect, where the Default sounds have none). Use it when a
+reverb moves about too much from song to song. So the three buttons are: **Save to this song**
+(this song gets its own), **Save as default** (every song without its own follows it) and
+**Back to default for this song** (this song stops having its own).
+
 Tom's split, 27 Nov 2026: **the song carries the effect's own settings** (which delay, its time,
 how much reverb), and **the send level is the venue's choice**, set on the channel and saved
 with the act. A song with no vocal delay has the mixer's delay with its **Mix** at 0, so it
