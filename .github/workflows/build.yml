@@ -159,10 +159,37 @@ jobs:
       - name: The phone sound script reports without changing anything
         run: linux/break-music.sh --status
 
+  # The test program for the board's controller (a Teensy 4.1): three small screens and the
+  # piezo kick pad. Built here so Tom gets one file to load; there is no Teensy on a build
+  # machine, so this proves only that it compiles. Guide: docs/bench-test.md.
+  controller:
+    name: Controller test program
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the build tool
+        run: pipx install platformio
+
+      - name: Build
+        run: |
+          pio run -d firmware/bench-test
+          pio pkg list -d firmware/bench-test
+          cp firmware/bench-test/.pio/build/teensy41/firmware.hex GigRig-Controller-Test.hex
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Controller
+          path: GigRig-Controller-Test.hex
+          if-no-files-found: error
+
   release:
     name: Publish download
-    needs: [build, linux-install]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The controller's test program is added when it built, but can never hold up the app.
+    needs: [build, linux-install, controller]
+    if: always() && needs.build.result == 'success' && needs.linux-install.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -186,6 +213,9 @@ jobs:
           in the blue "Windows protected your PC" box, click **More info**, then **Run anyway**.
 
           `GigRig-Linux.tar.gz` is the same app for Linux (for the final rig computer later).
+
+          `GigRig-Controller-Test.hex` is the test program for the board's controller (the Teensy),
+          for the bench test of the small screens and the piezo pad. The bench test guide says how to load it.
           NOTES
           gh release create "build-$BUILD" downloads/* \
             --target "$GITHUB_SHA" \
