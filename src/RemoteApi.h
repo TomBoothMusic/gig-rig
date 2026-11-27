@@ -51,9 +51,11 @@ private:
     juce::var chainJson (const fx::ChainModel&);
     juce::var typesJson();
     juce::var mixerJson();
+    juce::var breakJson();
+    juce::String doBreak (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::var effectsJson();
     juce::String doMixer (const juce::String& op, const juce::var& c, juce::var& answer);
-    juce::String doEffects (const juce::String& op, const juce::var& c);
+    juce::String doEffects (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::String doSongs (const juce::String& op, const juce::var& c, juce::var& answer);
 
     AudioEngine& engine;

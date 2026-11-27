@@ -1153,6 +1153,32 @@ static juce::String saveNewShapeToPresets (EffectsRack& rack, int c, const juce:
 }
 
 
+juce::String saveChainAsPreset (EffectsRack& rack, int chain, const juce::File& presetFolder, const juce::String& typedName, bool& saved)
+{
+    saved = false;
+    const auto name = juce::File::createLegalFileName (typedName.trim());
+
+    if (name.isEmpty())
+        return "Type a name for the preset first.";
+
+    if (const auto recipe = rack.recipe (chain); recipe.size() > 1 && recipe.contains (name, true))
+        return "Not saved: this chain is made of " + recipe.joinIntoString (" + ") + ", and saving all of it as \"" + name
+             + "\" would put the other presets' effects inside it. Press Update its presets instead, or type a new name.";
+
+    presetFolder.createDirectory();
+    const auto file = presetFolder.getChildFile (name + ".txt");
+    saved = file.replaceWithText ("# GigRig effect preset \"" + name + "\" (build " + juce::String (GIGRIG_BUILD_LABEL) + ")\n"
+                                  + juce::String (rack.chain (chain).model().toText()));
+
+    if (! saved)
+        return "Could not save " + file.getFullPathName();
+
+    rack.setRecipe (chain, juce::StringArray (name));     // the chain is now exactly this preset
+    rack.setBaseline (chain, rack.chain (chain).model());
+    rack.markChanged();
+    return "Saved the preset \"" + name + "\".";
+}
+
 juce::String saveBackToPresets (EffectsRack& rack, int c, const juce::File& presetFolder)
 {
     const auto recipe = rack.recipe (c);
@@ -1416,6 +1442,9 @@ void SongBook::load (int index, const juce::String& why, bool withSounds)
         applySounds (why);
     else
         changed();
+
+    if (onLoaded != nullptr)
+        onLoaded();
 }
 
 SongSetup SongBook::layoutOf (int index) const
@@ -1651,6 +1680,9 @@ void SongBook::programChange (int program, const juce::String& from)
     {
         line << " (already loaded: the loops were left alone and the sounds set afresh)";
         applySounds ("program " + juce::String (program) + " again");
+
+        if (onLoaded != nullptr)
+            onLoaded();
     }
     else
     {

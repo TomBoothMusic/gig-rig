@@ -225,6 +225,7 @@ juce::var RemoteApi::effectsJson()
 
     readLists();
     fxo->setProperty ("presets", strings (presetList));
+
     return juce::var (fxo);
 }
 
@@ -310,6 +311,30 @@ juce::var RemoteApi::mixerJson()
     m->setProperty ("fx", effects);
     m->setProperty ("outputs", outputs);
     return juce::var (m);
+}
+
+juce::var RemoteApi::breakJson()
+{
+    auto& music = engine.breakMusic();
+    const auto set = music.settings();
+    auto* b = obj();
+    auto list = music.mixes();
+
+    if (BreakMusic::phoneSupported())
+        list.add (BreakMusic::phoneName());
+
+    b->setProperty ("mixes", strings (list));
+    b->setProperty ("mix", music.mixName());
+    b->setProperty ("level", tidy ((double) music.levelDb()));
+    b->setProperty ("minLevel", (double) BreakMusic::minLevelDb);
+    b->setProperty ("maxLevel", (double) BreakMusic::maxLevelDb);
+    b->setProperty ("fadeDown", tidy (set.fadeDownSeconds));
+    b->setProperty ("fadeUp", tidy (set.fadeUpSeconds));
+    b->setProperty ("onSwitch", set.onSwitch);
+    b->setProperty ("onSong", set.onSong);
+    b->setProperty ("onSound", set.onSound);
+    b->setProperty ("soundDb", tidy ((double) set.soundDb));
+    return juce::var (b);
 }
 
 juce::var RemoteApi::state()
@@ -410,6 +435,36 @@ juce::var RemoteApi::state()
 
     s->setProperty ("effects", effectsJson());
     s->setProperty ("mixer", mixerJson());
+    s->setProperty ("breakMusic", breakJson());
+
+    {
+        // Top-level, not inside "effects": a song's sounds replace "effects" whole (in the demo too), and these never change.
+        // What "Add an effect" offers, in the Effects tab's order.
+        juce::Array<juce::var> catalogue;
+
+        for (const auto& t : fx::effectTypes())
+        {
+            auto* o = obj();
+            o->setProperty ("id", juce::String (t.id));
+            o->setProperty ("name", juce::String (t.name));
+            o->setProperty ("group", juce::String (t.group));
+            catalogue.add (juce::var (o));
+        }
+
+        s->setProperty ("fxCatalogue", catalogue);
+        s->setProperty ("fxMaxSlots", fx::Chain::maxSlots);
+    }
+
+    {
+        auto& tuner = engine.tuner();
+        auto* t = obj();
+        t->setProperty ("socket", tuner.socket());              // 0-based, -1 = whichever input is being played
+        t->setProperty ("reference", tidy (tuner.reference()));
+        t->setProperty ("mutes", tuner.mutes());
+        t->setProperty ("minReference", Tuner::minReference);
+        t->setProperty ("maxReference", Tuner::maxReference);
+        s->setProperty ("tuner", juce::var (t));
+    }
     s->setProperty ("types", typesJson());      // last: it describes every effect type the parts above used
     return juce::var (s);
 }
@@ -481,6 +536,34 @@ juce::var RemoteApi::live()
         mo->setProperty ("limit", tidy ((double) mixer.outputLimiterDb (0)));
         mo->setProperty ("guard", mixer.guardTripped());
         l->setProperty ("mix", juce::var (mo));
+    }
+
+    // ---- the break music, and the knob that works it and the venue presets ----
+    {
+        auto& music = engine.breakMusic();
+        auto* bo = obj();
+        bo->setProperty ("playing", music.isPlaying());
+        bo->setProperty ("up", music.isUp());
+        bo->setProperty ("fade", tidy ((double) music.fadeNow()));
+        bo->setProperty ("pos", std::round (music.positionSeconds()));
+        bo->setProperty ("len", std::round (music.lengthSeconds()));
+        bo->setProperty ("mix", music.mixName());
+        bo->setProperty ("level", tidy ((double) music.levelDb()));
+        bo->setProperty ("line", music.statusLine());
+        bo->setProperty ("knobOnBreak", engine.venueKnob().onBreakMusic());
+        bo->setProperty ("knob", engine.venueKnob().screen (juce::Time::getMillisecondCounterHiRes()));
+        l->setProperty ("breakMusic", juce::var (bo));
+
+        auto& tuner = engine.tuner();
+        const auto r = tuner.reading();
+        auto* to = obj();
+        to->setProperty ("on", tuner.isOn());
+        to->setProperty ("heard", r.heard);
+        to->setProperty ("name", r.name);
+        to->setProperty ("cents", tidy (r.cents));
+        to->setProperty ("hz", tidy (r.hz));
+        to->setProperty ("socket", r.socket);
+        l->setProperty ("tuner", juce::var (to));
     }
 
     const auto drops = engine.dropoutStats();
@@ -564,7 +647,7 @@ juce::String RemoteApi::doSongs (const juce::String& op, const juce::var& c, juc
     return "unknown";
 }
 
-juce::String RemoteApi::doEffects (const juce::String& op, const juce::var& c)
+juce::String RemoteApi::doEffects (const juce::String& op, const juce::var& c, juce::var& answer)
 {
     auto& rack = engine.effects();
 
@@ -605,6 +688,49 @@ juce::String RemoteApi::doEffects (const juce::String& op, const juce::var& c)
         return {};
     }
 
+    // ---- the row itself: add, save. (Remove and move are further down, with the other orders that name a slot.) ----
+    if (op == "fx.add")
+    {
+        const auto type = c.getProperty ("type", {}).toString().toStdString();
+        auto m = rack.chain (chain).model();
+        bool offered = false;
+
+        for (const auto& t : fx::effectTypes())
+            offered = offered || t.id == type;
+
+        if (! offered)
+            return "There is no effect called \"" + juce::String (type) + "\" to add.";
+
+        if ((int) m.slots.size() >= fx::Chain::maxSlots)
+            return "This chain is full: it holds " + juce::String (fx::Chain::maxSlots) + " effects. Remove one first.";
+
+        // After the effect that is open on the page, or at the end. A new effect starts from its own defaults, switched on.
+        const int at = juce::jlimit (0, (int) m.slots.size(), (int) c.getProperty ("at", (int) m.slots.size()));
+        m.slots.insert (m.slots.begin() + at, fx::SlotModel { type, true, {}, {} });
+        rack.chain (chain).setModel (m);
+        rack.markChanged();
+        answer = "Added at place " + juce::String (at + 1) + ".";
+        return {};
+    }
+
+    if (op == "fx.save")
+    {
+        bool saved = false;
+        const auto line = saveChainAsPreset (rack, chain, book.presetsFolder(), c.getProperty ("name", {}).toString(), saved);
+
+        if (! saved)
+            return line;
+
+        answer = line;
+        return {};
+    }
+
+    if (op == "fx.update")
+    {
+        answer = saveBackToPresets (rack, chain, book.presetsFolder());
+        return {};
+    }
+
     const int slot = (int) c.getProperty ("slot", -1);
     const auto& model = rack.chain (chain).model();
 
@@ -614,6 +740,32 @@ juce::String RemoteApi::doEffects (const juce::String& op, const juce::var& c)
     if (op == "fx.slotOn")
     {
         rack.chain (chain).setSlotOn (slot, (bool) c.getProperty ("on", false));
+        rack.markChanged();
+        return {};
+    }
+
+    if (op == "fx.remove")
+    {
+        auto m = model;
+        m.slots.erase (m.slots.begin() + slot);
+        rack.chain (chain).setModel (m);
+        rack.markChanged();
+        return {};
+    }
+
+    if (op == "fx.move")
+    {
+        auto m = model;
+        const int to = (int) c.getProperty ("to", -1);
+
+        if (to < 0 || to >= (int) m.slots.size())
+            return "It is already at that end of the chain.";
+
+        // Its settings travel with it (the model always holds the live values).
+        auto moving = m.slots[(size_t) slot];
+        m.slots.erase (m.slots.begin() + slot);
+        m.slots.insert (m.slots.begin() + to, std::move (moving));
+        rack.chain (chain).setModel (m);
         rack.markChanged();
         return {};
     }
@@ -793,9 +945,105 @@ juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juc
         return "There is no kind of preset called \"" + kind + "\".";
     }
 
+    if (op == "mix.save")
+    {
+        const auto kind = c.getProperty ("kind", {}).toString();
+        const auto name = juce::File::createLegalFileName (c.getProperty ("name", {}).toString().trim());
+
+        if (name.isEmpty())
+            return "Type a name to save it under first.";
+
+        if (kind != "act" && kind != "venue" && kind != "monitors")
+            return "There is no kind of preset called \"" + kind + "\".";
+
+        const auto error = kind == "act" ? mixer.saveAct (name) : kind == "venue" ? mixer.saveVenue (name) : mixer.saveMonitors (name);
+
+        if (error.isEmpty())
+            answer = "Saved the " + juce::String (kind == "act" ? "act" : kind == "venue" ? "venue" : "monitor set-up") + " \"" + name + "\".";
+
+        return error;
+    }
+
     if (op == "mix.keepFx")
     {
         answer = book.keepMixerEffect ((int) c.getProperty ("f", -1), false);
+        return {};
+    }
+
+    return "unknown";
+}
+
+juce::String RemoteApi::doBreak (const juce::String& op, const juce::var& c, juce::var& answer)
+{
+    auto& music = engine.breakMusic();
+
+    if (op == "break.play")
+    {
+        const auto name = c.getProperty ("name", {}).toString();
+        return music.play (name.isNotEmpty() ? name : music.mixName(), (bool) c.getProperty ("fromStart", false));
+    }
+
+    if (op == "break.stop")     { music.stop(); return {}; }
+    if (op == "break.up")       { music.bringUp(); return {}; }
+    if (op == "break.down")     { music.fadeDown(); return {}; }
+
+    if (op == "break.level")
+    {
+        music.setLevelDb ((float) (double) c.getProperty ("value", (double) music.levelDb()));
+        return {};
+    }
+
+    if (op == "break.set")
+    {
+        const auto key = c.getProperty ("key", {}).toString();
+        const auto value = c.getProperty ("value", 0.0);
+        auto s = music.settings();
+
+        if (key == "fadeDown")          s.fadeDownSeconds = (double) value;
+        else if (key == "fadeUp")       s.fadeUpSeconds = (double) value;
+        else if (key == "onSwitch")     s.onSwitch = (bool) value;
+        else if (key == "onSong")       s.onSong = (bool) value;
+        else if (key == "onSound")      s.onSound = (bool) value;
+        else if (key == "soundDb")      s.soundDb = (float) (double) value;
+        else                            return "The break music has no \"" + key + "\".";
+
+        music.setSettings (s);      // which limits every figure
+        return {};
+    }
+
+    // The knob (ENC 5), as the buttons on the Mixer tab work it.
+    if (op == "knob")
+    {
+        const auto what = c.getProperty ("do", {}).toString();
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        auto& knob = engine.venueKnob();
+
+        if (what == "left")         answer = knob.turn (-1, nowMs);
+        else if (what == "right")   answer = knob.turn (1, nowMs);
+        else if (what == "push")    answer = knob.push (nowMs);
+        else if (what == "hold")    answer = knob.hold (nowMs);
+        else                        return "The knob can go left or right, be pushed or be held.";
+
+        return {};
+    }
+
+    if (op == "tuner.on")
+    {
+        engine.tuner().setOn ((bool) c.getProperty ("on", false));
+        return {};
+    }
+
+    if (op == "tuner.set")
+    {
+        const auto key = c.getProperty ("key", {}).toString();
+        const auto value = c.getProperty ("value", 0.0);
+        auto& tuner = engine.tuner();
+
+        if (key == "socket")            tuner.setSocket ((int) value);
+        else if (key == "reference")    tuner.setReference ((double) value);
+        else if (key == "mutes")        tuner.setMutes ((bool) value);
+        else                            return "The tuner has no \"" + key + "\".";
+
         return {};
     }
 
@@ -825,7 +1073,8 @@ juce::var RemoteApi::command (const juce::var& c)
         error = {};
     }
     else if (op.startsWith ("song.") || op.startsWith ("layout."))  error = doSongs (op, c, answer);
-    else if (op.startsWith ("fx."))                                 error = doEffects (op, c);
+    else if (op.startsWith ("fx."))                                 error = doEffects (op, c, answer);
+    else if (op.startsWith ("break.") || op.startsWith ("tuner.") || op == "knob")              error = doBreak (op, c, answer);
     else if (op.startsWith ("mix."))                                error = doMixer (op, c, answer);
 
     if (error == "unknown")

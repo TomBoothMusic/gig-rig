@@ -1,6 +1,7 @@
 #include "SelfTest.h"
 #include "AudioEngine.h"
 #include "DeviceReport.h"
+#include "ExpressionPedal.h"
 #include "LatencyProbe.h"
 #include "MidiMonitor.h"
 
@@ -13,6 +14,9 @@ void runEffectsSelfTest (const std::function<void (bool, const juce::String&)>& 
 void runSongSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runMixerSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runBreakMusicSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runExpressionSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
 {
@@ -47,6 +51,9 @@ juce::String runSelfTest (bool& passed)
     // The checks build pretend rigs: none of them may write over this machine's own memory of the Mixer and Effects tabs.
     Mixer::memoryOnDisk = false;
     EffectsRack::memoryOnDisk = false;
+    BreakMusic::memoryOnDisk = false;
+    ExpressionInput::memoryOnDisk = false;
+    Tuner::memoryOnDisk = false;
 
     juce::StringArray log;
     int failures = 0;
@@ -58,6 +65,23 @@ juce::String runSelfTest (bool& passed)
         if (! condition)
             ++failures;
     };
+
+    // For working on one part without waiting for the rest (never used by the automatic builds):
+    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, songs.
+    if (const auto only = juce::SystemStats::getEnvironmentVariable ("GIGRIG_SELFTEST_ONLY", {}); only.isNotEmpty())
+    {
+        if (only == "break")        runBreakMusicSelfTest (check);
+        else if (only == "pedal")   runExpressionSelfTest (check);
+        else if (only == "tuner")   runTunerSelfTest (check);
+        else if (only == "remote")  runRemoteSelfTest (check);
+        else if (only == "mixer")   runMixerSelfTest (check);
+        else if (only == "songs")   runSongSelfTest (check);
+
+        passed = failures == 0;
+        log.add ({});
+        log.add ((passed ? "Part '" + only + "' only: passed (" : "Part '" + only + "' only: FAILED (" + juce::String (failures) + " of ") + juce::String (log.size() - 1) + " checks)");
+        return log.joinIntoString ("\n") + "\n";
+    }
 
     using State = Verdict::State;
 
@@ -539,6 +563,9 @@ juce::String runSelfTest (bool& passed)
     runSongSelfTest (check);
     runMixerSelfTest (check);
     runRemoteSelfTest (check);
+    runBreakMusicSelfTest (check);
+    runExpressionSelfTest (check);
+    runTunerSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

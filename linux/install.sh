@@ -14,6 +14,8 @@
 #   linux/install.sh --build         compile this copy of the code instead of downloading
 #                                    a build (for a test branch that has no release yet)
 #   linux/install.sh --file GigRig-Linux.tar.gz   install a build already downloaded
+#   linux/install.sh --app-only      only fetch and switch to a build: no packages, no tuning,
+#                                    no password (what linux/update.sh and the Update icon use)
 #   linux/install.sh --keep-pipewire leave the desktop sound system on (see the guide)
 #   linux/install.sh --yes           no questions (used by the automatic test on GitHub)
 #
@@ -32,6 +34,7 @@ FROM_SOURCE=0
 FROM_FILE=""
 KEEP_PIPEWIRE=0
 ASSUME_YES=0
+APP_ONLY=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -41,7 +44,8 @@ while [ $# -gt 0 ]; do
         --file)          FROM_FILE="$(realpath "${2:?--file needs the path of a GigRig-Linux.tar.gz}")"; shift ;;
         --keep-pipewire) KEEP_PIPEWIRE=1 ;;
         --yes|-y)        ASSUME_YES=1 ;;
-        -h|--help)       sed -n '2,19p' "$0"; exit 0 ;;
+        --app-only)      APP_ONLY=1 ;;
+        -h|--help)       sed -n '2,21p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1 (try --help)"; exit 2 ;;
     esac
     shift
@@ -87,6 +91,13 @@ if [ -d /run/casper ] || grep -qw boot=casper /proc/cmdline 2>/dev/null; then
     fi
 fi
 ok "Mode: $([ "$MODE" = rig ] && echo 'full rig set-up' || echo 'test (USB stick or trial, start-up left alone)')"
+
+if [ "$APP_ONLY" -eq 1 ]; then
+    # An update: the computer was set up by an earlier full run, so only the app changes.
+    [ -d "$RIG_HOME/builds" ] || fail "nothing is installed here yet. Run linux/install.sh without --app-only first."
+    command -v xvfb-run > /dev/null || fail "this computer was not set up by linux/install.sh. Run it without --app-only first."
+    ok "Updating the app only (the computer's own set-up is left as it is)"
+else
 
 if [ "$ASSUME_YES" -eq 0 ]; then
     echo
@@ -265,6 +276,8 @@ else
     ok "PipeWire will stay off for $USER from the next log-in"
 fi
 
+fi   # the end of everything --app-only skips
+
 # ---------------------------------------------------------------------------
 say "Installing the Gig Rig app"
 
@@ -287,30 +300,55 @@ elif [ -n "$FROM_FILE" ]; then
     tar -xzf "$FROM_FILE" -C "$RIG_HOME/builds/$label"
     ok "Unpacked $FROM_FILE as $label"
 else
-    if ! gh auth status > /dev/null 2>&1; then
-        [ "$ASSUME_YES" -eq 0 ] || fail "not signed in to GitHub (set GH_TOKEN for an unattended run)."
-        say "Signing in to GitHub (the code is private)"
-        echo "   A one-time code appears below. Press Enter to open the browser, sign in to GitHub,"
-        echo "   and type the code in. Then come back to this window."
-        gh auth login --hostname github.com --git-protocol https --web \
-            || fail "GitHub sign-in did not finish. Run this script again to retry."
-    fi
+    # While the code is public, a build downloads with no sign-in at all. If that does not
+    # work (the code is private, or GitHub wants a sign-in), gh is used as before.
+    base="https://github.com/$REPO/releases"
     if [ -z "$BUILD_TAG" ]; then
-        BUILD_TAG="$(gh release view --repo "$REPO" --json tagName -q .tagName)" \
-            || fail "could not find the latest build on GitHub."
+        latest="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$base/latest" 2>/dev/null || true)"
+        case "$latest" in */releases/tag/*) BUILD_TAG="${latest##*/}" ;; esac
+    fi
+    got_it=0
+    if [ -n "$BUILD_TAG" ] && [ -x "$RIG_HOME/builds/$BUILD_TAG/GigRig" ]; then
+        got_it=1
+        ok "Build $BUILD_TAG is already here"
+    elif [ -n "$BUILD_TAG" ]; then
+        tmp="$(mktemp -d)"
+        if curl -fsSL --retry 3 -o "$tmp/GigRig-Linux.tar.gz" "$base/download/$BUILD_TAG/GigRig-Linux.tar.gz" 2>/dev/null \
+           && tar -tzf "$tmp/GigRig-Linux.tar.gz" > /dev/null 2>&1; then
+            mkdir -p "$RIG_HOME/builds/$BUILD_TAG"
+            tar -xzf "$tmp/GigRig-Linux.tar.gz" -C "$RIG_HOME/builds/$BUILD_TAG"
+            got_it=1
+            ok "Downloaded $BUILD_TAG"
+        fi
+        rm -rf "$tmp"
+    fi
+
+    if [ "$got_it" -eq 0 ]; then
+        if ! gh auth status > /dev/null 2>&1; then
+            [ "$ASSUME_YES" -eq 0 ] || fail "not signed in to GitHub (set GH_TOKEN for an unattended run)."
+            say "Signing in to GitHub (the code is private)"
+            echo "   A one-time code appears below. Press Enter to open the browser, sign in to GitHub,"
+            echo "   and type the code in. Then come back to this window."
+            gh auth login --hostname github.com --git-protocol https --web \
+                || fail "GitHub sign-in did not finish. Run this script again to retry."
+        fi
+        if [ -z "$BUILD_TAG" ]; then
+            BUILD_TAG="$(gh release view --repo "$REPO" --json tagName -q .tagName)" \
+                || fail "could not find the latest build on GitHub."
+        fi
+        if [ -x "$RIG_HOME/builds/$BUILD_TAG/GigRig" ]; then
+            ok "Build $BUILD_TAG is already here"
+        else
+            tmp="$(mktemp -d)"
+            gh release download "$BUILD_TAG" --repo "$REPO" --pattern 'GigRig-Linux.tar.gz' --dir "$tmp" \
+                || fail "could not download $BUILD_TAG. Check the name on the Releases page."
+            mkdir -p "$RIG_HOME/builds/$BUILD_TAG"
+            tar -xzf "$tmp/GigRig-Linux.tar.gz" -C "$RIG_HOME/builds/$BUILD_TAG"
+            rm -rf "$tmp"
+            ok "Downloaded $BUILD_TAG"
+        fi
     fi
     label="$BUILD_TAG"
-    if [ -x "$RIG_HOME/builds/$label/GigRig" ]; then
-        ok "Build $label is already here"
-    else
-        tmp="$(mktemp -d)"
-        gh release download "$label" --repo "$REPO" --pattern 'GigRig-Linux.tar.gz' --dir "$tmp" \
-            || fail "could not download $label. Check the name on the Releases page."
-        mkdir -p "$RIG_HOME/builds/$label"
-        tar -xzf "$tmp/GigRig-Linux.tar.gz" -C "$RIG_HOME/builds/$label"
-        rm -rf "$tmp"
-        ok "Downloaded $label"
-    fi
 fi
 
 app="$RIG_HOME/builds/$label/GigRig"
@@ -376,8 +414,36 @@ Categories=AudioVideo;Audio;
 EOF
 ok "Menu entry: Gig Rig"
 
+# Three more icons, so updating, going back and the health check need no typing. Each opens
+# a window that shows what it is doing and waits for Enter before it closes.
+cat > "$HOME/.local/bin/gigrig-run" <<'EOF'
+#!/usr/bin/env bash
+# Gig Rig (written by linux/install.sh): runs one of the rig's scripts from an icon and keeps the window open.
+"$@"
+echo
+read -r -p "Press Enter to close this window. " _
+EOF
+chmod +x "$HOME/.local/bin/gigrig-run"
+
+icon() {    # icon <file> <name> <comment> <script>
+    cat > "$HOME/.local/share/applications/$1.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$2
+Comment=$3
+Exec="$HOME/.local/bin/gigrig-run" "$4"
+Icon=system-software-update
+Terminal=true
+Categories=AudioVideo;Audio;
+EOF
+}
+icon gigrig-update   "Gig Rig: update"            "Fetch the newest build, check it, and switch to it" "$SCRIPT_DIR/update.sh"
+icon gigrig-rollback "Gig Rig: go back a build"   "Switch back to the build that was running before"   "$SCRIPT_DIR/rollback.sh"
+icon gigrig-check    "Gig Rig: health check"      "Check the computer's set-up (changes nothing)"      "$SCRIPT_DIR/rig-check.sh"
+ok "Icons: Gig Rig: update, go back a build, health check (press the Super key and type Gig)"
+
 # ---------------------------------------------------------------------------
-if [ "$MODE" = rig ]; then
+if [ "$MODE" = rig ] && [ "$APP_ONLY" -eq 0 ]; then
     say "Start-up straight into the rig"
 
     mkdir -p "$HOME/.config/autostart"
@@ -439,6 +505,10 @@ fi
 say "Done"
 
 echo "   Installed build: $label"
+if [ "$APP_ONLY" -eq 1 ]; then
+    echo "   Quit the Gig Rig app and open it again (or restart the computer) to use it."
+    echo "   To go back: $SCRIPT_DIR/rollback.sh (or the 'Gig Rig: go back a build' icon)."
+fi
 echo "   Check the set-up any time with:  $SCRIPT_DIR/rig-check.sh"
 if [ "$REBOOT_NEEDED" -eq 1 ]; then
     echo

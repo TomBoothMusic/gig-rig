@@ -680,39 +680,18 @@ void EffectsPanel::refreshPresets()
 
 void EffectsPanel::savePreset()
 {
-    const auto name = juce::File::createLegalFileName (presetName.getText().trim());
-
-    if (name.isEmpty())
-    {
-        captureNote = "Type a name for the preset first.";
-        return;
-    }
-
-    // A chain stacked from several presets must not be saved whole under the name of one of them:
-    // the others' effects would end up inside it, and every song would get them twice.
-    if (const auto recipe = rack.recipe (chainIndex); recipe.size() > 1 && recipe.contains (name, true))
-    {
-        captureNote = "Not saved: this chain is made of " + recipe.joinIntoString (" + ") + ", and saving all of it as \"" + name
-                    + "\" would put the other presets' effects inside it. Press Update its presets instead, or type a new name.";
-        return;
-    }
-
-    presetFolder().createDirectory();
-    const auto file = presetFolder().getChildFile (name + ".txt");
-    const bool ok = file.replaceWithText ("# GigRig effect preset \"" + name + "\" (build " + juce::String (GIGRIG_BUILD_LABEL) + ")\n"
-                                          + juce::String (rack.chain (chainIndex).model().toText()));
-    captureNote = ok ? "Saved the preset \"" + name + "\"." : "Could not save " + file.getFullPathName();
+    bool ok = false;
+    captureNote = saveChainAsPreset (rack, chainIndex, presetFolder(), presetName.getText(), ok);
+    refreshPresets();
 
     if (ok)
     {
-        rack.setRecipe (chainIndex, juce::StringArray (name));     // the chain is now exactly this preset
-        rack.setBaseline (chainIndex, rack.chain (chainIndex).model());
-    }
-    refreshPresets();
+        const auto file = presetFolder().getChildFile (juce::File::createLegalFileName (presetName.getText().trim()) + ".txt");
 
-    for (int i = 0; i < presetFiles.size(); ++i)
-        if (presetFiles[i] == file)
-            presetBox.setSelectedId (i + 1, juce::dontSendNotification);
+        for (int i = 0; i < presetFiles.size(); ++i)
+            if (presetFiles[i] == file)
+                presetBox.setSelectedId (i + 1, juce::dontSendNotification);
+    }
 }
 
 void EffectsPanel::loadPreset (const juce::File& file)

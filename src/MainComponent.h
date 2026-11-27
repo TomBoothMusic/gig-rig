@@ -4,8 +4,10 @@
 
 #include "AudioEngine.h"
 #include "AudioPanel.h"
+#include "BreakMusicPanel.h"
 #include "DeviceCheckPanel.h"
 #include "EffectsPanel.h"
+#include "ExpressionPedal.h"
 #include "KickPadPanel.h"
 #include "LooperPanel.h"
 #include "MixerPanel.h"
@@ -13,6 +15,7 @@
 #include "RemotePanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
+#include "TunerStrip.h"
 
 namespace gigrig
 {
@@ -34,6 +37,7 @@ private:
 
     AudioEngine engine;     // declared first: the panels below use it, so it must outlive them
     PedalInput pedal;       // the RC-600's switches; feeds the looper inside the engine
+    ExpressionInput expression;     // a real expression pedal arriving as MIDI; feeds the blend, the wah and the whammy
 
     SongBook songBook { engine, SongBook::defaultSongFolder(), EffectsPanel::presetFolder() };     // the song list: looper layouts and sounds
 
@@ -42,7 +46,7 @@ private:
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     AudioPanel audioPanel { engine };
     DeviceCheckPanel devicePanel;
-    PedalPanel pedalPanel { pedal };
+    PedalPanel pedalPanel { pedal, expression };
     KickPadPanel kickPanel { engine };
     LooperPanel looperPanel { engine, pedal, songBook };
     SongsPanel songsPanel { engine, songBook };
@@ -52,6 +56,8 @@ private:
     RemoteApi remoteApi { engine, pedal, songBook };        // the remote screen (docs/remote.md): what a phone or tablet can see and do
     RemoteServer remoteServer { remoteApi };                // off until the Remote screen tab switches it on
     RemotePanel remotePanel { remoteServer };
+    BreakMusicPanel breakPanel { engine };
+    TunerStrip tunerStrip { engine };                       // the tuner, in the header beside Copy report
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 

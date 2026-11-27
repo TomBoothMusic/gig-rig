@@ -225,12 +225,62 @@ GR.screens.songs = (root) =>
 
 // ---------------------------------------------------------------- Effects
 
+/** The list "Add an effect" offers: every effect the rig has, under its kind. */
+function addEffectSheet (c)
+{
+    GR.openSheet ({ title: 'Add an effect', build: (close) =>
+    {
+        const s = GR.state, chain = s.effects.chains[c];
+        if (! chain) return [];
+        const full = chain.slots.length >= s.fxMaxSlots;
+        const groups = [];
+        s.fxCatalogue.forEach ((e) => { let g = groups.find ((x) => x.name === e.group); if (! g) groups.push (g = { name: e.group, list: [] }); g.list.push (e); });
+
+        return [
+            h ('p', { class: 'hint', text: full ? 'This chain is full: it holds ' + s.fxMaxSlots + ' effects. Remove one first.'
+                : 'It goes on the end of ' + chain.name + ', switched on, with its usual settings. Move it earlier afterwards if it belongs before something.' }),
+            groups.map ((g) => [
+                h ('h3', { text: g.name }),
+                h ('div', { class: 'row wrap' }, g.list.map ((e) => h ('button', { class: 'btn', disabled: full, onclick: async () =>
+                {
+                    const place = chain.slots.length;
+                    const r = await GR.send ({ op: 'fx.add', chain: c, type: e.id }, true);
+                    if (r.ok) { GR.ui.open['fx' + c + '.' + place + e.id] = true; GR.render(); GR.toast ('Added ' + e.name + ' to ' + chain.name + '.'); close(); }
+                } }, e.name))),
+            ]),
+        ];
+    } });
+}
+
 GR.screens.effects = (root) =>
 {
     const fx = GR.state.effects;
     const c = GR.clamp (GR.ui.fxChain, 0, fx.chains.length - 1);
     const chain = fx.chains[c];
     let preset = GR.ui.fxPreset && fx.presets.includes (GR.ui.fxPreset) ? GR.ui.fxPreset : (fx.presets[0] || '');
+    const nameOf = (slot) => ((GR.state.types || {})[slot.type] || { name: slot.type }).name;
+    const keyOf = (i, slot) => 'fx' + c + '.' + i + slot.type;
+
+    const move = async (i, to) =>
+    {
+        // Which blocks are open is kept by place, so note it first and put it back in the new order: the one that moved stays open where it lands.
+        const before = chain.slots.map ((x, k) => ({ key: keyOf (k, x), type: x.type, open: !! GR.ui.open[keyOf (k, x)] }));
+        const r = await GR.send ({ op: 'fx.move', chain: c, slot: i, to }, true);
+        if (! r.ok) return;
+        before.forEach ((e) => { delete GR.ui.open[e.key]; });
+        before.splice (to, 0, before.splice (i, 1)[0]);
+        before.forEach ((e, k) => { if (e.open) GR.ui.open['fx' + c + '.' + k + e.type] = true; });
+        GR.render();
+    };
+
+    const remove = (i) => GR.ask ('Take ' + nameOf (chain.slots[i]) + ' out of ' + chain.name + '? Its settings go with it.', 'Remove it',
+        () => { chain.slots.forEach ((x, k) => { delete GR.ui.open[keyOf (k, x)]; }); GR.send ({ op: 'fx.remove', chain: c, slot: i }, true); }, { danger: true });
+
+    const savePreset = () => GR.askName ('Save as a preset', 'Saves everything in ' + chain.name + ' as one preset. A name that is already used is replaced.',
+        chain.recipe.length === 1 ? chain.recipe[0] : '', 'Save it', (name) => GR.send ({ op: 'fx.save', chain: c, name }));
+
+    const updatePresets = () => GR.ask ('Save the changes made to ' + chain.name + ' back into the ' + (chain.recipe.length === 1 ? 'preset' : 'presets') + ' it was made from ('
+        + chain.recipe.join (', ') + ')? Every song that uses ' + (chain.recipe.length === 1 ? 'that preset' : 'those presets') + ' gets the change.', 'Update', () => GR.send ({ op: 'fx.update', chain: c }));
 
     root.append (
         h ('div', { class: 'row between' },
@@ -249,13 +299,24 @@ GR.screens.effects = (root) =>
             fx.presets.length ? h ('div', { class: 'row' },
                 GR.select (fx.presets.map ((p) => ({ id: p, label: p })), preset, (v) => { preset = v; GR.ui.fxPreset = v; }, 'Preset'),
                 h ('button', { class: 'btn', onclick: () => GR.ask ('Load the preset "' + preset + '" onto ' + chain.name + '? It replaces what the chain has now.', 'Load it',
-                    () => GR.send ({ op: 'fx.preset', chain: c, name: preset })) }, 'Load preset')) : null),
-        chain.slots.length === 0 ? h ('p', { class: 'hint pad', text: 'This chain has no effects in it. Effects are added and put in order on the rig\'s own Effects tab.' }) : null,
-        h ('div', { class: 'blocks' }, chain.slots.map ((slot, i) => GR.block ('fx' + c + '.' + i + slot.type, slot, {
+                    () => GR.send ({ op: 'fx.preset', chain: c, name: preset })) }, 'Load preset')) : null,
+            h ('div', { class: 'row wrap' },
+                h ('button', { class: 'btn', onclick: savePreset }, 'Save as a preset'),
+                chain.recipe.length ? h ('button', { class: 'btn', onclick: updatePresets }, chain.recipe.length === 1 ? 'Update its preset' : 'Update its presets') : null)),
+        chain.slots.length === 0 ? h ('p', { class: 'hint pad', text: 'This chain has no effects in it. Press Add an effect, or load a preset.' }) : null,
+        h ('div', { class: 'blocks' }, chain.slots.map ((slot, i) => GR.block (keyOf (i, slot), slot, {
             setOn: (on) => GR.send ({ op: 'fx.slotOn', chain: c, slot: i, on }, true),
             setParam: (id, value) => GR.sendValue ('fx' + c + '.' + i + id, { op: 'fx.param', chain: c, slot: i, id, value }),
+            tools: [
+                h ('button', { class: 'btn tiny', disabled: i === 0, onclick: () => move (i, i - 1) }, 'Move earlier'),
+                h ('button', { class: 'btn tiny', disabled: i === chain.slots.length - 1, onclick: () => move (i, i + 1) }, 'Move later'),
+                h ('button', { class: 'btn tiny danger-ghost', onclick: () => remove (i) }, 'Remove'),
+            ],
         }))),
-        h ('p', { class: 'hint', text: 'Tempo for synced delays: ' + fx.tempo + '. Adding, removing and reordering effects is done on the rig\'s own Effects tab for now.' }));
+        h ('div', { class: 'row between' },
+            h ('button', { class: 'btn primary', onclick: () => addEffectSheet (c) }, 'Add an effect'),
+            h ('span', { class: 'hint', text: chain.slots.length + ' of ' + GR.state.fxMaxSlots + ' places used' })),
+        h ('p', { class: 'hint', text: 'The sound runs through the effects from the top of the list to the bottom. Open an effect to move it or remove it. Tempo for synced delays: ' + fx.tempo + '.' }));
 };
 
 // ---------------------------------------------------------------- Mixer
@@ -357,14 +418,17 @@ function presetSheet()
                     GR.select (list.map ((n) => ({ id: n, label: n })), pick, (v) => { pick = v; }, title),
                     h ('button', { class: 'btn', onclick: () => GR.ask ('Load the ' + title.toLowerCase() + ' "' + pick + '"?' + (changed ? ' The changes made since the last one was loaded are lost unless they were saved on the rig.' : ''), 'Load it',
                         () => GR.send ({ op: 'mix.preset', kind, name: pick })) }, 'Load'))
-                    : h ('p', { class: 'hint', text: 'None saved yet. They are saved on the rig\'s own Mixer tab.' }));
+                    : h ('p', { class: 'hint', text: 'None saved yet.' }),
+                h ('div', { class: 'row wrap' },
+                    now ? h ('button', { class: 'btn', onclick: () => GR.ask ('Save the ' + title.toLowerCase() + ' as it is now over "' + now + '"?', 'Save over it', () => GR.send ({ op: 'mix.save', kind, name: now })) }, 'Save over "' + now + '"') : null,
+                    h ('button', { class: 'btn', onclick: () => GR.askName ('Save the ' + title.toLowerCase(), 'Saves the ' + title.toLowerCase() + ' as it is now. A name that is already used is replaced.', '', 'Save it',
+                        (name) => GR.send ({ op: 'mix.save', kind, name })) }, 'Save as a new one')));
         };
 
         return [
             row ('act', 'Act', m.act, m.actChanged, m.acts, 'Who is playing: the channels, their processing and the main mix.'),
             row ('venue', 'Venue', m.venue, m.venueChanged, m.venues, 'The room and the PA: the output chain and the four effects. A venue fades in and never jumps louder.'),
             row ('monitors', 'Monitors', m.monitors, m.monitorsChanged, m.monitorSets, 'What each monitor hears.'),
-            h ('p', { class: 'hint', text: 'Saving a set-up is done on the rig\'s own Mixer tab for now.' }),
         ];
     } });
 }
@@ -485,6 +549,95 @@ GR.screens.mixer = (root) =>
         const lim = l.mix.limit || 0;
         limit.textContent = l.mix.guard ? 'The loudness guard cut in' : lim < -0.5 ? 'Limiter ' + lim.toFixed (1) + ' dB' : 'Limiter resting';
         limit.className = 'tag' + (l.mix.guard ? ' bad' : lim < -0.5 ? ' warn' : ' dim');
+    };
+};
+
+// ---------------------------------------------------------------- Tools: the tuner, the break music, the venue knob
+
+GR.screens.tools = (root) =>
+{
+    const s = GR.state, tu = s.tuner, bm = s.breakMusic;
+    const live0 = GR.live || {};
+    const sockets = [{ id: -1, label: 'Whichever input is being played' }].concat ((s.effects.chains || []).map ((ch) => ({ id: ch.socket - 1, label: ch.name + ' (input ' + ch.socket + ')' })));
+    if (! sockets.some ((x) => x.id === tu.socket)) sockets.push ({ id: tu.socket, label: 'Input ' + (tu.socket + 1) });
+
+    // ---- the tuner ----
+    const note = h ('div', { class: 'tuner-note', text: '--' });
+    const words = h ('div', { class: 'tuner-words hint' });
+    const needle = h ('i');
+    const tunerOn = !! (live0.tuner && live0.tuner.on);
+    const tunerBody = h ('div', { class: 'tuner' + (tunerOn ? '' : ' off') }, note, h ('div', { class: 'tuner-bar' }, h ('b'), needle), words);
+
+    // ---- the break music ----
+    let pick = GR.ui.breakPick && bm.mixes.includes (GR.ui.breakPick) ? GR.ui.breakPick : (bm.mixes.includes (bm.mix) ? bm.mix : (bm.mixes[0] || ''));
+    const state = h ('b'), line = h ('p', { class: 'hint' }), fade = h ('i');
+    const knobLine = h ('p', { class: 'knob-line' });
+    const set = (key, value) => GR.send ({ op: 'break.set', key, value }, true);
+    const tick = (label, key) => h ('label', { class: 'inline' }, label, GR.toggle (!! bm[key], (on) => { bm[key] = on; set (key, on); GR.render(); }, label));
+
+    root.append (
+        h ('section', { class: 'card' },
+            h ('div', { class: 'row between' },
+                h ('h2', { text: 'Tuner' }),
+                h ('label', { class: 'inline' }, tunerOn ? 'On' : 'Off', GR.toggle (tunerOn, (on) => { GR.send ({ op: 'tuner.on', on }, true).then (() => GR.render()); if (GR.live && GR.live.tuner) GR.live.tuner.on = on; GR.render(); }, 'Tuner'))),
+            tunerBody,
+            h ('p', { class: 'hint', text: tu.mutes ? 'With the mixer on, the main mix is silent while the tuner is on. The monitors and the break music carry on.' : 'The main mix carries on while you tune.' }),
+            h ('div', { class: 'row wrap' },
+                h ('label', { class: 'field grow' }, 'Listen to', GR.select (sockets, tu.socket, (v) => { tu.socket = Number (v); GR.send ({ op: 'tuner.set', key: 'socket', value: Number (v) }, true); }, 'Listen to')),
+                h ('label', { class: 'field' }, 'Tune A to', GR.select ([432, 436, 437, 438, 439, 440, 441, 442, 443, 444].map ((hz) => ({ id: hz, label: hz + ' Hz' + (hz === 440 ? ' (the usual)' : '') })).concat (
+                    [432, 436, 437, 438, 439, 440, 441, 442, 443, 444].includes (tu.reference) ? [] : [{ id: tu.reference, label: tu.reference + ' Hz' }]), tu.reference,
+                    (v) => { tu.reference = Number (v); GR.send ({ op: 'tuner.set', key: 'reference', value: Number (v) }, true); }, 'Tune A to')),
+                h ('label', { class: 'inline' }, 'Silence the main mix', GR.toggle (tu.mutes, (on) => { tu.mutes = on; GR.send ({ op: 'tuner.set', key: 'mutes', value: on }, true); GR.render(); }, 'Silence the main mix while tuning')))),
+
+        h ('section', { class: 'card' },
+            h ('div', { class: 'row between' }, h ('h2', { text: 'Break music' }), state),
+            line,
+            h ('div', { class: 'break-fade', title: 'How far up the music is' }, fade),
+            bm.mixes.length ? h ('div', { class: 'row wrap' },
+                GR.select (bm.mixes.map ((m) => ({ id: m, label: m })), pick, (v) => { pick = v; GR.ui.breakPick = v; }, 'Mix'),
+                h ('button', { class: 'btn primary', onclick: () => GR.send ({ op: 'break.play', name: pick }, true) }, 'Play'),
+                h ('button', { class: 'btn', onclick: () => GR.send ({ op: 'break.play', name: pick, fromStart: true }, true) }, 'From the start'),
+                h ('button', { class: 'btn', onclick: () => GR.send ({ op: 'break.stop' }, true) }, 'Stop'))
+                : h ('p', { class: 'note', text: 'There are no mixes yet. On the rig, open the Break music tab, press Open the break music folder and put WAV, FLAC or MP3 files in it.' }),
+            h ('div', { class: 'row wrap' },
+                h ('button', { class: 'btn', onclick: () => GR.send ({ op: 'break.up' }, true) }, 'Bring the music up'),
+                h ('button', { class: 'btn', onclick: () => GR.send ({ op: 'break.down' }, true) }, 'Fade it down')),
+            GR.param ({ id: 'level', label: 'Level', unit: 'dB', min: bm.minLevel, max: bm.maxLevel, def: -12, kind: 'knob' }, bm.level, (v) => { bm.level = v; GR.sendValue ('breakLevel', { op: 'break.level', value: v }); }),
+            h ('h3', { text: 'It fades down by itself when' }),
+            h ('div', { class: 'row wrap' }, tick ('a foot switch is pressed', 'onSwitch'), tick ('a song loads', 'onSong'), tick ('an input gets loud', 'onSound')),
+            bm.onSound ? GR.param ({ id: 'soundDb', label: 'How loud that input has to be', unit: 'dB', min: -60, max: 0, def: -30, kind: 'knob' }, bm.soundDb, (v) => { bm.soundDb = v; GR.sendValue ('breakSound', { op: 'break.set', key: 'soundDb', value: v }); }) : null,
+            GR.param ({ id: 'fadeDown', label: 'Fading down takes', unit: 's', min: 0.2, max: 15, def: 2, kind: 'knob' }, bm.fadeDown, (v) => { bm.fadeDown = v; GR.sendValue ('breakDown', { op: 'break.set', key: 'fadeDown', value: v }); }),
+            GR.param ({ id: 'fadeUp', label: 'Coming back up takes', unit: 's', min: 0.2, max: 15, def: 4, kind: 'knob' }, bm.fadeUp, (v) => { bm.fadeUp = v; GR.sendValue ('breakUp', { op: 'break.set', key: 'fadeUp', value: v }); }),
+            h ('p', { class: 'hint', text: 'It only ever comes back up by hand. It is never in a loop, a recording or a monitor.' })),
+
+        h ('section', { class: 'card' },
+            h ('h2', { text: 'The venue knob (ENC 5)' }),
+            h ('p', { class: 'hint', text: 'These stand in for the knob until the board is built. It rests on the venue list: turn to browse, push to load. Hold hands it to the break music: turn is its level, push fades it up or down. Hold again to hand it back.' }),
+            knobLine,
+            h ('div', { class: 'row wrap' }, ['left', 'right', 'push', 'hold'].map ((what) =>
+                h ('button', { class: 'btn', onclick: () => GR.send ({ op: 'knob', do: what }, true) }, { left: 'Turn left', right: 'Turn right', push: 'Push', hold: 'Hold' }[what])))));
+
+    let wasOn = tunerOn;
+
+    GR.onLive = (l) =>
+    {
+        const t = l.tuner || {}, b = l.breakMusic || {};
+        if (!! t.on !== wasOn) { wasOn = !! t.on; GR.render(); return; }
+
+        const cents = Math.round (Math.abs (t.cents || 0));
+        const close = t.heard && Math.abs (t.cents) < 3;
+        note.textContent = t.on && t.heard ? t.name : '--';
+        note.className = 'tuner-note' + (close ? ' good' : '');
+        needle.style.left = (50 + GR.clamp (t.heard ? t.cents : 0, -50, 50)) + '%';
+        needle.className = ! t.heard ? 'rest' : close ? 'good' : Math.abs (t.cents) < 15 ? 'near' : 'far';
+        words.textContent = ! t.on ? 'Switch it on and play one string.' : ! t.heard ? 'Play one string' + (t.socket >= 0 ? ' (listening to input ' + (t.socket + 1) + ').' : '.')
+            : (cents === 0 ? 'In tune' : cents + (cents === 1 ? ' cent ' : ' cents ') + (t.cents < 0 ? 'flat: tune up' : 'sharp: tune down')) + '. ' + Number (t.hz).toFixed (1) + ' Hz, input ' + (t.socket + 1) + '.';
+
+        state.textContent = ! b.playing ? 'Stopped' : b.up ? 'Playing' : 'Playing, faded down';
+        state.className = ! b.playing ? 'tag dim' : b.up ? 'tag ok' : 'tag warn';
+        line.textContent = b.line || '';
+        fade.style.width = Math.round (GR.clamp (b.fade || 0, 0, 1) * 100) + '%';
+        knobLine.textContent = (b.knobOnBreak ? 'On the break music. ' : 'On the venue list. ') + (b.knob || '');
     };
 };
 

@@ -43,6 +43,10 @@ cmake --build build --parallel
 xvfb-run -a build/GigRig_artefacts/Release/GigRig --self-test result.txt
 ```
 
+The whole self-test takes a few minutes. While working on one part,
+`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `songs`) in front of the
+last line runs only that part's checks. CI always runs all of them.
+
 Real audio and MIDI are proven only on Tom's hardware.
 
 ## The rig computer (Linux)
@@ -53,8 +57,9 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`, `break-music.txt`, `expression-pedal.txt`, `tuner.txt`).
   Tom's presets, songs and mixer set-ups: `~/Documents/GigRig/`. Moving them from the laptop: `docs/linux-setup.md`, B4.
+- Updates: `linux/update.sh` (the **Gig Rig: update** icon) fetches, self-tests and switches a build with no `sudo`; it never closes the running app without a yes. A fresh computer: `linux/bootstrap.sh`. The phone as break music: `linux/break-music.sh` (optional, unproven on hardware).
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
   `gnome-screenshot -f shot.png` can show what is on screen.
 - If you are running on the rig itself: never update packages, change kernel
@@ -98,9 +103,38 @@ writes a song's own looper layout as `looper ...` lines in its song file (the wo
 Tom's disk: never rename them, only add) for the arrangement builder. All checked by
 `src/RemoteSelfTest.cpp`. The page has a demo (`remote/demo.js`, a pretend rig) whose data
 `remote/demo-data.js` is made by `tools/remote_demo.py` from a running app: never edit it by
-hand, and capture it again when `RemoteApi::state` gains a part (the self-test says when).
+hand, and capture it again when `RemoteApi::state` gains a part (the self-test says when); on a
+machine without Tom's songs use `tools/remote_demo.py top-up` instead, which adds only what is
+missing. The state must never hold a path from the computer's disk (the demo data is public).
+Every new order goes in four places: `RemoteApi::command`, `remote/demo.js`, the table in
+`docs/remote.md` and `src/RemoteSelfTest.cpp`.
 The demo's looper is a stand-in, never evidence about timing. Nothing in the remote screen may
 run on the audio thread, and the looper engine was not changed for it.
+
+## Break music, the tuner and the expression pedal
+
+Built 27 Nov 2026 in one batch. **`docs/break-music.md` and `docs/tuner.md` are the guides; the
+expression pedal is in `docs/mixer.md`. Keep them true.**
+
+- **Break music** (`src/BreakMusic.*`, tab `src/BreakMusicPanel.*`, checks
+  `src/BreakMusicSelfTest.cpp`): a stereo channel that uses no interface input and plays Tom's own
+  mixes from `Documents/GigRig/Break music` (never commit one), or on Linux a phone's sound from a
+  pipe. Tom's two rules: **it fades down by itself when he starts playing, and it only ever comes
+  back up by hand.** Nothing plays until Play is pressed. With the mixer on it joins the main
+  output only, after the main mix is recorded, so it is in no loop, recording or monitor; with
+  the mixer off it goes to a pair of returns. A background thread reads the file; the audio
+  thread only empties a queue. `VenueKnob` (same files) is ENC 5: it rests on PA/venue, a hold
+  hands it to the break music, and it hands itself back when playing fades the music.
+- **The tuner** (`src/Tuner.*`, header strip `src/TunerStrip.*`, checks `src/TunerSelfTest.cpp`):
+  listens to one socket before any effect; the note is worked out on the message thread. With
+  the mixer on the main mix (only) is silent while it is on. **Mixer off, it must change no
+  sample** (a check).
+- **The expression pedal** (`src/ExpressionPedal.*`, checks `src/ExpressionSelfTest.cpp`): a MIDI
+  controller found by Learn on the Pedal tab; every move goes to
+  `EffectsRack::moveExpressionPedal`, the same door the on-screen Pedal sliders use.
+- All three have their part in the report, their memory file in the app's settings folder (keys
+  are saved on Tom's disk: never rename, only add) and their controls on the remote screen's
+  Tools screen (`break.*`, `knob`, `tuner.*` orders).
 
 ## Adding an effect
 

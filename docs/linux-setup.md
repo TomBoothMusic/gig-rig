@@ -174,6 +174,13 @@ Ubuntu may not see the drive.
    ```
 
    (The same as Part A, without `--test` at the end.)
+
+   **Once the repository is public** the whole of steps 1 and 2 is this one line instead, with
+   no GitHub sign-in at all (steps 3 and 5 still apply; step 4 becomes just **Carry on?**):
+
+   ```
+   wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash
+   ```
 3. Type your password when asked (nothing shows while you type; that is normal).
 4. Do the GitHub code step as in Part A, step A3.5, then press Enter at **Carry on?**.
 5. At the end it says **Restart the computer now**. Do that.
@@ -265,14 +272,21 @@ README (Stage 1, parts A and B2). Click **Copy report** after each and paste it 
 
 Update **between gigs, never on the day of one**, and run the glitch check after.
 
-- **Update to the newest build:** open a Terminal and run
-  `~/gig-rig-code/linux/install.sh`. It downloads the newest build from the
-  Releases page, checks it with its built-in self-test, and only then switches
-  to it. Quit the app and open it again (or restart the computer).
-- **Install one particular build:** `~/gig-rig-code/linux/install.sh --version build-42`
-- **Go back to the build before:** `~/gig-rig-code/linux/rollback.sh`, then restart the app.
-  Run it with a build name (`rollback.sh build-41`) to pick one.
-- **Update the scripts and this guide:** `git -C ~/gig-rig-code pull`
+- **Update to the newest build, in one step:** press the Super key (the one with the Windows
+  logo), type `Gig` and click **Gig Rig: update**. (Or in a Terminal:
+  `~/gig-rig-code/linux/update.sh`.) It fetches the newest scripts and the newest build,
+  checks the build with its built-in self-test, and only then switches to it. It asks for no
+  password and touches nothing else on the computer. If the app is open it asks before closing
+  it: say no and the new build is used the next time the app starts.
+- **Install one particular build:** `~/gig-rig-code/linux/update.sh build-42`
+- **Go back to the build before:** the **Gig Rig: go back a build** icon, or
+  `~/gig-rig-code/linux/rollback.sh`, then restart the app. Run it with a build name
+  (`rollback.sh build-41`) to pick one.
+- **Check the computer's set-up:** the **Gig Rig: health check** icon, or `linux/rig-check.sh`.
+- **Run the whole set-up again** (after an Ubuntu upgrade, or if the health check finds
+  something): `~/gig-rig-code/linux/install.sh`. It is safe to repeat.
+- **The phone as break music over Bluetooth** (optional, not proven on hardware yet):
+  `~/gig-rig-code/linux/break-music.sh`. See `docs/break-music.md`, "The phone".
 - **Update Ubuntu itself:** only now and then, between gigs, and run the glitch
   check afterwards: `sudo apt update && sudo apt full-upgrade`, then restart.
   If something breaks after an Ubuntu update, the start-up menu (shown for
@@ -340,13 +354,29 @@ Run `~/gig-rig-code/linux/rig-check.sh --save` first: it saves its output in
 | `power-profiles-daemon` disabled | systemd | rig |
 | Kernel options `preempt=full threadirqs usbcore.autosuspend=-1`, GRUB menu shown for 2 s | `/etc/default/grub.d/90-gigrig.cfg` + `update-grub` | rig |
 | PipeWire and WirePlumber masked for the user (undo: `--keep-pipewire`) | `systemctl --user mask` | both |
-| App: release tarball via `gh release download` (or a local compile with `--build`), self-test under xvfb before switching | `~/gigrig/builds/<tag>/`, symlink `~/gigrig/current` | both |
+| App: release tarball by plain download when the repository is public, otherwise via `gh release download` (or a local compile with `--build`), self-test under xvfb before switching | `~/gigrig/builds/<tag>/`, symlink `~/gigrig/current` | both |
 | Launcher that restarts the app after a crash (gives up after 5 crashes within 30 s each; exit code 0 = deliberate quit) | `~/.local/bin/gigrig`, logs `~/gigrig/logs/app-<date>.log` | both |
 | Menu entry | `~/.local/share/applications/gigrig.desktop` | both |
+| Icons **Gig Rig: update**, **go back a build**, **health check**, and the small wrapper that keeps their window open | `~/.local/share/applications/gigrig-update.desktop`, `gigrig-rollback.desktop`, `gigrig-check.desktop`, `~/.local/bin/gigrig-run` | both |
 | Autostart | `~/.config/autostart/gigrig.desktop` | rig |
 | GDM automatic log-in and X11 (Wayland off, so screenshots work over Remote Control) | `/etc/gdm3/custom.conf` (backup `.before-gigrig`) | rig |
 | No screen lock, blanking, sleep, notification banners or GNOME Software updates | gsettings | rig |
 | No unattended upgrades or apt timers; snaps held | `/etc/apt/apt.conf.d/99gigrig-no-auto-updates`, systemd, `snap refresh --hold` | rig |
+
+`linux/install.sh --app-only` (what `linux/update.sh` runs) does only the **App** row, with no
+`sudo`. `linux/bootstrap.sh` installs git and curl (and gh if the code is private), clones the
+code to `~/gig-rig-code` and runs `install.sh`.
+
+`linux/break-music.sh` (optional, never run by `install.sh`; `--remove` undoes the services):
+
+| What | Where |
+| --- | --- |
+| Packages `bluez`, `bluez-alsa-utils` | apt |
+| `bluetooth.service` enabled; any packaged BlueALSA services disabled | systemd |
+| The computer offered to phones as a speaker: `bluealsa -S -p a2dp-sink --a2dp-force-audio-cd` | `/etc/systemd/system/gigrig-bluealsa.service` |
+| The phone's sound poured into the app's pipe (`bluealsa-cli open ... > pipe`), as a user service | `~/.local/bin/gigrig-phone-audio`, `~/.config/systemd/user/gigrig-phone-audio.service`, pipe `~/gigrig/break-music.pipe` |
+
+PipeWire stays masked: BlueALSA talks to BlueZ directly, so the app keeps the interface to itself.
 
 The app's own files on Linux are in `~/.config/GigRig/`: `audio-settings.txt`
 (device, rate and buffer to open at start-up), `loop-timing-2.txt` (measured

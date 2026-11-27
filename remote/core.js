@@ -265,6 +265,18 @@ GR.ask = (text, yes, then, opts) =>
     });
 };
 
+/** Asks for a name in a small sheet, then calls then (name). */
+GR.askName = (title, hint, first, yes, then) =>
+{
+    let name = first || '';
+    GR.openSheet ({ small: true, title, build: (close) => [
+        h ('p', { class: 'hint', text: hint }),
+        h ('label', { class: 'field' }, 'Name', h ('input', { type: 'text', value: name, maxlength: 60, oninput: (ev) => { name = ev.target.value; } })),
+        h ('div', { class: 'row end' }, h ('button', { class: 'btn', onclick: close }, 'Cancel'),
+            h ('button', { class: 'btn primary', onclick: () => { if (! name.trim()) return GR.toast ('Type a name first.', true); close(); then (name.trim()); } }, yes)),
+    ] });
+};
+
 /** A sheet over the screen. build (close) returns its contents and is called again when the rig's state changes. */
 GR.openSheet = (sheet) =>
 {
@@ -374,7 +386,8 @@ GR.block = (key, block, o) =>
             if (done && ! GR.dragging) GR.render();
         })),
         block.t ? Object.keys (block.t).filter ((k) => block.t[k]).map ((k) => h ('p', { class: 'hint', text: k + ': ' + block.t[k] })) : null,
-        type.params.length === 0 ? h ('p', { class: 'hint', text: 'This one has no settings.' }) : null) : null;
+        type.params.length === 0 ? h ('p', { class: 'hint', text: 'This one has no settings.' }) : null,
+        o.tools ? h ('div', { class: 'row wrap block-tools' }, o.tools) : null) : null;
 
     return h ('div', { class: 'block' + (block.on ? '' : ' off') }, head, body);
 };
@@ -455,6 +468,7 @@ const tabs = [
     { id: 'build',   label: 'Build' },
     { id: 'effects', label: 'Effects' },
     { id: 'mixer',   label: 'Mixer' },
+    { id: 'tools',   label: 'Tools' },
     { id: 'rig',     label: 'Rig' },
 ];
 
