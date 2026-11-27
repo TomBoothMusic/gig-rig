@@ -59,7 +59,7 @@ Every line is optional. Lines starting with `#` are notes.
 | `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one, and in front of a Volume pedal that sits right before that amp, so the drives push the pedal and the pedal pushes the amp). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
 | `set = chain 1 / spring / reverb = 3.5` | The song's own change on top: chain, effect, setting, value. |
 | `set = chain 1 / tremolo / off` | Switches one effect off (or `on`) for this song. |
-| `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). |
+| `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). Two or more lines may name the same switch: every one of them acts on each press, so `switch CTL3 = chain 3 / chain on off` and `switch CTL3 = chain 2 / chain on off` swap bass and electric with one press (set one chain on and the other off first). |
 | `switches = none` | This song uses no switches for effects (overrides the default's). |
 | `amps = chain 1 / A / B` | The amp models the "next amp" switch steps through, in order. Without it the switch steps through every installed amp model. |
 | `send = Vocal / Vocal plate = -6` | With the Mixer tab on: how much of a mixer channel goes to one of the mixer's reverbs or delays while this song is loaded (`off` for none). The channel and the effect by name, or `channel 1`, `fx 2`. It sits on top of the act and goes when another song loads; a song never changes the reverb or delay itself, which belongs to the venue. See `docs/mixer.md`, "Sends that belong to a song". |
@@ -72,7 +72,7 @@ Naming things:
   one of the same kind is `eq #2`.
 - A setting is its id or its name on screen. Ids are listed in `docs/effects.md`.
 - What a switch does: `compare`, `chain on off`, `tap tempo`, `whammy`, `wah`, `delay throw`,
-  `test take`, `next amp`, `toe switch` (the expression pedal's toe switch: electric full, acoustic muted, the chain's wah or whammy on; see `docs/mixer.md`), `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
+  `test take`, `next amp`, `pedal toe` (no chain needed: the switch stands in for the expression pedal, toe down while held and heel down when let go; for testing until the board has a pedal), `toe switch` (the expression pedal's toe switch: electric full, acoustic muted, the chain's wah or whammy on; see `docs/mixer.md`), `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
 
 When a line cannot be used (a preset that is not in the folder, a setting no effect has), the
 song still loads. The line is reported as `PROBLEM:` on the Songs tab and in the report, and a
@@ -106,8 +106,17 @@ set again.
 On the Effects tab, **Update its presets** writes the knobs turned since the chain was loaded
 back into the presets the chain was built from, each preset getting its own effects. This is the
 "edit once, every song follows" button. It only saves what was turned since loading, so a song's
-own `set` changes never leak into a shared preset. It refuses if effects were added, removed or
-moved (use **Save as** then).
+own `set` changes never leak into a shared preset.
+
+It also copes with an effect that was **added or taken out** (from 27 Nov 2026). Effects that were
+there when the chain loaded stay with the preset they came from. A new effect joins the first
+preset (the base); if it sits between two effects of one other preset it joins that one; and if
+the base cannot hold it where it is, the preset of the effect after it, then of the one before.
+Nothing is written unless stacking the presets again gives exactly the chain on screen
+(`saveNewShapeToPresets` in `src/SongBook.cpp`); otherwise it says so and **Save as** is the way.
+
+**Save** refuses to write a chain stacked from several presets under the name of one of them:
+that would put the other presets' effects inside it and every song would get them twice.
 
 ## Program changes
 

@@ -607,6 +607,49 @@ void runSongSelfTest (const Check& check)
                  && cleanAmp.slots.size() == 4 && std::abs (cleanAmp.slots[2].param ("reverb", 0.0f) - 2.4f) < 0.001f,
                "song book: Update its presets saves only the knobs turned since the song loaded, each into its own preset; the song's own change (reverb 5) stays out of the preset (" + saved + ")");
         check (saveBackToPresets (rack, 0, presetDir).contains ("nothing to save"), "song book: saving back again finds nothing new to save");
+
+        // An effect added to a stacked chain: Update its presets puts it into the preset it belongs with,
+        // and loading the presets again gives the same chain (Tom, 27 Nov 2026: a volume pedal in front of the amp).
+        {
+            const auto before = rack.chain (0).model();
+            auto withPedal = before;
+            size_t ampAt = 0;
+            while (ampAt < withPedal.slots.size() && withPedal.slots[ampAt].type != "amp") ++ampAt;
+            withPedal.slots.insert (withPedal.slots.begin() + (std::ptrdiff_t) ampAt, slot ("volume"));
+            withPedal.slots[0].on = ! withPedal.slots[0].on;                 // and a change to an effect that was already there
+            rack.chain (0).setModel (withPedal);
+            const auto said = saveBackToPresets (rack, 0, presetDir);
+            fx::ChainModel again, part;
+            const auto recipe = rack.recipe (0);
+            bool loaded = true;
+            for (int i = 0; i < recipe.size(); ++i)
+            {
+                loaded = loaded && book.loader() (recipe[i], part);
+                if (i == 0) again = part; else again.addFrom (part, fx::Chain::maxSlots);
+            }
+            bool same = loaded && again.slots.size() == withPedal.slots.size();
+            for (size_t k = 0; same && k < again.slots.size(); ++k)
+                same = again.slots[k].type == withPedal.slots[k].type;
+            fx::ChainModel screamerNow, compEqNow;
+            book.loader() ("Screamer", screamerNow);
+            book.loader() ("Comp and EQ", compEqNow);
+            const auto ownersNow = slotOwners (recipe, book.loader());
+            check (said.contains ("new line-up") && same && ampAt < withPedal.slots.size() && screamerNow.slots.size() == 2
+                     && compEqNow.slots[0].on == withPedal.slots[0].on && ownersNow.size() == withPedal.slots.size(),
+                   "song book: a volume pedal added in front of the amp of a stacked chain is saved by Update its presets, the drives stay in their own preset, and the presets stack back into the same chain (" + said + ")");
+            check (saveBackToPresets (rack, 0, presetDir).contains ("nothing to save"), "song book: after the new line-up is saved there is nothing more to save");
+
+            // Taken out again: the preset loses it.
+            auto without = withPedal;
+            without.slots.erase (without.slots.begin() + (std::ptrdiff_t) ampAt);
+            rack.chain (0).setModel (without);
+            const auto saidOut = saveBackToPresets (rack, 0, presetDir);
+            check (saidOut.contains ("new line-up") && slotOwners (recipe, book.loader()).size() == before.slots.size(),
+                   "song book: an effect taken out of a stacked chain is taken out of its preset by Update its presets (" + saidOut + ")");
+            without.slots[0].on = before.slots[0].on;
+            rack.chain (0).setModel (without);
+            saveBackToPresets (rack, 0, presetDir);
+        }
         EffectsRack reopened;
         reopened.loadStateText (rack.stateText());
         check (reopened.baseline (0).toText() == rack.baseline (0).toText() && reopened.baseline (0).slots.size() == 8,

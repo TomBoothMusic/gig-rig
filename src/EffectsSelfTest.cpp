@@ -194,6 +194,12 @@ void runEffectsSelfTest (const Check& check)
         rack.setPedalAssign (1, { 8, 2, 6 });
         check (rack.pedalUse (8) == "chain 3 wah sweep while held" && rack.takePedal (8, true) && rack.takePedal (8, false),
                "effects: a switch on a second row is named too, and it is the same switch the effects really take");
+        // Two rows on one switch both act: one press swaps two chains (Tom, 27 Nov 2026: bass on, electric off).
+        rack.setPedalAssign (1, { 10, 2, 1 });
+        rack.setPedalAssign (2, { 10, 1, 1 });
+        check (rack.pedalUse (10) == "chain 1 A/B + chain 3 chain on/off + chain 2 chain on/off" && rack.takePedal (10, true) && rack.takePedal (10, false),
+               "effects: three rows on one switch are all named on its tile, so all three act on one press (\"" + rack.pedalUse (10) + "\")");
+        rack.setPedalAssign (2, { -1, 0, 0 });
         rack.setPedalAssign (1, { -1, 0, 0 });
         rack.setEnabled (false);
         check (! rack.takePedal (10, true) && rack.pedalUse (10).isEmpty(), "effects: with the effects off, CTL4 goes back to the looper and its tile says so");
@@ -235,6 +241,28 @@ void runEffectsSelfTest (const Check& check)
             rack.chain (1).setModel (before1);
             check (moved == 2 && std::abs (e - 30.0f) < 0.01f && std::abs (a - 30.0f) < 0.01f && stillReversed && rack.moveVolumePedals (50.0f) == 0,
                    "effects: one pedal position moves the volume pedal in every chain, so the electric's and the acoustic's reversed one work as a blend");
+        }
+
+        // A held switch stands in for the expression pedal until there is one (Tom, 27 Nov 2026): toe down while held.
+        {
+            const auto before0 = rack.chain (0).model(), before1 = rack.chain (1).model();
+            fx::ChainModel electric, acoustic;
+            electric.slots.push_back ({ "volume", true, {}, {} });
+            acoustic.slots.push_back ({ "volume", true, { { "reverse", 1.0f } }, {} });
+            rack.chain (0).setModel (electric);
+            rack.chain (1).setModel (acoustic);
+            rack.setPedalAssign (0, { 10, 0, EffectsRack::actionPedalToe });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false, true) && rack.takePedal (10, false);
+            const auto tile = rack.pedalUse (10);
+            rack.moveExpressionPedal (100.0f);       // what the press does once the screen's thread gets to it
+            const float toeE = rack.chain (0).model().slots[0].param ("pedal", -1.0f), toeA = rack.chain (1).model().slots[0].param ("pedal", -1.0f);
+            rack.moveExpressionPedal (0.0f);         // and the release
+            const float heelE = rack.chain (0).model().slots[0].param ("pedal", -1.0f);
+            rack.setPedalAssign (0, { 10, 0, 0 });
+            rack.chain (0).setModel (before0);
+            rack.chain (1).setModel (before1);
+            check (taken && tile == "pedal toe down while held" && toeE > 99.9f && toeA > 99.9f && std::abs (heelE) < 0.1f,
+                   "effects: a switch can stand in for the expression pedal: toe down while held (electric full, the reversed acoustic off), heel down when let go");
         }
 
         // The toe switch: electric to full, acoustic off, the chain's wah on and worked by the pedal; again, and the blend is back.

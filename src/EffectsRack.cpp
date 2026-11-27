@@ -177,6 +177,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
     if (! enabled.load() || sw < 0)
         return false;
 
+    // Every row that names this switch acts: two rows on one switch swap two chains with one press
+    // (Tom, 27 Nov 2026: bass on and electric off). Before 27 Nov 2026 only the first row did.
+    bool taken = false;
+
     for (int i = 0; i < numPedalAssigns; ++i)
     {
         const auto a = pedalAssign (i);
@@ -212,6 +216,13 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
                 if (onPedalAction != nullptr)
                     onPedalAction();
             });
+        else if (a.action == actionPedalToe)
+            juce::MessageManager::callAsync ([this, isDown]
+            {
+                moveExpressionPedal (isDown ? 100.0f : 0.0f);
+                if (onPedalAction != nullptr)
+                    onPedalAction();
+            });
         else if (a.action == 5)
             juce::MessageManager::callAsync ([this, a, isDown]
             {
@@ -222,10 +233,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
         else if (isDown)
             juce::MessageManager::callAsync ([this, a] { doPedalAction (a); });
 
-        return true;
+        taken = true;
     }
 
-    return false;
+    return taken;
 }
 
 bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
@@ -490,7 +501,7 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         r.on = ! r.on;
         setRouting (c, r);
     }
-    else if (a.action >= 10)
+    else if (a.action >= 10 && a.action != actionPedalToe)
     {
         const int k = a.action - 10;
         auto& ch = chain (c);
@@ -508,6 +519,9 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
 juce::String EffectsRack::pedalAssignText (const PedalAssign& a, bool brief) const
 {
     const auto& m = chains[(size_t) a.chain].chain.model();
+    if (a.action == actionPedalToe)
+        return brief ? "pedal toe down while held" : "expression pedal toe down while held, heel down when let go (stands in for the pedal until there is one)";
+
     juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
                       : a.action == 4 ? (brief ? "test take" : "test take: record, then play round and round, then stop")
                       : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held"
@@ -540,15 +554,17 @@ juce::String EffectsRack::pedalText() const
 
 juce::String EffectsRack::pedalUse (int sw) const
 {
-    // The same test, in the same order, as takePedal: the first row that names the switch has it.
+    // The same test as takePedal: every row that names the switch acts, in row order.
     if (! enabled.load() || sw < 0)
         return {};
 
+    juce::StringArray uses;
+
     for (int i = 0; i < numPedalAssigns; ++i)
         if (const auto a = pedalAssign (i); a.sw == sw)
-            return pedalAssignText (a, true);
+            uses.add (pedalAssignText (a, true));
 
-    return {};
+    return uses.joinIntoString (" + ");
 }
 
 EffectsRack::Levels EffectsRack::takeLevels (int c) noexcept

@@ -39,6 +39,7 @@ struct ChainModel
         the amp model if there is one (so drives land before the amp), otherwise at the end.
         Stops at the most slots a chain holds. Returns how many were added. */
     int addFrom (const ChainModel& other, int maxSlots);
+    size_t stackPoint() const;      // where addFrom puts a stacked preset: in front of the amp (and of a volume pedal right before it)
 };
 
 /** A row of effects, one after another, running on the audio thread.

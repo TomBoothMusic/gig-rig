@@ -180,6 +180,9 @@ input socket --> chain (effect 1 -> effect 2 -> ...) --> chain level --> Listen 
   `EffectsRack::moveExpressionPedal` is where the pedal arrives (the Effects tab calls it
   when either Pedal slider moves; a real expression pedal should call the same thing). With
   the toe switch off it moves the `pedal` of every volume pedal in every chain.
+- **A switch as the pedal** (pedal action 90, `EffectsRack::actionPedalToe`, the words `pedal toe` in a
+  song file): while the switch is held the expression pedal is at the toe, and at the heel when let
+  go (`moveExpressionPedal`). For testing until there is a real pedal.
 - **The toe switch** (`EffectsRack::toeSwitch`, pedal action 9, the words `toe switch` in a
   song file; Tom's stand-in is CTL4). On: every volume pedal goes to toe down (electric full,
   the reversed acoustic silent), the first `wah` or `whammy` in the switch's chain is switched
