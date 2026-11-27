@@ -194,6 +194,12 @@ void runEffectsSelfTest (const Check& check)
         rack.setPedalAssign (1, { 8, 2, 6 });
         check (rack.pedalUse (8) == "chain 3 wah sweep while held" && rack.takePedal (8, true) && rack.takePedal (8, false),
                "effects: a switch on a second row is named too, and it is the same switch the effects really take");
+        // Two rows on one switch both act: one press swaps two chains (Tom, 27 Nov 2026: bass on, electric off).
+        rack.setPedalAssign (1, { 10, 2, 1 });
+        rack.setPedalAssign (2, { 10, 1, 1 });
+        check (rack.pedalUse (10) == "chain 1 A/B + chain 3 chain on/off + chain 2 chain on/off" && rack.takePedal (10, true) && rack.takePedal (10, false),
+               "effects: three rows on one switch are all named on its tile, so all three act on one press (\"" + rack.pedalUse (10) + "\")");
+        rack.setPedalAssign (2, { -1, 0, 0 });
         rack.setPedalAssign (1, { -1, 0, 0 });
         rack.setEnabled (false);
         check (! rack.takePedal (10, true) && rack.pedalUse (10).isEmpty(), "effects: with the effects off, CTL4 goes back to the looper and its tile says so");

@@ -177,6 +177,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
     if (! enabled.load() || sw < 0)
         return false;
 
+    // Every row that names this switch acts: two rows on one switch swap two chains with one press
+    // (Tom, 27 Nov 2026: bass on and electric off). Before 27 Nov 2026 only the first row did.
+    bool taken = false;
+
     for (int i = 0; i < numPedalAssigns; ++i)
     {
         const auto a = pedalAssign (i);
@@ -222,10 +226,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
         else if (isDown)
             juce::MessageManager::callAsync ([this, a] { doPedalAction (a); });
 
-        return true;
+        taken = true;
     }
 
-    return false;
+    return taken;
 }
 
 bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
@@ -540,15 +544,17 @@ juce::String EffectsRack::pedalText() const
 
 juce::String EffectsRack::pedalUse (int sw) const
 {
-    // The same test, in the same order, as takePedal: the first row that names the switch has it.
+    // The same test as takePedal: every row that names the switch acts, in row order.
     if (! enabled.load() || sw < 0)
         return {};
 
+    juce::StringArray uses;
+
     for (int i = 0; i < numPedalAssigns; ++i)
         if (const auto a = pedalAssign (i); a.sw == sw)
-            return pedalAssignText (a, true);
+            uses.add (pedalAssignText (a, true));
 
-    return {};
+    return uses.joinIntoString (" + ");
 }
 
 EffectsRack::Levels EffectsRack::takeLevels (int c) noexcept
