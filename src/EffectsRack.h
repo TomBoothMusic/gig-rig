@@ -85,6 +85,7 @@ public:
         int action = 0;
     };
     static constexpr int numPedalAssigns = 6;
+    static constexpr int actionPedalToe = 90;       // a held switch stands in for the expression pedal: toe down while held, heel down when let go
     PedalAssign pedalAssign (int i) const noexcept;
     void setPedalAssign (int i, PedalAssign a) noexcept;
     /** Any thread. True if the effects use this switch (so the looper must not); presses are

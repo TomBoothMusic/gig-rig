@@ -186,6 +186,9 @@ juce::String switchActionWords (int action, const fx::ChainModel& chain)
     if (action >= 0 && action < (int) std::size (actionWords))
         return actionWords[action];
 
+    if (action == EffectsRack::actionPedalToe)
+        return "pedal toe";
+
     if (action >= 10 && action - 10 < (int) chain.slots.size())
         return slotWords (chain, action - 10) + " on off";
 
@@ -802,7 +805,10 @@ ResolvedSounds resolveSounds (const SongSounds& song, const SongSounds* fallback
                 if (words == actionWords[i])
                     a.action = i;
 
-            const bool anyChain = a.action == 2 || a.action == 4;
+            if (words == "pedal toe")
+                a.action = EffectsRack::actionPedalToe;
+
+            const bool anyChain = a.action == 2 || a.action == 4 || a.action == EffectsRack::actionPedalToe;
 
             if (! anyChain)
             {
@@ -1585,7 +1591,7 @@ SongSounds SongBook::capture (const juce::String& songName, juce::StringArray& n
     for (int i = 0; i < EffectsRack::numPedalAssigns; ++i)
         if (const auto a = rack.pedalAssign (i); a.sw >= 0)
             if (const auto words = switchActionWords (a.action, rack.chain (a.chain).model()); words.isNotEmpty())
-                s.switches.push_back ({ a.sw, a.action == 2 || a.action == 4 ? juce::String() : chainWordsFor (a.chain), words });
+                s.switches.push_back ({ a.sw, a.action == 2 || a.action == 4 || a.action == EffectsRack::actionPedalToe ? juce::String() : chainWordsFor (a.chain), words });
 
     return s;
 }

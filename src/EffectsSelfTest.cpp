@@ -243,6 +243,28 @@ void runEffectsSelfTest (const Check& check)
                    "effects: one pedal position moves the volume pedal in every chain, so the electric's and the acoustic's reversed one work as a blend");
         }
 
+        // A held switch stands in for the expression pedal until there is one (Tom, 27 Nov 2026): toe down while held.
+        {
+            const auto before0 = rack.chain (0).model(), before1 = rack.chain (1).model();
+            fx::ChainModel electric, acoustic;
+            electric.slots.push_back ({ "volume", true, {}, {} });
+            acoustic.slots.push_back ({ "volume", true, { { "reverse", 1.0f } }, {} });
+            rack.chain (0).setModel (electric);
+            rack.chain (1).setModel (acoustic);
+            rack.setPedalAssign (0, { 10, 0, EffectsRack::actionPedalToe });
+            const bool taken = rack.takePedal (10, true) && rack.takePedal (10, false, true) && rack.takePedal (10, false);
+            const auto tile = rack.pedalUse (10);
+            rack.moveExpressionPedal (100.0f);       // what the press does once the screen's thread gets to it
+            const float toeE = rack.chain (0).model().slots[0].param ("pedal", -1.0f), toeA = rack.chain (1).model().slots[0].param ("pedal", -1.0f);
+            rack.moveExpressionPedal (0.0f);         // and the release
+            const float heelE = rack.chain (0).model().slots[0].param ("pedal", -1.0f);
+            rack.setPedalAssign (0, { 10, 0, 0 });
+            rack.chain (0).setModel (before0);
+            rack.chain (1).setModel (before1);
+            check (taken && tile == "pedal toe down while held" && toeE > 99.9f && toeA > 99.9f && std::abs (heelE) < 0.1f,
+                   "effects: a switch can stand in for the expression pedal: toe down while held (electric full, the reversed acoustic off), heel down when let go");
+        }
+
         // The toe switch: electric to full, acoustic off, the chain's wah on and worked by the pedal; again, and the blend is back.
         {
             const auto before0 = rack.chain (0).model(), before1 = rack.chain (1).model();
