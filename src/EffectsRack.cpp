@@ -177,6 +177,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
     if (! enabled.load() || sw < 0)
         return false;
 
+    // Every row that names this switch acts: two rows on one switch swap two chains with one press
+    // (Tom, 27 Nov 2026: bass on and electric off). Before 27 Nov 2026 only the first row did.
+    bool taken = false;
+
     for (int i = 0; i < numPedalAssigns; ++i)
     {
         const auto a = pedalAssign (i);
@@ -212,6 +216,13 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
                 if (onPedalAction != nullptr)
                     onPedalAction();
             });
+        else if (a.action == actionPedalToe)
+            juce::MessageManager::callAsync ([this, isDown]
+            {
+                moveExpressionPedal (isDown ? 100.0f : 0.0f);
+                if (onPedalAction != nullptr)
+                    onPedalAction();
+            });
         else if (a.action == 5)
             juce::MessageManager::callAsync ([this, a, isDown]
             {
@@ -222,10 +233,10 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
         else if (isDown)
             juce::MessageManager::callAsync ([this, a] { doPedalAction (a); });
 
-        return true;
+        taken = true;
     }
 
-    return false;
+    return taken;
 }
 
 bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
@@ -287,6 +298,7 @@ namespace
 void EffectsRack::moveExpressionPedal (float position)
 {
     position = juce::jlimit (0.0f, 100.0f, position);
+    pedalMoved = true;
 
     if (toeOn)
     {
@@ -490,7 +502,7 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         r.on = ! r.on;
         setRouting (c, r);
     }
-    else if (a.action >= 10)
+    else if (a.action >= 10 && a.action != actionPedalToe)
     {
         const int k = a.action - 10;
         auto& ch = chain (c);
@@ -505,6 +517,24 @@ void EffectsRack::doPedalAction (const PedalAssign& a)
         onPedalAction();
 }
 
+juce::String EffectsRack::pedalAssignText (const PedalAssign& a, bool brief) const
+{
+    const auto& m = chains[(size_t) a.chain].chain.model();
+    if (a.action == actionPedalToe)
+        return brief ? "pedal toe down while held" : "expression pedal toe down while held, heel down when let go (stands in for the pedal until there is one)";
+
+    juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
+                      : a.action == 4 ? (brief ? "test take" : "test take: record, then play round and round, then stop")
+                      : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held"
+                      : a.action == 9 ? (brief ? (toeOn ? "toe switch (ON)" : "toe switch (off)")
+                                               : (toeOn ? "toe switch (ON: electric full, acoustic off, the pedal works the wah or whammy)" : "toe switch (off: the pedal is the acoustic and electric blend)"))
+                      : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
+                      : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
+                            ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
+
+    return (a.action == 2 || a.action == 4 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") + what;
+}
+
 juce::String EffectsRack::pedalText() const
 {
     juce::String t;
@@ -516,17 +546,26 @@ juce::String EffectsRack::pedalText() const
         if (a.sw < 0)
             continue;
 
-        const auto& m = chains[(size_t) a.chain].chain.model();
-        juce::String what = a.action == 2 ? "tap tempo" : a.action == 3 ? "whammy bend while held"
-                          : a.action == 4 ? "test take: record, then play round and round, then stop"
-                          : a.action == 5 ? "delay throw while held" : a.action == 6 ? "wah sweep while held" : a.action == 8 ? "harmony while held" : a.action == 9 ? (toeOn ? "toe switch (ON: electric full, acoustic off, the pedal works the wah or whammy)" : "toe switch (off: the pedal is the acoustic and electric blend)") : a.action == 7 ? "next amp sound" : a.action == 0 ? "A/B" : a.action == 1 ? "chain on/off"
-                          : "slot " + juce::String (a.action - 9) + (a.action - 10 < (int) m.slots.size()
-                                ? " (" + juce::String (fx::findEffectType (m.slots[(size_t) (a.action - 10)].type)->name) + ")" : juce::String()) + " on/off";
         t << "Pedal switch " << (a.sw < 9 ? juce::String (a.sw + 1) : a.sw == 9 ? juce::String ("CTL3") : juce::String ("CTL4"))
-          << ": " << (a.action == 2 || a.action == 4 ? juce::String() : "chain " + juce::String (a.chain + 1) + " ") << what << " (the looper no longer hears this switch)\n";
+          << ": " << pedalAssignText (a, false) << " (the looper no longer hears this switch)\n";
     }
 
     return t;
+}
+
+juce::String EffectsRack::pedalUse (int sw) const
+{
+    // The same test as takePedal: every row that names the switch acts, in row order.
+    if (! enabled.load() || sw < 0)
+        return {};
+
+    juce::StringArray uses;
+
+    for (int i = 0; i < numPedalAssigns; ++i)
+        if (const auto a = pedalAssign (i); a.sw == sw)
+            uses.add (pedalAssignText (a, true));
+
+    return uses.joinIntoString (" + ");
 }
 
 EffectsRack::Levels EffectsRack::takeLevels (int c) noexcept
@@ -695,6 +734,9 @@ void EffectsRack::loadStateText (const juce::String& text)
 
 void EffectsRack::saveState()
 {
+    if (! memoryOnDisk.load())
+        return;
+
     auto f = stateFile();
     f.getParentDirectory().createDirectory();
     f.replaceWithText (stateText());
@@ -1620,6 +1662,9 @@ juce::String EffectsRack::reportText() const
 
     t << pedalText();
     t << takeText() << "\n";
+
+    if (panelNote.isNotEmpty())
+        t << "Effects tab last said: " << panelNote << "\n";
 
     if (lastCapture != juce::File())
         t << "Last capture: " << lastCapture.getFullPathName() << "\n";

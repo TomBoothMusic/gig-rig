@@ -117,6 +117,156 @@ void runSongSelfTest (const Check& check)
                "songs: a 'send' line sets a mixer channel's send to a reverb or delay by name or by number; the song's line wins over the default's, a name the mixer does not have is reported, and the lines come back from the file as they were written");
     }
 
+    // ---- a song's own settings for the mixer's reverbs and delays (27 Nov 2026) ----
+    {
+        const auto song = SongSounds::fromText ("mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20\nmixer effect = fx 1 / plate / decay = 3.5\n"
+                                                "mixer effect = Nobody / plate\nmixer effect = Vocal delay / klon\nmixer effect = Vocal delay / digitaldelay / time = long\n"
+                                                "mixer effect = Instrument room / room / wobble = 3\n");
+        const auto fallback = SongSounds::fromText ("mixer effect = Vocal delay / analogdelay / time = 52\nmixer effect = fx 4 / analogdelay / time = 52\n");
+        juce::StringArray problems;
+        const auto list = resolveMixerEffects (song, &fallback, defaultMixerSetup(), problems);
+        const auto again = SongSounds::fromText (song.toText ("x"));
+        const auto typeOf = [&list] (size_t i) { return i < list.size() && ! list[i].effect.slots.empty() ? juce::String (list[i].effect.slots[0].type) : juce::String(); };
+        check (song.mixerEffects.size() == 5 && song.notUnderstood.size() == 1 && list.size() == 4 && problems.size() == 3
+               && list[0].fx == 1 && typeOf (0) == "tapedelay" && list[0].effect.slots[0].param ("time", 0.0f) == 121.0f && list[0].effect.slots[0].param ("feedback", 0.0f) == 20.0f
+               && list[1].fx == 0 && typeOf (1) == "plate" && list[1].effect.slots[0].param ("decay", 0.0f) == 3.5f
+               && list[2].fx == 2 && typeOf (2) == "room" && list[2].effect.slots[0].params.empty()
+               && list[3].fx == 3 && typeOf (3) == "analogdelay"
+               && again.mixerEffects.size() == 5 && again.mixerEffects[0].type == "tapedelay" && again.mixerEffects[0].values.size() == 2 && again.mixerEffects[0].values[0].second == 121.0f,
+               "songs: a 'mixer effect' line says which reverb or delay one of the mixer's effects is for this song and how it is set; the song's line wins over the default's, "
+               "an effect the mixer does not have, a name it does not have and a setting the effect does not have are each reported, and the lines come back from the file as written ("
+               + juce::String (list.size()) + " set, " + juce::String (problems.size()) + " reported)");
+    }
+
+    // ---- moving a song's vocal reverb and delay and the acoustic's room into the mixer ----
+    {
+        const PresetLoader load = [] (const juce::String& name, fx::ChainModel& m)
+        {
+            const char* text = name == "Vocal"    ? "slot=comp\non=1\nslot=digitaldelay\non=0\nthrow=1\nmix=30\nslot=tapedelay\non=0\ntime=124.5\nmix=27\nslot=analogdelay\non=1\ntime=52.8\nmix=31\nslot=plate\non=1\nreverb=1.05\ndecay=3.55\n"
+                             : name == "Acoustic" ? "slot=comp\non=1\nslot=analogdelay\non=1\ntime=80\nslot=room\non=1\nreverb=1.65\ndecay=4\n"
+                             : name == "Electric" ? "slot=amp\non=1\nslot=digitaldelay\non=1\ntime=300\nslot=spring\non=1\n"
+                                                  : nullptr;
+            if (text == nullptr)
+                return false;
+
+            m = fx::ChainModel::fromText (text);
+            return true;
+        };
+        const juce::StringArray names { "Acoustic", "Electric", "Bass", "Vocal" };
+        const std::array<int, EffectsRack::numChains> feeds { 1, 3, 4, 0 };       // the default mixer: Vocal, Acoustic, Stomp, Electric, Bass
+        const auto mixer = defaultMixerSetup();
+        const auto valueOf = [] (const SongSounds::MixerEffect& e, const char* id)
+        {
+            for (const auto& v : e.values)
+                if (v.first == id)
+                    return v.second;
+            return -1.0f;
+        };
+        const auto offLine = [] (const SongSounds& s, const char* chain, const char* effect)
+        {
+            return std::count_if (s.settings.begin(), s.settings.end(), [&] (const auto& x) { return x.chain == chain && x.effect == effect && x.setting == "on" && x.value == "0"; }) == 1;
+        };
+
+        // A song with a tape echo of its own on the vocal (the slapback switched off), and the acoustic and electric as the presets have them.
+        const auto song = SongSounds::fromText ("program = 7\nchain 1 = Acoustic\nchain 2 = Electric\nchain 4 = Vocal\nset = chain 4 / tapedelay / on\nset = chain 4 / tapedelay / time = 140\n"
+                                                "set = chain 4 / analogdelay / off\nset = chain 4 / plate / reverb = 2.5\nswitch CTL4 = chain 4 / delay throw\n");
+        const auto m = moveToMixer (song, names, feeds, mixer, load);
+        const auto& fxs = m.song.mixerEffects;
+        const bool three = m.changed && fxs.size() == 3 && m.song.sends.empty();
+        check (three && fxs[0].effect == "Instrument room" && fxs[0].type == "room" && valueOf (fxs[0], "reverb") == 1.65f && valueOf (fxs[0], "decay") == 4.0f
+               && fxs[1].effect == "Vocal plate" && fxs[1].type == "plate" && valueOf (fxs[1], "reverb") == 2.5f && valueOf (fxs[1], "decay") == 3.55f
+               && fxs[2].effect == "Vocal delay" && fxs[2].type == "tapedelay" && valueOf (fxs[2], "time") == 140.0f && valueOf (fxs[2], "mix") == 27.0f,
+               "move to the mixer: the acoustic's room, the vocal's plate and the vocal's own tape echo each become a 'mixer effect' line with the settings the song had "
+               "(the song's own changes on top of the preset's), and no send line is written: the send level is the venue's (" + juce::String (fxs.size()) + " lines)");
+        check (three && offLine (m.song, "chain 1", "room") && offLine (m.song, "chain 4", "plate") && offLine (m.song, "chain 4", "tapedelay")
+               && offLine (m.song, "chain 4", "analogdelay") && ! offLine (m.song, "chain 4", "digitaldelay") && ! offLine (m.song, "chain 1", "analogdelay"),
+               "move to the mixer: the copies in the chains are switched off by the song's own lines, and the acoustic's delay and the delay throw are not touched");
+        check (std::none_of (m.song.settings.begin(), m.song.settings.end(), [] (const auto& x) { return x.chain == "chain 2"; })
+               && std::none_of (fxs.begin(), fxs.end(), [] (const auto& x) { return x.type == "spring" || x.type == "digitaldelay"; })
+               && m.song.program == 7 && m.song.chains.size() == 3 && m.song.switches.size() == 1,
+               "move to the mixer: a chain with an amp in it is left alone (electric delays and reverbs stay in the chain), and the song's program, presets and switches are as they were");
+        check (m.sends.size() == 3 && m.sends[0] == std::pair<int, int> { 1, 2 } && m.sends[1] == std::pair<int, int> { 0, 0 } && m.sends[2] == std::pair<int, int> { 0, 1 },
+               "move to the mixer: it says which sends must be open for the moved sounds to be heard (Acoustic to the room, Vocal to the plate and the delay)");
+
+        // The moved song, resolved: the chains no longer have them on, the mixer has them.
+        const std::array<fx::ChainModel, EffectsRack::numChains> nothing;
+        const auto after = resolveSounds (m.song, nullptr, names, nothing, load);
+        juce::StringArray problems;
+        const auto inMixer = resolveMixerEffects (m.song, nullptr, mixer, problems);
+        const auto onIn = [&after] (int chain, const char* type)
+        {
+            for (const auto& s : after.model[(size_t) chain].slots)
+                if (s.type == type)
+                    return s.on;
+            return false;
+        };
+        check (after.problems.isEmpty() && problems.isEmpty() && inMixer.size() == 3 && ! onIn (3, "plate") && ! onIn (3, "tapedelay") && ! onIn (0, "room") && onIn (0, "analogdelay") && onIn (1, "spring"),
+               "move to the mixer: the moved song loads without a problem, with those three off in the chains and set in the mixer");
+
+        // A second go changes nothing, and neither does the file's round trip.
+        const auto twice = moveToMixer (SongSounds::fromText (m.song.toText ("x", names)), names, feeds, mixer, load);
+        check (! twice.changed && twice.song.toText ("x", names) == m.song.toText ("x", names), "move to the mixer: pressing it a second time changes nothing");
+
+        // A song with the vocal's delays all off says so with the delay's level at nothing, so the venue's send does not give it one.
+        const auto dry = moveToMixer (SongSounds::fromText ("chain 4 = Vocal\nset = chain 4 / analogdelay / off\n"), names, feeds, mixer, load);
+        check (dry.changed && dry.song.mixerEffects.size() == 2 && dry.song.mixerEffects[1].effect == "Vocal delay" && valueOf (dry.song.mixerEffects[1], "mix") == 0.0f
+               && valueOf (dry.song.mixerEffects[0], "reverb") == 1.05f,
+               "move to the mixer: a song with no vocal delay switched on gets the mixer's delay with its level at nothing, so it stays dry whatever the venue's send is");
+
+        // A song that names no chain follows the default sounds and is not written to; lines the app could not read stop the move.
+        const auto follows = moveToMixer (SongSounds::fromText ("program = 9\nlooper = Dreams\n"), names, feeds, mixer, load);
+        const auto odd = moveToMixer (SongSounds::fromText ("chain 4 = Vocal\nsend = Vocal\n"), names, feeds, mixer, load);
+        check (! follows.changed && ! odd.changed && odd.notes.size() == 1, "move to the mixer: a song with no chains of its own is left to follow the default sounds, and a file with a line the app cannot read is left alone");
+
+        // A venue whose reverbs and delays are switched off or renamed still gets the songs' effects, in the places the mixer starts with
+        // (Tom, 27 Nov 2026: the button moved nothing, because his mixer reverbs were off while the chains still did the job).
+        auto bare = defaultMixerSetup();
+        for (auto& x : bare.fx)
+            x.on = false;
+        bare.fx[0].name = "Plate";
+        bare.fx[1].name = "Echo";
+        bare.fx[2].name = "Hall";
+        const auto offVenue = moveToMixer (song, names, feeds, bare, load);
+        check (offVenue.changed && offVenue.song.mixerEffects.size() == 3 && offVenue.song.mixerEffects[0].effect == "Hall" && offVenue.song.mixerEffects[1].effect == "Plate"
+               && offVenue.song.mixerEffects[2].effect == "Echo" && offVenue.sends.size() == 3,
+               "move to the mixer: mixer reverbs and delays that are switched off or have been renamed are still used (" + juce::String (offVenue.song.mixerEffects.size()) + " lines)");
+
+        // Saving one mixer effect into a song replaces the line for that effect only.
+        auto kept = m.song;
+        fx::ChainModel echo;
+        echo.slots.resize (1);
+        echo.slots[0].type = "analogdelay";
+        echo.slots[0].setParam ("time", 99.0f);
+        putMixerEffect (kept, mixerEffectLine (1, echo, mixer), mixer);
+        check (kept.mixerEffects.size() == 3 && kept.mixerEffects[2].type == "analogdelay" && valueOf (kept.mixerEffects[2], "time") == 99.0f && kept.mixerEffects[1].type == "plate"
+               && kept.settings.size() == m.song.settings.size() && mixerEffectFromWords ("fx 2", mixer) == 1 && mixerEffectFromWords ("vocal delay", mixer) == 1,
+               "save to this song: one mixer reverb or delay saved into a song replaces that effect's line and nothing else in the file");
+
+        // Back to default: the song's own line for one effect goes, the others and the rest of the file stay,
+        // and the song then resolves to the default sounds' effect.
+        auto back = kept;
+        SongSounds defaults;
+        fx::ChainModel slap;
+        slap.slots.resize (1);
+        slap.slots[0].type = "tapedelay";
+        slap.slots[0].setParam ("time", 250.0f);
+        putMixerEffect (defaults, mixerEffectLine (1, slap, mixer), mixer);
+        juce::StringArray none;
+        const auto resolvedFx = [&] (const SongSounds& song)
+        {
+            for (const auto& x : resolveMixerEffects (song, &defaults, mixer, none))
+                if (x.fx == 1 && ! x.effect.slots.empty())
+                    return juce::String (x.effect.slots[0].type) + " " + juce::String (x.effect.slots[0].param ("time", 0.0f), 0);
+
+            return juce::String ("none");
+        };
+        const auto before = resolvedFx (back);
+        const bool dropped = dropMixerEffect (back, 1, mixer);
+        check (dropped && ! dropMixerEffect (back, 1, mixer) && back.mixerEffects.size() == 2 && back.settings.size() == kept.settings.size()
+               && before == "analogdelay 99" && resolvedFx (back) == "tapedelay 250",
+               "back to default: a song's own mixer reverb or delay is taken out of its file alone, and the song then follows the default sounds (" + before + " then " + resolvedFx (back) + ")");
+    }
+
     // ---- delays and reverbs ring out when a chain's effects are changed ----
     {
         // Playing through a delay, then the chain changes to one without it and the playing stops.
@@ -494,6 +644,107 @@ void runSongSelfTest (const Check& check)
                  && cleanAmp.slots.size() == 4 && std::abs (cleanAmp.slots[2].param ("reverb", 0.0f) - 2.4f) < 0.001f,
                "song book: Update its presets saves only the knobs turned since the song loaded, each into its own preset; the song's own change (reverb 5) stays out of the preset (" + saved + ")");
         check (saveBackToPresets (rack, 0, presetDir).contains ("nothing to save"), "song book: saving back again finds nothing new to save");
+
+        // An effect added to a stacked chain: Update its presets puts it into the preset it belongs with,
+        // and loading the presets again gives the same chain (Tom, 27 Nov 2026: a volume pedal in front of the amp).
+        {
+            const auto before = rack.chain (0).model();
+            auto withPedal = before;
+            size_t ampAt = 0;
+            while (ampAt < withPedal.slots.size() && withPedal.slots[ampAt].type != "amp") ++ampAt;
+            withPedal.slots.insert (withPedal.slots.begin() + (std::ptrdiff_t) ampAt, slot ("volume"));
+            withPedal.slots[0].on = ! withPedal.slots[0].on;                 // and a change to an effect that was already there
+            rack.chain (0).setModel (withPedal);
+            const auto said = saveBackToPresets (rack, 0, presetDir);
+            fx::ChainModel again, part;
+            const auto recipe = rack.recipe (0);
+            bool loaded = true;
+            for (int i = 0; i < recipe.size(); ++i)
+            {
+                loaded = loaded && book.loader() (recipe[i], part);
+                if (i == 0) again = part; else again.addFrom (part, fx::Chain::maxSlots);
+            }
+            bool same = loaded && again.slots.size() == withPedal.slots.size();
+            for (size_t k = 0; same && k < again.slots.size(); ++k)
+                same = again.slots[k].type == withPedal.slots[k].type;
+            fx::ChainModel screamerNow, compEqNow;
+            book.loader() ("Screamer", screamerNow);
+            book.loader() ("Comp and EQ", compEqNow);
+            const auto ownersNow = slotOwners (recipe, book.loader());
+            check (said.contains ("new line-up") && same && ampAt < withPedal.slots.size() && screamerNow.slots.size() == 2
+                     && compEqNow.slots[0].on == withPedal.slots[0].on && ownersNow.size() == withPedal.slots.size(),
+                   "song book: a volume pedal added in front of the amp of a stacked chain is saved by Update its presets, the drives stay in their own preset, and the presets stack back into the same chain (" + said + ")");
+            check (saveBackToPresets (rack, 0, presetDir).contains ("nothing to save"), "song book: after the new line-up is saved there is nothing more to save");
+
+            // Taken out again: the preset loses it.
+            auto without = withPedal;
+            without.slots.erase (without.slots.begin() + (std::ptrdiff_t) ampAt);
+            rack.chain (0).setModel (without);
+            const auto saidOut = saveBackToPresets (rack, 0, presetDir);
+            check (saidOut.contains ("new line-up") && slotOwners (recipe, book.loader()).size() == before.slots.size(),
+                   "song book: an effect taken out of a stacked chain is taken out of its preset by Update its presets (" + saidOut + ")");
+            without.slots[0].on = before.slots[0].on;
+            rack.chain (0).setModel (without);
+            saveBackToPresets (rack, 0, presetDir);
+        }
+
+        // A volume pedal's place is the pedal's, never the one a preset saved (Tom, 27 Nov 2026).
+        {
+            const auto file = presetDir.getChildFile ("Comp and EQ.txt");
+            const auto original = file.loadFileAsString();
+            file.replaceWithText (original.trimEnd() + "\nslot=volume\non=1\npedal=100\n");
+            const auto pedalOf = [&rack]
+            {
+                for (const auto& sm : rack.chain (0).model().slots)
+                    if (sm.type == "volume")
+                        return sm.param ("pedal", -1.0f);
+                return -2.0f;
+            };
+            book.load (book.entryNamed ("Dreams"), "test");
+            rack.moveExpressionPedal (30.0f);
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            const float loadedAt = pedalOf();
+            const auto nothing = saveBackToPresets (rack, 0, presetDir);
+            rack.moveExpressionPedal (0.0f);
+            const auto stillNothing = saveBackToPresets (rack, 0, presetDir);
+            book.load (book.entryNamed ("Dreams"), "test");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            check (std::abs (loadedAt - 30.0f) < 0.01f && nothing.contains ("nothing to save") && stillNothing.contains ("nothing to save") && std::abs (pedalOf()) < 0.01f,
+                   "song book: a song loads its volume pedal where the pedal is now (30, then 0), not at the 100 its preset saved, and moving the pedal is not a change to save");
+            file.replaceWithText (original);
+            book.load (book.entryNamed ("Dreams"), "test");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+        }
+
+        // Tidy unused presets: list first, move on the second press, nothing a song names is touched, and one press puts them back.
+        {
+            presetDir.getChildFile ("Spare one.txt").replaceWithText ("slot=boost\non=1\n");
+            presetDir.getChildFile ("Spare two.txt").replaceWithText ("slot=boost\non=1\n");
+            const auto countHere = [&presetDir] { return presetDir.findChildFiles (juce::File::findFiles, false, "*.txt").size(); };
+            const int before = countHere();
+            const auto unused = book.unusedPresets();
+            const auto listed = book.tidyPresets();
+            const int afterFirst = countHere();
+            const auto moved = book.tidyPresets();
+            const int afterSecond = countHere();
+            const auto asideFolders = presetDir.findChildFiles (juce::File::findDirectories, false, "Not used*");
+            const bool inAside = asideFolders.size() == 1 && asideFolders[0].getChildFile ("Spare one.txt").existsAsFile();
+            book.load (book.entryNamed ("Dreams"), "test");
+            const bool dreamsFine = book.statusLine().isNotEmpty() && ! book.reportText().contains ("is not in the Effect presets folder");
+            book.load (book.entryNamed ("Wicked Game"), "test");
+            const bool wickedFine = ! book.reportText().contains ("is not in the Effect presets folder");
+            const auto nothingLeft = book.tidyPresets();
+            const auto back = book.restoreTidiedPresets();
+            check (unused.contains ("Spare one") && unused.contains ("Spare two") && ! unused.contains ("Comp and EQ") && ! unused.contains ("Screamer") && ! unused.contains ("Clean amp")
+                     && listed.contains ("Spare one") && listed.contains ("again") && afterFirst == before
+                     && moved.startsWith ("Moved " + juce::String (unused.size())) && afterSecond == before - unused.size() && inAside && dreamsFine && wickedFine && nothingLeft.startsWith ("Nothing to tidy")
+                     && back.startsWith ("Put " + juce::String (unused.size())) && countHere() == before
+                     && presetDir.findChildFiles (juce::File::findDirectories, false, "Not used*").isEmpty(),
+                   "song book: Tidy unused presets lists them first, moves them aside on the second press, leaves every preset a song names, and Put the presets back undoes it ("
+                     + listed.upToFirstOccurrenceOf (".", true, false) + " / " + moved.upToFirstOccurrenceOf (".", true, false) + " / " + back + ")");
+            presetDir.getChildFile ("Spare one.txt").deleteFile();
+            presetDir.getChildFile ("Spare two.txt").deleteFile();
+        }
         EffectsRack reopened;
         reopened.loadStateText (rack.stateText());
         check (reopened.baseline (0).toText() == rack.baseline (0).toText() && reopened.baseline (0).slots.size() == 8,
@@ -553,6 +804,16 @@ void runSongSelfTest (const Check& check)
         check (report.contains ("PROBLEM: The preset \"Not there\"") && report.contains ("Line not understood") && report.contains ("Song loaded: Cocaine (program 14)")
                  && report.contains ("Program numbers:") && report.contains ("7 Hallelujah"),
                "song book: the report names the song, its program number, and each problem in its file");
+
+        // The folder check (GigRig --check-songs) finds the same mistake without anyone loading the song.
+        {
+            const auto checked = book.checkEverySong();
+            const auto listed = book.checkEverySong (true);
+            check (checked.contains (" 1 with a problem.") && checked.contains ("PROBLEM  ") && checked.contains ("The preset \"Not there\"") && checked.contains ("Line not understood: what is this")
+                     && listed.contains ("    chain 1 slot 1 "),
+                   "song book: the check of a whole folder names the one song with a mistake and what is wrong with it, and can list every setting each song ends up with");
+            book.load (book.entryNamed ("Cocaine"), "test");
+        }
 
         // The app's start: the looper layout only, the effects as the rack remembers them.
         const auto effectsBefore = rack.chain (0).model().toText();

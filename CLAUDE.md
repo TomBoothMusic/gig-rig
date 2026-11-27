@@ -53,7 +53,8 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`).
+  Tom's presets, songs and mixer set-ups: `~/Documents/GigRig/`. Moving them from the laptop: `docs/linux-setup.md`, B4.
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
   `gnome-screenshot -f shot.png` can show what is on screen.
 - If you are running on the rig itself: never update packages, change kernel
@@ -76,12 +77,30 @@ Built 26 Nov 2026 (two builds the same day); **`docs/mixer.md` is the guide. Kee
 is inside the engine (`src/Mixer.*`, no screen, checked by `src/MixerSelfTest.cpp`), its own
 blocks are in `src/effects/mixer/`, its screen is `src/MixerPanel.*`. It is **off by default
 and off must stay sample-for-sample what the app did before it existed** (the first mixer
-check in the self-test). Each loop returns to the channel of the socket it was recorded from;
+check in the self-test). Each loop is recorded after its channel's own processing (Trim, gate, EQ, compressors) and returns to that channel after it, so layers never pile into a compressor;
 the mixer's reverbs and delays are after the looper; the mixer adds no delay. Presets (act,
 venue, monitors, output) are text files in `Documents/GigRig/Mixer`: their section names,
 keys and block ids are saved on Tom's disk, so never rename them, only add. A song may set a
 channel's sends to the mixer's reverbs and delays (`send =` lines, an overlay on the act) and
-nothing else in the mixer: **a song never changes the venue.**
+which reverb or delay each of the mixer's four effects is and its settings (`mixer effect =`
+lines, an overlay on the venue; Tom's decision, 27 Nov 2026), and nothing else in the mixer:
+**a song never changes the venue itself** (each effect's EQ, cuts and levels, the main output).
+Tom's split (27 Nov 2026): the song carries a reverb's or delay's own settings, the send level is
+the venue's choice. `moveToMixer` in `src/SongBook.cpp` (the Songs tab button) moves old songs over.
+
+## The remote screen (the phone and tablet control app)
+
+Built 27 Nov 2026; **`docs/remote.md` is the guide. Keep it true.** It is a web page (`remote/`,
+plain JavaScript, no libraries, built into the app) served by a small server inside the app
+(`src/RemoteServer.*`), which is **off by default and off must open no port**. `src/RemoteApi.*`
+turns the rig into JSON and JSON back into actions with no network in it; `src/LooperLayout.*`
+writes a song's own looper layout as `looper ...` lines in its song file (the words are saved on
+Tom's disk: never rename them, only add) for the arrangement builder. All checked by
+`src/RemoteSelfTest.cpp`. The page has a demo (`remote/demo.js`, a pretend rig) whose data
+`remote/demo-data.js` is made by `tools/remote_demo.py` from a running app: never edit it by
+hand, and capture it again when `RemoteApi::state` gains a part (the self-test says when).
+The demo's looper is a stand-in, never evidence about timing. Nothing in the remote screen may
+run on the audio thread, and the looper engine was not changed for it.
 
 ## Adding an effect
 

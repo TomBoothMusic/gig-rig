@@ -79,6 +79,12 @@ public:
     void setReturnPair (int pair) noexcept          { returnPair.store (juce::jlimit (0, 3, pair)); }
     int getReturnPair() const noexcept              { return returnPair.load(); }
 
+    /** The input socket the kick joins, as if the stomp box were plugged in there: the looper
+        hears it on that socket and, with the mixer on, the channel listening to that socket
+        plays it. -1 = straight onto the returns, never looped. */
+    void setSocket (int s) noexcept                 { socket.store (juce::jlimit (-1, 15, s)); }
+    int getSocket() const noexcept                  { return socket.load(); }
+
     /** A recording to play in place of the built-in kick (mono, at the file's own rate).
         An empty vector goes back to the built-in kick. */
     void setSample (std::vector<float> samples, double sampleRate, const juce::String& name);
@@ -147,7 +153,7 @@ private:
     // Where a fresh install starts: the settings Tom settled on with the SPD::ONE on his studio
     // monitors (27 Nov 2026, build 103, "we'll lock that sound in"). A big PA may move them.
     std::atomic<float> level { 0.8f }, touch { 1.1f }, click { 0.86f }, pitch { 49.0f }, length { 0.155f };
-    std::atomic<int> returnPair { 2 };
+    std::atomic<int> returnPair { 2 }, socket { 9 };
 
     // ---- hits on their way to the audio thread ----
     static constexpr int queueSize = 64;

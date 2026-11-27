@@ -278,9 +278,14 @@ void AudioPanel::refreshDevices (bool openCQ)
 
         if (found != nullptr)
         {
-            // An ASIO driver keeps its own buffer setting (its settings window), so only other
-            // driver types (ALSA on the rig) are asked for the remembered buffer.
-            openDevice (*found, found->typeName == "ASIO" ? 0 : saved.buffer, saved.rate);
+            // Every driver type is asked for the remembered buffer. An ASIO driver left to its own
+            // setting can come up at 1024 (a fresh USB port gives the CQ's driver fresh settings):
+            // Tom played a night about 30 ms late that way on 26 Nov 2026 without the app saying so.
+            openDevice (*found, saved.buffer, saved.rate);
+
+            if (! engine.isOpen() && saved.buffer > 0)
+                openDevice (*found, 0, saved.rate);     // the driver would not take that size: its own, then
+
             return;
         }
     }
@@ -292,8 +297,10 @@ void AudioPanel::openDevice (const DeviceChoice& choice, int bufferSize, double 
 {
     engine.open (choice, bufferSize, sampleRate);
 
+    // What is remembered is the buffer that was asked for: if the driver opened at some other
+    // size of its own, the next start asks for the wanted one again.
     if (engine.isOpen())
-        saveAudio (choice, engine.sampleRate(), engine.bufferSize());
+        saveAudio (choice, engine.sampleRate(), bufferSize > 0 ? bufferSize : engine.bufferSize());
 
     // Watch a device that opened; a device that would not open is left alone (no endless retries
     // for something chosen by mistake). The watch keeps going through its own tries.
@@ -484,6 +491,13 @@ void AudioPanel::updateDropoutLine()
         return;
     }
 
+    if (const auto slow = engine.slowBufferWarning(); slow.isNotEmpty())
+    {
+        dropoutLabel.setColour (juce::Label::textColourId, style::red);
+        dropoutLabel.setText (slow, juce::dontSendNotification);
+        return;
+    }
+
     const auto stats = engine.dropoutStats();
     const auto seconds = (int) stats.seconds;
     const bool clean = stats.lateCallbacks == 0 && stats.driverDropouts <= 0;
@@ -554,7 +568,7 @@ void AudioPanel::timerCallback()
     {
         case ReconnectWatch::Action::lost:
             lostChoice = engine.currentChoice();
-            lostBuffer = lostChoice.typeName == "ASIO" ? 0 : engine.bufferSize();
+            lostBuffer = engine.bufferSize();
             lostRate = engine.sampleRate();
             engine.close();
             syncToEngine();

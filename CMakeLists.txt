@@ -78,7 +78,15 @@ juce_add_binary_data(GigRigData SOURCES
     resources/presets/starter-acoustic.txt
     resources/presets/starter-vocal.txt
     resources/presets/starter-bass.txt
-    resources/presets/vocal-for-the-mixer.txt)
+    resources/presets/vocal-for-the-mixer.txt
+    # The remote screen: the page a phone or tablet opens (docs/remote.md). RemoteServer hands these out.
+    remote/index.html
+    remote/app.css
+    remote/core.js
+    remote/demo.js
+    remote/screens.js
+    remote/builder.js
+    remote/demo-data.js)
 
 # ---------------------------------------------------------------------------
 # The app. Stage 0 was a device check; stage 1 adds the audio engine with
@@ -107,6 +115,7 @@ target_sources(GigRig PRIVATE
     src/KickPadSelfTest.cpp
     src/LatencyProbe.cpp
     src/Looper.cpp
+    src/LooperLayout.cpp
     src/LooperPanel.cpp
     src/LooperSelfTest.cpp
     src/MidiMonitor.cpp
@@ -115,6 +124,10 @@ target_sources(GigRig PRIVATE
     src/MixerSelfTest.cpp
     src/MixRecorder.cpp
     src/Pedal.cpp
+    src/RemoteApi.cpp
+    src/RemotePanel.cpp
+    src/RemoteSelfTest.cpp
+    src/RemoteServer.cpp
     src/PedalPanel.cpp
     src/SelfTest.cpp
     src/SongBook.cpp

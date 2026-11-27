@@ -64,7 +64,7 @@ std::string ChainModel::toText() const
     return s.str();
 }
 
-int ChainModel::addFrom (const ChainModel& other, int maxSlots)
+size_t ChainModel::stackPoint() const
 {
     auto at = slots.size();
     for (size_t k = 0; k < slots.size(); ++k)
@@ -73,6 +73,18 @@ int ChainModel::addFrom (const ChainModel& other, int maxSlots)
             at = k;
             break;
         }
+
+    // A volume pedal sitting right in front of the amp stays there: on Tom's board the drives
+    // push the pedal and the pedal pushes the amp, so stacked drives go in front of the pedal.
+    while (at > 0 && at < slots.size() && slots[at - 1].type == "volume")
+        --at;
+
+    return at;
+}
+
+int ChainModel::addFrom (const ChainModel& other, int maxSlots)
+{
+    const auto at = stackPoint();
 
     int added = 0;
     for (const auto& s : other.slots)

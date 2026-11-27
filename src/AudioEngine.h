@@ -132,6 +132,9 @@ public:
     bool isOpen() const noexcept                { return device != nullptr || simulated; }
     DeviceChoice currentChoice() const          { return choice; }
     bool isCQ() const noexcept                  { return deviceIsCQ; }
+    /** Words for the screen and the report when the buffer is big enough to hear as lateness
+        (over 256 samples). Empty when it is fine. */
+    juce::String slowBufferWarning() const;
     double sampleRate() const noexcept          { return currentSampleRate; }
     int bufferSize() const noexcept             { return currentBufferSize; }
     int numInputs() const noexcept              { return currentInputs; }
@@ -283,7 +286,8 @@ private:
     std::atomic<bool> statsResetRequested { true };
 
     // ---- audio thread only ----
-    std::vector<float> scratch, mix;
+    std::vector<float> scratch, mix, kickBuf, kickSock;
+    std::array<const float*, 64> withKick {};
     juce::int64 lastCallbackTicks = 0;
     int samplesSinceReset = 0;
     double tonePhase = 0.0;

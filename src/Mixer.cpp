@@ -77,6 +77,25 @@ namespace
         return m;
     }
 
+    /** The EQ on what goes into a mixer effect: always exactly one mixeq, switched on (flat until moved). */
+    fx::ChainModel conformFxEq (const fx::ChainModel& from)
+    {
+        fx::ChainModel m;
+
+        for (const auto& s : from.slots)
+            if (s.type == "mixeq")
+            {
+                m.slots.push_back (s);
+                break;
+            }
+
+        if (m.slots.empty())
+            m.slots.push_back (slot ("mixeq", true));
+
+        m.slots[0].on = true;
+        return m;
+    }
+
     const char* const outputKeys[numMixOutputs] { "main", "monitor 1", "monitor 2" };
     const char* const recordWords[] { "none", "raw", "effects", "looper" };
     const char* const tapWords[] { "pre", "eq", "all" };
@@ -120,6 +139,7 @@ namespace
         for (int m = 0; m < numMixMonitors; ++m)
             t << "monitor" << (m + 1) << "=" << num (s.monDb[(size_t) m]) << "\n";
         t << "[fx " << (f + 1) << " effect]\n" << juce::String (s.effect.toText());
+        t << "[fx " << (f + 1) << " eq]\n" << juce::String (s.eq.toText());
     }
 
     void writeOutput (juce::String& t, int o, const MixOutputSetup& s, bool withSockets)
@@ -237,6 +257,12 @@ namespace
                 if (words.size() > 2 && words[2] == "effect")
                 {
                     fxs.effect = conformFx (fx::ChainModel::fromText (sec.body.toStdString()));
+                    continue;
+                }
+
+                if (words.size() > 2 && words[2] == "eq")
+                {
+                    fxs.eq = conformFxEq (fx::ChainModel::fromText (sec.body.toStdString()));
                     continue;
                 }
 
@@ -461,6 +487,10 @@ void Mixer::pushFx (int f, bool first)
     auto& a = fxs[(size_t) f];
     auto& s = now.fx[(size_t) f];
     s.effect = conformFx (s.effect);
+    s.eq = conformFxEq (s.eq);
+
+    if (first)  a.pre.setModel (s.eq);
+    else        a.pre.setModelGently (s.eq);
 
     a.ret.store (gainOf (s.returnDb));
     for (int m = 0; m < numMixMonitors; ++m)   a.mon[(size_t) m].store (gainOf (s.monDb[(size_t) m]));
@@ -468,8 +498,11 @@ void Mixer::pushFx (int f, bool first)
     a.filter.setParam ("highcut", s.highCutHz);
     a.on.store (s.on);
 
-    if (first)  a.chain.setModel (s.effect);
-    else        a.chain.setModelGently (s.effect);
+    if (songFxHas[(size_t) f])
+        songFxModel[(size_t) f] = conformFx (songFxModel[(size_t) f]);
+
+    if (first)  a.chain.setModel (effectNow (f));
+    else        a.chain.setModelGently (effectNow (f));
 }
 
 void Mixer::pushOutput (int o, bool first)
@@ -619,6 +652,57 @@ void Mixer::clearSongSend (int c, int f)
     auto sends = songSends();
     sends.erase (std::remove_if (sends.begin(), sends.end(), [c, f] (const SongSend& s) { return s.channel == c && s.fx == f; }), sends.end());
     setSongSends (sends);
+}
+
+void Mixer::setSongFx (const std::vector<SongFx>& list)
+{
+    std::array<bool, numMixFx> had = songFxHas;
+    songFxHas.fill (false);
+
+    for (const auto& s : list)
+        if (s.fx >= 0 && s.fx < numMixFx)
+        {
+            songFxHas[(size_t) s.fx] = true;
+            songFxModel[(size_t) s.fx] = conformFx (s.effect);
+        }
+
+    for (int f = 0; f < numMixFx; ++f)
+        if (had[(size_t) f] || songFxHas[(size_t) f])
+            pushFx (f);
+
+    markChanged();
+}
+
+std::vector<Mixer::SongFx> Mixer::songFx() const
+{
+    std::vector<SongFx> list;
+
+    for (int f = 0; f < numMixFx; ++f)
+        if (songFxHas[(size_t) f])
+            list.push_back ({ f, songFxModel[(size_t) f] });
+
+    return list;
+}
+
+void Mixer::setSongFx (int f, const fx::ChainModel& m)
+{
+    if (f < 0 || f >= numMixFx)
+        return;
+
+    songFxHas[(size_t) f] = true;
+    songFxModel[(size_t) f] = conformFx (m);
+    pushFx (f);
+    markChanged();
+}
+
+void Mixer::clearSongFx (int f)
+{
+    if (! hasSongFx (f))
+        return;
+
+    songFxHas[(size_t) f] = false;
+    pushFx (f);
+    markChanged();
 }
 
 void Mixer::setFx (int f, const MixFxSetup& s)
@@ -1068,6 +1152,9 @@ juce::String Mixer::stateText() const
     for (const auto& s : songSends())
         t << "channel " << (s.channel + 1) << " fx " << (s.fx + 1) << "=" << num (s.db) << "\n";
 
+    for (const auto& s : songFx())
+        t << "[song fx " << (s.fx + 1) << "]\n" << juce::String (s.effect.toText());
+
     return t;
 }
 
@@ -1090,6 +1177,14 @@ void Mixer::loadStateText (const juce::String& text)
 
     setSongSends (sends);
 
+    std::vector<SongFx> songEffects;
+
+    for (const auto& sec : parseSections (text))
+        if (sec.name.startsWith ("song fx "))
+            songEffects.push_back ({ sec.name.fromLastOccurrenceOf (" ", false, false).getIntValue() - 1, fx::ChainModel::fromText (sec.body.toStdString()) });
+
+    setSongFx (songEffects);
+
     for (const auto& sec : parseSections (text))
         if (sec.name == "mixer")
         {
@@ -1107,6 +1202,9 @@ void Mixer::loadStateText (const juce::String& text)
 
 void Mixer::saveState()
 {
+    if (! memoryOnDisk.load())
+        return;
+
     auto f = stateFile();
     f.getParentDirectory().createDirectory();
     f.replaceWithText (stateText());
@@ -1258,8 +1356,14 @@ juce::String Mixer::reportText() const
     for (int f = 0; f < numMixFx; ++f)
     {
         const auto& s = now.fx[(size_t) f];
-        const auto* type = fx::findEffectType (s.effect.slots.empty() ? std::string() : s.effect.slots[0].type);
+        const auto& effect = effectNow (f);
+        const auto* type = fx::findEffectType (effect.slots.empty() ? std::string() : effect.slots[0].type);
+        juce::String settings;
+        if (! effect.slots.empty())
+            for (const auto& p : effect.slots[0].params)
+                settings << " " << juce::String (p.first) << "=" << juce::String (p.second, 2);
         t << "Mixer effect " << (f + 1) << " " << s.name << ": " << (s.on ? "on" : "off") << ", " << (type != nullptr ? juce::String (type->name) : juce::String ("?"))
+          << (hasSongFx (f) ? " (this song's own; the venue's comes back with the next song)" : "") << (settings.isNotEmpty() ? " [" + settings.trim() + "]" : juce::String())
           << ", wet low cut " << juce::String (s.lowCutHz, 0) << " Hz, wet high cut " << juce::String (s.highCutHz, 0) << " Hz, return " << dbText (s.returnDb);
         for (int m = 0; m < numMixMonitors; ++m)
             if (s.monDb[(size_t) m] > mixOffDb)
@@ -1304,9 +1408,10 @@ void Mixer::prepare (double sampleRate, int maxBlock)
 
     laneData.assign ((size_t) numMixSockets * (size_t) capacity, 0.0f);
     stray.assign ((size_t) capacity, 0.0f);
-    work.assign ((size_t) capacity, 0.0f);
-    tapPre.assign ((size_t) capacity, 0.0f);
-    tapMid.assign ((size_t) capacity, 0.0f);
+    chanPre.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
+    chanMid.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
+    chanPost.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
+    stripped.fill (false);
     silence.assign ((size_t) capacity, 0.0f);
     directData.assign ((size_t) 8 * (size_t) capacity, 0.0f);
     directUsed.fill (false);
@@ -1323,6 +1428,7 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     for (auto& f : fxs)
     {
         f.chain.prepare (rate, capacity);
+        f.pre.prepare (rate, capacity);
         f.filter.prepare (rate, capacity);
         f.in.assign ((size_t) capacity, 0.0f);
         f.wet.assign ((size_t) capacity, 0.0f);
@@ -1384,6 +1490,51 @@ bool Mixer::startBlock (int n) noexcept
     return true;
 }
 
+const float* const* Mixer::stripChannels (const float* const* feed, int numIns, int n) noexcept
+{
+    stripped.fill (false);
+
+    if (n <= 0 || n > capacity || numIns > (int) loopFeed.size())
+        return feed;
+
+    for (int s = 0; s < numIns; ++s)
+        loopFeed[(size_t) s] = feed[s];
+
+    for (int c = 0; c < numMixChannels; ++c)
+    {
+        auto& ch = chans[(size_t) c];
+        const bool on = ch.on.load (std::memory_order_relaxed);
+
+        // A channel switched off fades out before it stops being worked on.
+        if (! on && ! ch.wasOn)
+            continue;
+
+        const int socket = ch.socket.load (std::memory_order_relaxed);
+        const bool plugged = socket >= 0 && socket < numIns && socket < numMixSockets;
+        const float* live = plugged && feed[socket] != nullptr ? feed[socket] : silence.data();
+        float* pre = chanPre.data() + (size_t) c * (size_t) capacity;
+        float* mid = chanMid.data() + (size_t) c * (size_t) capacity;
+        float* post = chanPost.data() + (size_t) c * (size_t) capacity;
+
+        float start, step;
+        ch.trimG.advance (ch.trim.load (std::memory_order_relaxed), fastStep * 4.0f, n, start, step);
+        for (int i = 0; i < n; ++i)
+            pre[i] = live[i] * (start + step * (float) i);
+
+        juce::FloatVectorOperations::copy (post, pre, n);
+        ch.strip.process (post, n);
+        juce::FloatVectorOperations::copy (mid, post, n);
+        ch.strip2.process (post, n);
+        stripped[(size_t) c] = true;
+
+        // The looper hears the first channel that is on and listens to this socket.
+        if (on && plugged && loopFeed[(size_t) socket] == feed[socket])
+            loopFeed[(size_t) socket] = post;
+    }
+
+    return loopFeed.data();
+}
+
 void Mixer::process (const float* const* raw, const float* const* feed, int numIns, int n) noexcept
 {
     if (n <= 0 || n > capacity)
@@ -1417,17 +1568,25 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         const float* live = plugged && feed[socket] != nullptr ? feed[socket] : silence.data();
         const float* loops = plugged && busPtrs[(size_t) socket] != nullptr ? busPtrs[(size_t) socket] : silence.data();
 
-        // The channel's own sound: live, after its effects, and every loop recorded from it.
+        // The channel's own sound: live, after its own processing (done in stripChannels, before the
+        // looper heard it), and every loop recorded from it. A loop was recorded after the channel's
+        // processing, so it rejoins after it: at every point a monitor or the sound crew can tap.
+        if (! stripped[(size_t) c])
+            continue;
+
+        float* tapPre = chanPre.data() + (size_t) c * (size_t) capacity;
+        float* tapMid = chanMid.data() + (size_t) c * (size_t) capacity;
+        float* work = chanPost.data() + (size_t) c * (size_t) capacity;
+        juce::FloatVectorOperations::add (tapPre, loops, n);
+        juce::FloatVectorOperations::add (tapMid, loops, n);
+        juce::FloatVectorOperations::add (work, loops, n);
         float start, step;
-        ch.trimG.advance (ch.trim.load (std::memory_order_relaxed), fastStep * 4.0f, n, start, step);
-        for (int i = 0; i < n; ++i)
-            work[(size_t) i] = live[i] * (start + step * (float) i) + loops[i];
 
         if (rec.wants (c))
         {
             const auto point = (RecordPoint) ch.record.load (std::memory_order_relaxed);
             const float* tap = point == RecordPoint::raw ? (plugged && raw[socket] != nullptr ? raw[socket] : silence.data())
-                             : point == RecordPoint::afterEffects ? live : work.data();
+                             : point == RecordPoint::afterEffects ? live : tapPre;
             rec.write (c, tap, nullptr, n);
         }
 
@@ -1445,16 +1604,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
                 juce::FloatVectorOperations::clear (to, n);
                 directUsed[(size_t) direct] = true;
             }
-            addGliding (to, work.data(), start2, step2, n);
+            addGliding (to, tapPre, start2, step2, n);
         }
 
         // A monitor can take its sends before the processing, after the tone blocks (gate,
         // warmth, EQ) or after the compressors, so a wedge need not hear the squeeze.
-        juce::FloatVectorOperations::copy (tapPre.data(), work.data(), n);
-        ch.strip.process (work.data(), n);
-        juce::FloatVectorOperations::copy (tapMid.data(), work.data(), n);
-        ch.strip2.process (work.data(), n);
-        raise (ch.peak, peakOf (work.data(), n));
+        raise (ch.peak, peakOf (work, n));
 
         const float fader = on && ! ch.mute.load (std::memory_order_relaxed) ? ch.fader.load (std::memory_order_relaxed) : 0.0f;
         const float pan = ch.pan.load (std::memory_order_relaxed);
@@ -1462,10 +1617,10 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         bool sounding = false;
 
         ch.mainL.advance (fader * left, fastStep, n, start, step);
-        addGliding (outs[0].bus[0].data(), work.data(), start, step, n);
+        addGliding (outs[0].bus[0].data(), work, start, step, n);
         sounding = sounding || ch.mainL.now != 0.0f;
         ch.mainR.advance (fader * right, fastStep, n, start, step);
-        addGliding (outs[0].bus[1].data(), work.data(), start, step, n);
+        addGliding (outs[0].bus[1].data(), work, start, step, n);
         sounding = sounding || ch.mainR.now != 0.0f;
 
         for (int m = 0; m < numMixMonitors; ++m)
@@ -1473,7 +1628,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
             auto& out = outs[(size_t) (m + 1)];
             const float send = ! on ? 0.0f : ch.mon[(size_t) m].load (std::memory_order_relaxed) * (out.preFader.load (std::memory_order_relaxed) ? 1.0f : fader);
             const int tap = out.tap.load (std::memory_order_relaxed);
-            const float* from = tap == 0 ? tapPre.data() : tap == 1 ? tapMid.data() : work.data();
+            const float* from = tap == 0 ? tapPre : tap == 1 ? tapMid : work;
             ch.monL[(size_t) m].advance (send * left, fastStep, n, start, step);
             addGliding (out.bus[0].data(), from, start, step, n);
             ch.monR[(size_t) m].advance (send * right, fastStep, n, start, step);
@@ -1484,7 +1639,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         for (int f = 0; f < numMixFx; ++f)
         {
             ch.fxG[(size_t) f].advance (fader * ch.fx[(size_t) f].load (std::memory_order_relaxed), fastStep, n, start, step);
-            addGliding (fxs[(size_t) f].in.data(), work.data(), start, step, n);
+            addGliding (fxs[(size_t) f].in.data(), work, start, step, n);
             sounding = sounding || ch.fxG[(size_t) f].now != 0.0f;
         }
 
@@ -1507,6 +1662,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         if (! on && ! f.live)
             continue;
 
+        f.pre.process (f.in.data(), n);      // the EQ on what goes into the effect
         juce::FloatVectorOperations::copy (f.wet.data(), f.in.data(), n);
         f.chain.process (f.wet.data(), n);
         juce::FloatVectorOperations::subtract (f.wet.data(), f.in.data(), n);      // every effect passes its input straight through: take it away, the wet sound is left

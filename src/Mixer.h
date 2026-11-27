@@ -86,6 +86,7 @@ struct MixFxSetup
     float lowCutHz = 20.0f, highCutHz = 20000.0f;   // on the wet sound only
     float returnDb = 0.0f;              // into the main mix
     std::array<float, numMixMonitors> monDb { mixOffDb, mixOffDb };
+    fx::ChainModel eq;                  // one mixeq, on what goes INTO the effect (Tom, 27 Nov 2026)
 };
 
 struct MixOutputSetup
@@ -146,6 +147,19 @@ public:
     bool hasSongSend (int c, int f) const noexcept      { return songHas[(size_t) c][(size_t) f]; }
     void setSongSend (int c, int f, float db);
     void clearSongSend (int c, int f);
+    // ---- a song's own reverb and delay settings (Tom's decision, 27 Nov 2026) ----
+    // A song may also say which reverb or delay one of the mixer's four effects is, and how it
+    // is set (its file's "mixer effect" lines). Like the sends this sits on top: the venue's own
+    // effect comes back when another song loads. The EQ, the cuts and the levels stay the venue's.
+    struct SongFx { int fx = 0; fx::ChainModel effect; };
+    void setSongFx (const std::vector<SongFx>&);
+    std::vector<SongFx> songFx() const;
+    bool hasSongFx (int f) const noexcept               { return f >= 0 && f < numMixFx && songFxHas[(size_t) f]; }
+    void setSongFx (int f, const fx::ChainModel&);
+    void clearSongFx (int f);
+    /** The reverb or delay an effect is right now: the song's where it has one, else the venue's. */
+    const fx::ChainModel& effectNow (int f) const noexcept  { return songFxHas[(size_t) f] ? songFxModel[(size_t) f] : now.fx[(size_t) f].effect; }
+
     /** What a channel sends to an effect right now: the song's value where it has one, else the act's. */
     float sendDb (int c, int f) const noexcept;
 
@@ -226,6 +240,10 @@ public:
     void loadStateText (const juce::String& text);
     static juce::File stateFile();
     void saveState();
+
+    /** False while the self-test runs, so its pretend rigs never write over the real memory file
+        (found 27 Nov 2026: a self-test run on a real machine left the test's settings behind). */
+    static inline std::atomic<bool> memoryOnDisk { true };
     void markChanged() noexcept                         { dirty = true; }
 
     /** The mixer's part of the report. */
@@ -246,6 +264,12 @@ public:
     float* strayBus() noexcept                          { return stray.data(); }
 
     /** raw = the sockets themselves; feed = the sockets as the looper hears them (after the effects). */
+    /** Call after startBlock and before the looper. Runs every channel's own processing on its
+        live sound and returns what the looper should hear: for a socket a channel listens to, that
+        channel's sound after its gate, EQ and compressors; for any other socket, feed as it is.
+        So a loop is processed once, as it was played, and layers never pile into a compressor. */
+    const float* const* stripChannels (const float* const* feed, int numIns, int numSamples) noexcept;
+
     void process (const float* const* raw, const float* const* feed, int numIns, int numSamples) noexcept;
 
     /** Adds the mixer's outputs to the returns. outputFor(r) gives return r's buffer or null. */
@@ -314,7 +338,7 @@ private:
 
     struct Fx
     {
-        fx::Chain chain;
+        fx::Chain chain, pre;           // the effect, and the EQ on what goes into it
         fx::WetFilter filter;
         std::atomic<bool> on { true };
         std::atomic<float> ret { 1.0f };
@@ -352,6 +376,8 @@ private:
     MixerSetup now;                                     // message thread's copy
     std::array<std::array<float, numMixFx>, numMixChannels> songDb {};
     std::array<std::array<bool, numMixFx>, numMixChannels> songHas {};
+    std::array<bool, numMixFx> songFxHas {};
+    std::array<fx::ChainModel, numMixFx> songFxModel;
     juce::String act, venue, monitors;
     bool actDirty = false, venueDirty = false, monitorsDirty = false;
     bool dirty = false;
@@ -381,7 +407,10 @@ private:
     float master = 0.0f;                                // 0..1: the fade when the mixer is switched on or off
     float mainMix = 0.0f;                               // 0 = set 0 .. 1 = set 1
     float fastStep = 0.0f, slowStep = 0.0f, masterStep = 0.0f;
-    std::vector<float> laneData, stray, work, tapPre, tapMid, silence, directData;
+    std::vector<float> laneData, stray, silence, directData;
+    std::vector<float> chanPre, chanMid, chanPost;      // each channel's live sound before, between and after its two strips
+    std::array<const float*, 64> loopFeed {};
+    std::array<bool, numMixChannels> stripped {};
     std::array<bool, 8> directUsed {};
     std::array<float*, numMixSockets> busPtrs {};
     float guardWindowPeak = 0.0f;

@@ -9,12 +9,12 @@ MainComponent::MainComponent()
     title.setFont (juce::Font (juce::FontOptions (24.0f, juce::Font::bold)));
     title.setColour (juce::Label::textColourId, style::textMain);
 
-    subtitle.setText ("Audio through the CQ, the RC-600 as the pedal, the looper and the first effects.   Build " + juce::String (GIGRIG_BUILD_LABEL),
+    subtitle.setText ("The looper, effects and mixer, with the RC-600 as the pedal.   Build " + juce::String (GIGRIG_BUILD_LABEL),
                       juce::dontSendNotification);
     subtitle.setFont (juce::Font (juce::FontOptions (14.0f)));
     subtitle.setColour (juce::Label::textColourId, style::textDim);
 
-    copyButton.setTooltip ("Copies the latency results and the device list, ready to paste to Claude");
+    copyButton.setTooltip ("Copies the whole report (every tab's part: devices, audio, pedal, looper, songs, effects, mixer and kick pad), ready to paste to Claude");
     copyButton.onClick = [this]
     {
         juce::SystemClipboard::copyTextToClipboard (devicePanel.reportText() + "\n" + engine.reportText());
@@ -59,11 +59,17 @@ MainComponent::MainComponent()
             });
     };
 
+    mixerPanel.onKeepEffect = [this] (int fx, bool asDefault) { return songBook.keepMixerEffect (fx, asDefault); };
+    mixerPanel.onDropEffect = [this] (int fx) { return songBook.dropMixerEffect (fx); };
     songBook.onChanged = [this]
     {
         looperPanel.songChanged();
         effectsPanel.refresh();
         songsPanel.refresh();
+        // A song (or the move to the mixer) may have changed sends and effects: the Mixer tab must show
+        // it, or a button that still reads "Off" gets pressed and switches the effect off (Tom, 27 Nov 2026).
+        // A moment later, because this can be called from one of that tab's own buttons.
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->mixerPanel.refresh(); });
     };
     devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
 
@@ -98,7 +104,7 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer).
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 
@@ -112,6 +118,17 @@ MainComponent::MainComponent()
 
     engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + kickPanel.reportText(); };
 
+    // The remote screen: a phone or tablet on the same network. Its tab goes last so the tab numbers before it stay as they were.
+    tabs.addTab ("Remote screen", style::background, &remotePanel, false);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + remoteServer.reportText(); };
+    remoteApi.wholeReport = [this] { return devicePanel.reportText() + "\n" + engine.reportText(); };
+    remoteServer.onRigChanged = [this]
+    {
+        effectsPanel.refresh();
+        songsPanel.refresh();
+        mixerPanel.refresh();
+    };
+
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
     if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
@@ -124,6 +141,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    remoteServer.stop();
     engine.close();
 }
 

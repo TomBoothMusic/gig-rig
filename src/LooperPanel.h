@@ -59,6 +59,7 @@ private:
     juce::OwnedArray<SwitchTile> switchTiles;
     juce::OwnedArray<juce::Label> socketLabels;
     juce::OwnedArray<juce::ComboBox> socketBoxes;
+    int followedKickId = 0;     // the stomp socket box's id the last time it followed the kick pad's socket
     juce::Slider trimSlider;
     juce::TextEditor descriptionView, logView;
 

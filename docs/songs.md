@@ -55,14 +55,16 @@ Every line is optional. Lines starting with `#` are notes.
 | --- | --- |
 | `program = 11` | The program number that loads this entry (1 to 128, counted as the RC-600 counts its memories). For a built-in song the number is already known; a line here changes it. |
 | `looper = Wicked Game` | Only for an entry that has no looper layout of its own: borrow this built-in song's layout. Without the line it uses the general set-up (memory 1, "Dirty Slap"). |
+| `looper beats = 4`, `looper track 1 = ...`, `looper switch 1.3 = ...`, `looper link = ...` | The song's own looper layout, written by the builder on the remote screen (27 Nov 2026). With these lines the song uses them in place of a built-in layout. Every word is listed in [remote.md](remote.md), "What it writes in the song file". A build from before 27 Nov 2026 reports them as lines it could not use and plays the song with its built-in layout. |
 | `tempo = 87` | About how fast the song is played, in beats a minute. The looper uses it to decide how many bars the first loop is (the first loop still sets the exact tempo). Without the line a built-in song uses the tempo saved in its RC-600 memory. Use it when a song counts at double or half speed. Takes effect the next time the song loads. |
-| `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
+| `chain 1 = <preset name>` | Chain 1 is built from this preset. A second `chain 1 =` line stacks another preset on, exactly like **Add to chain** (it goes in front of the amp if the chain has one, and in front of a Volume pedal that sits right before that amp, so the drives push the pedal and the pedal pushes the amp). One preset per line, because preset names may contain `+`. `chain 1 = (empty)` empties the chain. |
 | `set = chain 1 / spring / reverb = 3.5` | The song's own change on top: chain, effect, setting, value. |
 | `set = chain 1 / tremolo / off` | Switches one effect off (or `on`) for this song. |
-| `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). |
+| `switch CTL4 = chain 1 / next amp` | What a switch does in this song. Switches are `1` to `9`, `CTL3`, `CTL4` (the RC-600's, as on the Pedal tab). A switch given to the effects stops working for the looper while it is assigned, so pick one the song's looping does not need (switch 9 is All start/stop). Two or more lines may name the same switch: every one of them acts on each press, so `switch CTL3 = chain 3 / chain on off` and `switch CTL3 = chain 2 / chain on off` swap bass and electric with one press (set one chain on and the other off first). |
 | `switches = none` | This song uses no switches for effects (overrides the default's). |
 | `amps = chain 1 / A / B` | The amp models the "next amp" switch steps through, in order. Without it the switch steps through every installed amp model. |
 | `send = Vocal / Vocal plate = -6` | With the Mixer tab on: how much of a mixer channel goes to one of the mixer's reverbs or delays while this song is loaded (`off` for none). The channel and the effect by name, or `channel 1`, `fx 2`. It sits on top of the act and goes when another song loads; a song never changes the reverb or delay itself, which belongs to the venue. See `docs/mixer.md`, "Sends that belong to a song". |
+| `mixer effect = Vocal delay / tapedelay / time = 121 / feedback = 20` | With the Mixer tab on: which reverb or delay one of the mixer's four effects is while this song is loaded, and its settings (the effect's id, then `setting = value` for each; one left out takes the effect's starting value). The venue's own comes back when another song loads. The venue keeps the effect's EQ, cuts and levels. See `docs/mixer.md`, "A reverb or delay that belongs to a song". **Save to this song** on the Mixer tab writes this line and **Back to default for this song** takes it out again; **Move reverbs and delays to the mixer** on the Songs tab writes it for every song made before the mixer ("Moving songs made before the mixer"). |
 
 Naming things:
 
@@ -71,7 +73,7 @@ Naming things:
   one of the same kind is `eq #2`.
 - A setting is its id or its name on screen. Ids are listed in `docs/effects.md`.
 - What a switch does: `compare`, `chain on off`, `tap tempo`, `whammy`, `wah`, `delay throw`,
-  `test take`, `next amp`, `toe switch` (the expression pedal's toe switch: electric full, acoustic muted, the chain's wah or whammy on; see `docs/mixer.md`), `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
+  `test take`, `next amp`, `pedal toe` (no chain needed: the switch stands in for the expression pedal, toe down while held and heel down when let go; for testing until the board has a pedal), `toe switch` (the expression pedal's toe switch: electric full, acoustic muted, the chain's wah or whammy on; see `docs/mixer.md`), `harmony` (the harmony sings only while the switch is held), or `<effect> on off` (for example `chain 1 / tubescreamer on off`).
 
 When a line cannot be used (a preset that is not in the folder, a setting no effect has), the
 song still loads. The line is reported as `PROBLEM:` on the Songs tab and in the report, and a
@@ -94,7 +96,9 @@ set again.
 - **Forget this song's own sounds**: removes the sound lines. The program number stays.
 - **Set this song's sounds again**: back to what the file says.
 - **New entry**: a new song with the loaded song's looper layout and the sounds as they stand.
-- **Switches**: six rows. What they show is saved by the **Keep** buttons.
+- **Switches**: six rows. What they show is saved by the **Keep** buttons. On the **Looper** tab,
+  the tile of a switch the effects have taken says **Effects:** and what it does (for example
+  "Effects: chain 2 next amp sound") in place of its looper job (`EffectsRack::pedalUse`).
 - **Delays and reverbs ring out when the sound changes**: see below.
 - **Open in its own window**: lifts the Songs tab out into its own window (for a second screen,
   with the Effects tab open in the main window). Closing it, or **Put back as a tab**, returns it.
@@ -103,8 +107,33 @@ set again.
 On the Effects tab, **Update its presets** writes the knobs turned since the chain was loaded
 back into the presets the chain was built from, each preset getting its own effects. This is the
 "edit once, every song follows" button. It only saves what was turned since loading, so a song's
-own `set` changes never leak into a shared preset. It refuses if effects were added, removed or
-moved (use **Save as** then).
+own `set` changes never leak into a shared preset.
+
+It also copes with an effect that was **added or taken out** (from 27 Nov 2026). Effects that were
+there when the chain loaded stay with the preset they came from. A new effect joins the first
+preset (the base); if it sits between two effects of one other preset it joins that one; and if
+the base cannot hold it where it is, the preset of the effect after it, then of the one before.
+Nothing is written unless stacking the presets again gives exactly the chain on screen
+(`saveNewShapeToPresets` in `src/SongBook.cpp`); otherwise it says so and **Save as** is the way.
+
+A volume pedal's `pedal` position is never taken from a preset or a song: a chain that is
+loaded gets its volume pedals where the expression pedal is now (or, until it has moved, where
+the volume pedals on screen were), and moving the pedal is not a change that Update its presets
+saves (`SongBook::applySounds`).
+
+**Save** refuses to write a chain stacked from several presets under the name of one of them:
+that would put the other presets' effects inside it and every song would get them twice.
+
+## Tidying presets that nothing uses
+
+On the Songs tab, **Tidy unused presets** looks at every song file, the default sounds and the four
+chains on screen, and finds the presets in `Documents/GigRig/Effect presets` that none of them names.
+The first press only lists them. A second press within a minute moves them into a folder called
+`Not used (moved <date and time>)` inside the presets folder. Nothing is deleted. **Put the presets
+back** moves the newest such folder's presets back (never over a preset of the same name made since).
+A starter preset that was tidied away is not copied in again at the next start. Old song backups are
+not looked at: a song put back from a backup may name a preset that was tidied, and the Songs tab
+then says which one is missing. `SongBook::tidyPresets`, `restoreTidiedPresets`, `unusedPresets`.
 
 ## Program changes
 
@@ -178,3 +207,11 @@ Wicked Game (program 11)
 ```
 
 And once, at the top: `Default: electric = ..., acoustic = ..., vocal = ..., switches = ...`.
+
+## Checking a whole folder of songs without opening the app
+
+`GigRig --check-songs <songs folder> <presets folder> <result file>` loads every entry in turn
+with no sound card and writes one line per song: `ok` or `PROBLEM`, with the same words the
+Songs tab shows (a missing preset, a line not understood). Add `--every-setting` and it also
+lists every effect in every chain with every setting as the song leaves it. Run it on a folder
+before and after a tidy-up and compare the two files: if they match, every song sounds the same.

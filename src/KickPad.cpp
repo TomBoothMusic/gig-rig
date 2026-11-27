@@ -501,7 +501,9 @@ juce::String KickPad::reportText() const
                  + ". Sound: " + (sampleLabel.isEmpty() ? juce::String ("built-in kick") : "recording \"" + sampleLabel + "\"")
                  + ". Level " + juce::String (level.load(), 2) + ", touch " + juce::String (touch.load(), 2) + ", click " + juce::String (click.load(), 2)
                  + ", pitch " + juce::String (pitch.load(), 0) + " Hz, length " + juce::String (length.load(), 3) + " s"
-                 + ". Plays on returns " + juce::String (returnPair.load() * 2 + 1) + " and " + juce::String (returnPair.load() * 2 + 2) + ".");
+                 + (socket.load() >= 0 ? ". Joins socket " + juce::String (socket.load() + 1) + ": the looper hears it there, and with the mixer on the channel on that socket plays it (mixer off: returns "
+                                         : juce::String (". Plays straight on returns "))
+                 + juce::String (returnPair.load() * 2 + 1) + " and " + juce::String (returnPair.load() * 2 + 2) + (socket.load() >= 0 ? ")." : ", never looped."));
 
     if (device.isEmpty())
         lines.add ("  Pad: none seen yet. (The app looks for a MIDI device with SPD-1 in its name; Learn pad takes any other.)");

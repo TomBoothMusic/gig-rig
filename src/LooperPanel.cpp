@@ -300,6 +300,11 @@ void LooperPanel::labelSwitches (int bank)
             detail = linked.isEmpty() ? juce::String ("-") : linked.joinIntoString (", ");
         }
 
+        // A switch the effects have taken (Songs tab or Effects tab) does nothing in the looper,
+        // so the tile says what it does instead of the looper function it no longer has.
+        if (const auto use = engine.effects().pedalUse (sw); use.isNotEmpty())
+            detail = "Effects: " + use;
+
         switchTiles[sw]->setText (pedalSwitchName (sw), detail);
     }
 }
@@ -344,6 +349,24 @@ void LooperPanel::slowUpdate()
 
 void LooperPanel::timerCallback()
 {
+    // The kick pad's kick joins a socket of its own (socket 10 unless changed). While the pad is
+    // on and the looper still listens for the stomp on the acoustic's socket (how it starts, from
+    // when the real stomp box shared the acoustic's lead), the stomp follows the kick, so loops
+    // record it on a lane of its own with nothing to set (Tom, 27 Nov 2026: it did not loop).
+    // A stomp socket chosen by hand, different from the acoustic's, is left alone.
+    if (const int kickSocket = engine.kick().getSocket(); engine.kick().isOn() && kickSocket >= 0 && kickSocket < 16)
+    {
+        const int stompId = socketBoxes[(int) LoopSource::stomp]->getSelectedId();
+
+        if (stompId != kickSocket + 1 && (stompId == socketBoxes[(int) LoopSource::acoustic]->getSelectedId() || stompId == noSocketId || stompId == followedKickId))
+        {
+            socketBoxes[(int) LoopSource::stomp]->setSelectedId (kickSocket + 1, juce::dontSendNotification);
+            pushOptions();
+        }
+
+        followedKickId = kickSocket + 1;
+    }
+
     ++ticks;
     snapshot = engine.looper().snapshot();
 
@@ -379,7 +402,8 @@ void LooperPanel::timerCallback()
     for (int t = 0; t < numLoopTracks; ++t)
         trackTiles[t]->set (t, snapshot.track[(size_t) t], song.track[(size_t) t], snapshot.currentTrack == t, blink);
 
-    if (snapshot.bank != shownBank)
+    // Relabel on a bank change, and twice a second in case the effects took or gave back a switch.
+    if (snapshot.bank != shownBank || ticks % (timerHz / 2) == 0)
         labelSwitches (snapshot.bank);
 
     const auto seen = pedal.seen();
@@ -542,6 +566,20 @@ juce::String LooperPanel::reportText()
         sockets.add (loopSourceName (s) + " " + (options.inputFor[(size_t) s] >= 0 ? juce::String (options.inputFor[(size_t) s] + 1) : juce::String ("none")));
 
     lines.add ("Input sockets: " + sockets.joinIntoString (", "));
+
+    if (const int kickSocket = engine.kick().getSocket(); engine.kick().isOn() && kickSocket >= 0)
+    {
+        const int stomp = options.inputFor[(size_t) LoopSource::stomp], acoustic = options.inputFor[(size_t) LoopSource::acoustic];
+
+        if (stomp != kickSocket)
+            lines.add ("  NOTE: the kick pad's kick joins socket " + juce::String (kickSocket + 1) + ", but the looper listens for the stomp on socket "
+                         + (stomp >= 0 ? juce::String (stomp + 1) : juce::String ("none")) + ", so loops will not record the kick. Set Stomp to socket "
+                         + juce::String (kickSocket + 1) + " in the Looper tab's input sockets.");
+        else if (stomp == acoustic)
+            lines.add ("  NOTE: the stomp and the acoustic are on the same socket, so a loop keeps them as one sound, not a lane each.");
+        else
+            lines.add ("  The kick pad's kick is on the stomp's socket: loops record it on a lane of its own.");
+    }
     lines.add ("Double-press window: " + juce::String (options.doubleWindowMs) + " ms");
     lines.add ("Late press allowance: a new track pressed up to " + juce::String (options.lateStartBeats, 2) + " of a beat after a bar line starts from that bar line");
     lines.add ("First loop lead-in: the first loop starts " + juce::String (options.firstLoopLeadMs) + " ms before the press, to keep the attack of a note struck with the switch");

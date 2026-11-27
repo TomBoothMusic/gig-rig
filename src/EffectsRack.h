@@ -85,6 +85,7 @@ public:
         int action = 0;
     };
     static constexpr int numPedalAssigns = 6;
+    static constexpr int actionPedalToe = 90;       // a held switch stands in for the expression pedal: toe down while held, heel down when let go
     PedalAssign pedalAssign (int i) const noexcept;
     void setPedalAssign (int i, PedalAssign a) noexcept;
     /** Any thread. True if the effects use this switch (so the looper must not); presses are
@@ -137,6 +138,9 @@ public:
         it is and the acoustic chain's reversed both follow it. Where a real expression pedal
         will arrive. Returns how many it moved. */
     int moveVolumePedals (float position);
+    /** Where the expression pedal is now, for volume pedals in a chain that is just being loaded. */
+    float livePedal() const noexcept                    { return toeOn ? 100.0f : blendPosition; }
+    bool pedalHasMoved() const noexcept                 { return pedalMoved; }
 
     /** Message thread: the one expression pedal (0 heel .. 100 toe). It is the blend (every
         volume pedal follows it) until the toe switch is on; then it rocks the wah or whammy
@@ -154,6 +158,10 @@ public:
     std::function<void()> onPedalAction;
     /** A line for each switch the effects use, for the report and the screen. */
     juce::String pedalText() const;
+    /** What the effects do with one pedal switch, in a few words ("chain 2 wah sweep while held"),
+        or nothing when the looper has it: the effects are off, or no row names the switch.
+        The Looper tab shows it on the switch's tile, so a switch that no longer loops says so. */
+    juce::String pedalUse (int sw) const;
 
     /** Loudest peak on an input since the last call (every input, whether a chain uses it or not). */
     float takeSocketMax (int input) noexcept            { return input >= 0 && input < 16 ? socketMax[(size_t) input].exchange (0.0f) : 0.0f; }
@@ -166,6 +174,10 @@ public:
     void loadStateText (const juce::String& text);
     static juce::File stateFile();
     void saveState();
+
+    /** False while the self-test runs, so its pretend rigs never write over the real memory file
+        (found 27 Nov 2026: a self-test run on a real machine left the test's settings behind). */
+    static inline std::atomic<bool> memoryOnDisk { true };
     void markChanged() noexcept                         { dirty = true; }
 
     // ---- meters and figures ----
@@ -234,6 +246,7 @@ public:
     juce::String takeStep();
     /** The last thing takeStep() or a pedal press did, for the screen. */
     juce::String takeNote;
+    juce::String panelNote;         // the Effects tab's last message (a save, a load), so the report can carry it
     TakeState takeState() const noexcept;
     /** How long the take is (or how much has been recorded so far). */
     double takeSeconds() const noexcept;
@@ -304,6 +317,7 @@ public:
     void bypassBlock (const float* const* inputs, int numIns, int numSamples) noexcept;
 
 private:
+    juce::String pedalAssignText (const PedalAssign&, bool brief) const;
     bool rockPedal (int chain, const char* type, bool toeDown);
     std::atomic<double> tempoNow { 0.0 }, tappedBpm { 0.0 };
     std::atomic<bool> tempoFromLoop { false };
@@ -355,6 +369,7 @@ private:
     bool dirty = false, tails = true;
     bool toeOn = false;             // the toe switch: the pedal works a wah or whammy, not the blend
     int toeChain = 0;
+    bool pedalMoved = false;        // the pedal (or a switch standing in for it) has been moved since the app started
     float blendPosition = 100.0f;   // where the blend was left when the toe switch went on
     int ticksSinceChange = 0;
 

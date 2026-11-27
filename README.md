@@ -12,9 +12,16 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 1 | Audio through the CQ: a round-trip latency meter, buffer-size choice, play-through with a dropout watch, and a test tone for each return | Built |
 | 2 | The RC-600 as the pedal: every switch by name, and press, 2-second hold and double-press told apart | Built |
 | 3 | The looper: six tracks that copy how the RC-600 loops, driven by the RC-600's switches, for a side-by-side test | Built, first version |
-| 4 onward | Songs from the RC-600 backup and the effects | Built |
+| 4 | Songs: the looper set-ups Tom uses from his RC-600 backup, each calling up its own sounds, loaded by a program number from Songbook Pro | Built |
+| 5 and 6 | The effects: four chains (electric, acoustic, bass, vocal) of drives, amp models, compressors, EQs, delays, reverbs, modulation, wah, whammy, vocal harmony and the Bass9 copy | Built |
 | Mixer | The app's own mixer: channels with gate, EQ and compressors, reverbs and delays after the looper, monitor mixes, act and venue presets, recording. Off until you switch it on | Built, first version |
-| Later | Tablet app, the board itself | Planned |
+| Kick pad | A test: the SPD::ONE Kick over USB plays a kick made inside the app | Built as a test |
+| Later | Tablet app wired to the app, the rig computer, the board itself | Planned |
+
+**New here, or back after a break?** Go straight to
+[Start here: play your songs through the whole rig](#start-here-play-your-songs-through-the-whole-rig).
+The sections after it are the test steps for each stage in the order they were built. They are
+kept as a record and for checking one part by itself.
 
 The rig computer itself runs Linux. [docs/linux-setup.md](docs/linux-setup.md) sets one up with a
 single script, including a free trial on the laptop from a USB stick.
@@ -26,6 +33,71 @@ single script, including a free trial on the laptop from a USB stick.
 3. Double-click the downloaded file. The first time, Windows shows a blue "Windows protected your PC" box, because the app is home-made and not signed. Click **More info**, then **Run anyway**.
 
 Nothing is installed. The app is a single file; delete it to remove it.
+
+## Start here: play your songs through the whole rig
+
+This is the everyday way to use the app at home now that the looper, the effects, the songs and
+the mixer all exist: the laptop does everything, the CQ12T is only the sockets and the way to
+the speakers, and the RC-600 is only the footswitches. Each step names the section further down
+that explains it in full.
+
+### Plugging in (10 minutes the first time)
+
+1. **Straight into the CQ, with the pedalboard left out:** microphone into socket 6, acoustic
+   into socket 7, electric into socket 8. Set each gain so the CQ's meter is healthy and clear
+   of red.
+2. **CQ12T** to the laptop by USB. On the CQ: **CONFIG**, **USB/SD**, **Sample Rate 96 kHz**.
+3. **RC-600** to the laptop by USB, on memory **65** (MIDI CTRL). Footswitches in its CTL 3/4
+   socket if you use CTL3 and CTL4.
+4. **SPD::ONE Kick** to the laptop by USB (a micro-USB lead that carries data), with its own
+   power adaptor or batteries. See [docs/kick-pad.md](docs/kick-pad.md).
+5. On the CQ, pull the faders **right down** on sockets 6, 7 and 8, and on channels 9, 10 and
+   ST1. Bring the **USB stereo channel** up to 0 dB. That is where the app's mix arrives, and
+   it should be the only thing you hear.
+
+### In the app (2 minutes, every time)
+
+1. Open **one** copy of the app. It refuses to open a second window, because two copies both
+   hear the pedal.
+2. **Latency and audio test** tab: the box should say **READY**, **Rate** 96 kHz and
+   **Buffer** 64. If the buffer shows anything else, choose 64.
+3. **Looper** tab: if the line under the song box says **TIMING NOT MEASURED**, go back to the
+   first tab and click **Measure latency** once.
+4. **Effects** tab: **Effects on** ticked. None of your four chain buttons along the top
+   should say **(off)**.
+5. **Mixer** tab: tick **Mixer on**. Sing and play your loudest, and for each channel raise
+   **Trim** until the peaks sit in the lighter band between the two marks on its meter.
+6. **Songs** tab: choose a song in the **Song** box, or tap one in Songbook Pro if its MIDI
+   reaches the laptop.
+
+### Playing a song through
+
+For each song, play it the way you would at a gig, start to finish. Things worth noticing:
+
+- **The sounds.** Are the right sounds there the moment the song loads, on every instrument?
+- **The loops.** Does each switch do what it does on the RC-600 for this song? Does each loop
+  come back in time, at the level you played it, with a clean join?
+- **The effect switches.** On the **Looper** tab, a switch the song has given to an effect says
+  **Effects:** and what it does, in place of its looper job.
+- **The mixer.** A loop follows the fader, mute and reverb of the channel it was recorded from.
+- **Changing song.** Delays and reverbs should ring out under the new sound, with no click.
+
+When something is wrong, carry on if you can and press **Copy report** (top right) as soon as
+the song ends. It holds every tab's part, and the looper keeps its last 150 lines, so a
+report taken straight after a fault shows what happened. Paste it to Claude with the song's
+name and what you heard.
+
+### If something is not right
+
+| What you see or hear | Try this |
+| --- | --- |
+| No sound at all | CQ's USB stereo channel fader up; first tab says READY; **Mixer on** ticked, Main not muted |
+| You hear yourself twice, or hollow | A CQ fader for socket 6, 7 or 8 is still up. Pull it right down |
+| Everything feels late | First tab: **Buffer** must be 64. Change it to 128 and back to 64 |
+| A switch does nothing | **Pedal (RC-600)** tab should say CONNECTED and the RC-600 should be on memory 65. On the **Looper** tab, see whether the switch's tile says **Effects:** |
+| Loops are early or late | First tab, **Measure latency**, then record the loop again |
+| A song loads with the wrong sounds | **Songs** tab: the left box shows that song's file, and any line it could not use is marked **PROBLEM:** |
+| Loops doubled or drifting | A second copy of an older build may be open. Close every Gig Rig window and open one |
 
 ## Stage 1: the latency and audio test
 
@@ -47,14 +119,14 @@ they arrive like this:
 
 1. Close Reaper and any other audio program. The CQ's driver only lets one program use it at a time.
 2. Switch the PA speakers off, or unplug them. The test plays short chirps through the main outputs.
-3. On the CQ, go to **CONFIG**, then the **USB/SD** tab, and check: **Sample Rate** 48 kHz, **Stream Mode** Multitrack, **Source Point** Post Preamp.
+3. On the CQ, go to **CONFIG**, then the **USB/SD** tab, and check: **Sample Rate** 96 kHz (the setting decided on 20 November 2026; the first tests were at 48 kHz), **Stream Mode** Multitrack, **Source Point** Post Preamp.
 
 ### Part A: measure the latency (about 5 minutes)
 
 1. Take an ordinary microphone cable. Plug one end into **MAIN OUT L** on the back of the CQ and the other end into the XLR socket of **input 10**. Any spare input from 1 to 10 works; the app finds out which one by itself.
 2. On the CQ, for that input channel: make sure **48V** is off, turn its **Gain** right down, and pull its **fader right down** (use the fader, not mute). That stops the sound going round in a circle inside the mixer.
 3. On the CQ, find the **USB** stereo channel (in the stereo inputs bank). Unmute it and set its fader to 0 dB. Set the main fader to 0 dB.
-4. Open the app. The box near the top should say **READY** and "Running: 48 kHz".
+4. Open the app. The box near the top should say **READY** and "Running: 96 kHz".
 5. Click **Measure every size, 8 to 256**. You will hear about 36 short chirps over 45 seconds or so. Leave everything alone until the box changes.
 6. The box now shows the round trip at each buffer size. Click **Copy report** (top right) and paste the result to Claude.
 
@@ -162,7 +234,7 @@ A track that listens to two input sockets records each into its own lane. The la
 
 ### Part B: side by side with the RC-600
 
-1. In the **Song** box choose one of your songs (they are read from your RC-600 backup): Dirty Slap, CCR Acoustic, Wicked Game, Dreams, Throw Arms, Boiz, Dancing Moon or Songbird. The switches, each track's inputs and any preset lengths are then the same as in that RC-600 memory. The panel at the bottom left lists them.
+1. In the **Song** box choose one of your songs (they are read from your RC-600 backup): Dirty Slap (the general set-up), Wicked Game, Dreams, Cocaine, Come As You, Yellow, Throw Arms, Never Tear U, Dancing Moon, Livin, Boiz, Lucky, Black & Gold, Kiss Me, Time After T or Zombie. The switches, each track's inputs and any preset lengths are then the same as in that RC-600 memory. The panel at the bottom left lists them.
 2. Play the song's loops the way you do on the RC-600. Note anything that feels different: a switch that does the wrong thing, a loop that ends in the wrong place, timing that feels early or late.
 3. Click **Copy looper results** and paste them to Claude with your notes.
 
@@ -326,9 +398,10 @@ So you can keep "Comp & GE7" as its own preset and stack a drive preset on top:
 1. Choose **Comp & GE7 for Electric** and press **Load**.
 2. Add the **Amp model** if you want it.
 3. Choose a drive preset (for example **Blues Drive + Klon Boost**) and press **Add to chain**.
-   The drives land after the compressor and EQ and in front of the amp.
+   The drives land after the compressor and EQ and in front of the amp. If a **Volume pedal**
+   sits right before the amp, they land in front of the pedal, as on your pedalboard.
 
-A chain holds at most 16 effects.
+A chain holds at most 18 effects.
 
 ### Trying them (about 15 minutes)
 
@@ -390,7 +463,7 @@ Same leads and set-up as before (Chain 2 into the amp model, listening on **Effe
    with Follow tempo ticked while you tap a tempo, and the **Tape delay**.
 4. For the vocal tape delay, a chain on the vocal socket (socket 6) works the same way.
 
-A chain holds 16 effects at most.
+A chain holds 18 effects at most.
 
 ### What to send Claude
 
@@ -818,10 +891,115 @@ Added after Tom's first test of the mixer.
 3. Try **Time** at A and at F: A closes quickly after each phrase, F slowly.
 4. Click **Warmth**, switch it on with **Drive** high, and move **Mix** between 0 and 100.
 
+### Part L: loops after the channel, the kick pad through the mixer, the stomp lane (15 minutes)
+
+Added after Tom's test of build 103.
+
+1. First tab: check **Buffer** says **64**. If the buffer is ever big enough to hear, a red line
+   on that tab now says so. The app also asks the CQ for the buffer you last chose every time
+   it starts, instead of leaving it to the CQ's driver.
+2. **Mixer** tab, **Mixer on**. Raise the Vocal channel's **Trim** until your singing sits in
+   the lighter band. Record a vocal loop and stop singing: the loop should sit in the same band.
+3. Switch the Vocal channel's compressor on and make it squeeze hard. Record three layers on
+   one track: the amber bar should move with your live singing only, not with the loops.
+4. **Kick pad** tab: **Plays on** should say **Socket 10: through its mixer channel, and into
+   loops**. Stomp the pad: on the Mixer tab the **Stomp** channel's meter moves. Shape it with
+   that channel's EQ and compressor.
+5. **Looper** tab: the **Stomp** input socket reads **socket 10** by itself while the kick pad is on. There is nothing to set.
+6. Load a song and record track 1 while playing the acoustic and stomping. The track tile says
+   **(kept apart)**. On playback, pull the Mixer's **Stomp** fader down: the looped kick goes,
+   the looped guitar stays.
+7. Wicked Game: track 2 records bass and stomp. Livin: track 1 records bass, acoustic and stomp.
+
+### Part M: an EQ into each mixer reverb and delay, and a song's own delay (10 minutes)
+
+1. **Mixer** tab, press **Vocal delay**. Send the Vocal channel to it and sing. Move **Into it:
+   band A** down and its **at** slider across your voice: the repeats thin out, your dry voice
+   does not change. **Into it: low shelf** and **high shelf** do the same for the bottom and top.
+2. Load a song. Press **Vocal delay** and tick **Belong to this song, not the venue**.
+3. Change **Effect (this song's)** to **Tape delay** and set its sliders.
+4. On the **Songs** tab press **Keep these sounds for this song**.
+5. Load another song: the venue's delay is back. Load the first again: its tape delay is back.
+6. The quick way: with a song loaded, press **Vocal delay**, change a slider, and press **Save to
+   this song** just under it. Only that delay's line in the song's file changes. **Save as
+   default** puts it in the default sounds instead, for every song without its own.
+
+### Part N: moving your songs' vocal reverb, vocal delay and acoustic room into the mixer (15 minutes)
+
+Do this at home, not before a gig. It rewrites your song files, after copying them all first.
+
+1. Start with the mixer **on** and your act and venue loaded, and play a song or two so you know
+   how the vocal and the acoustic sound now.
+2. **Songs** tab: press **Move reverbs and delays to the mixer**. The line under **What happened**
+   says how many song files changed and the name of the backup folder.
+3. Play the same songs. They should sound the same, but now a loop of your voice or the acoustic
+   is recorded dry and the reverb and delay come after it.
+4. The reverb and delay amounts are still each song's own. How much of them a room gets is the
+   send: on the **Mixer** tab press **Vocal**, and move **To Vocal plate** and **To Vocal delay**.
+   Press **Save** beside **Act** to keep the sends.
+5. If anything is wrong, press **Put the songs back** on the Songs tab. Every song file is as it
+   was before step 2.
+
+What it does not touch: delay throws, anything in the electric or bass chains, the acoustic's
+own short delay, and your presets. With the mixer switched **off** the moved reverbs and delays
+are not heard at all, so press **Put the songs back** before going back to the mixer off.
+
 ### What to send Claude
 
 Press **Copy report** (top right) and paste it, with anything that sounded or looked wrong.
 The mixer's lines are near the end, starting with **MIXER**.
+
+## The remote screen: the rig on your phone or tablet
+
+This build adds the control app, as a page the rig app serves to a phone, tablet or laptop on
+the same Wi-Fi. Nothing is installed on the phone. The full guide is
+[docs/remote.md](docs/remote.md). It is **off until you tick the box**, and off it changes nothing.
+
+It has six screens: **Looper** (the tracks and the switches), **Songs**, **Build** (the looper
+arrangement builder), **Effects**, **Mixer** and **Rig**.
+
+### Setting up (5 minutes)
+
+1. Put your phone or tablet on the same Wi-Fi as the laptop.
+2. Open GigRig. Click the **Remote screen** tab (the last tab).
+3. Tick **Let a phone or tablet on the same network control the rig**. If Windows asks whether
+   GigRig may use the network, click **Allow**.
+4. The tab shows an address like `http://192.168.1.20:8080`. Type it into the browser on the
+   phone or tablet, exactly as shown.
+5. The tab should now say **A phone, tablet or browser is connected**.
+
+### Part A: the looper and the songs (10 minutes)
+
+1. On the phone tap **Songs**, then tap **Wicked Game**. The app's own Song box should change too.
+2. Tap **Looper**. Touch switch **1**, play a bar or two, touch **1** again. Track 1 should go
+   red, then green, and you should hear the loop.
+3. Press the real RC-600 switches. The tracks on the phone should follow.
+4. Hold switch **1** for two seconds (undo). The track should show **UNDONE**.
+5. Tap **Clear all loops**, then **Clear all loops** again in the box that asks.
+
+### Part B: build a layout (15 minutes)
+
+1. Tap **Build**. The draft is a copy of the loaded song's layout.
+2. On **Tracks**, change what track 2 records (tap the source buttons) and set its length to **4 bars**.
+3. Tap **Switches**, tap switch **5**, and choose a different action and track. Tap **Close**.
+4. Tap **Try it** (and **Try it** again in the box that asks). Go to **Looper** and play it.
+5. Back on **Build**, tap **Save as a new song**, give it a name, tap **Save the new song**.
+6. On the laptop, open the Songs tab: the new song should be in the list.
+7. If you want the old layout back on a song you saved over: **Go back to the built-in layout**.
+
+### Part C: the mixer and effects (10 minutes, mixer on)
+
+1. Tap **Mixer**. Drag a fader: the same fader on the laptop's Mixer tab should move, and the
+   level you hear should change.
+2. Tap **Vocal plate** in the row above the faders. The faders are now the sends to that reverb.
+3. Tap a channel's name. Move its Trim and open one of its processing blocks.
+4. Tap **Effects**, choose a chain, open an effect and move a setting while you play.
+5. Turn the phone on its side and check every screen is still usable.
+
+### What to send Claude
+
+On the phone tap **Rig**, then **Copy report**, and paste it into the chat. Add anything that
+felt slow, small, confusing or wrong, and which phone or tablet it was on.
 
 ## The Device check tab
 
@@ -866,9 +1044,17 @@ GigRig --report report.txt      # write the device report, no window
 | `src/Pedal.*` | The RC-600's switches: CC numbers to switch names, and press, hold and double-press |
 | `src/PedalPanel.*` | The stage 2 tab, and the on-screen switch used by both new tabs |
 | `src/Looper.*` | The looper core: tracks, bar timing, overdub, undo, and the RC-600's switch functions and linked actions |
-| `src/TestSongs.cpp` | Song set-ups for the side-by-side test, taken from the RC-600 backup |
+| `src/TestSongs.cpp` | The built-in looper set-ups: Tom's songs from the RC-600 backup, and the fixtures the self-test uses |
+| `tools/rc600_songs.py` | Writes those set-ups from an RC-600 backup's DATA folder |
 | `src/LooperPanel.*` | The stage 3 tab |
 | `src/LooperSelfTest.cpp` | Checks for the pedal and the looper, with loop timing checked to the sample |
+| `src/SongBook.*`, `src/SongsPanel.*`, `src/SongSelfTest.cpp` | Songs calling up their sounds and switches, program changes, the Songs tab and its checks ([docs/songs.md](docs/songs.md)) |
+| `src/effects/` | Every effect, one folder each, with the shared interface, the chain and the standard checks ([docs/effects.md](docs/effects.md)) |
+| `src/EffectsRack.*`, `src/EffectsPanel.*`, `src/EffectsSelfTest.cpp` | The four effect chains inside the engine, presets, switch actions, the Effects tab and its checks |
+| `src/AmpModels.*`, `src/Responses.*` | The built-in amp models, and response files made from a capture |
+| `src/Mixer.*`, `src/MixerPanel.*`, `src/MixRecorder.*`, `src/MixerSelfTest.cpp` | The mixer, its tab, recording and its checks ([docs/mixer.md](docs/mixer.md)) |
+| `src/KickPad.*`, `src/KickPadPanel.*`, `src/KickPadSelfTest.cpp` | The kick pad test ([docs/kick-pad.md](docs/kick-pad.md)) |
+| `src/ReconnectWatch.h` | Notices a lost audio device and opens it again |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |
 | `src/DeviceCheckPanel.*` | The stage 0 tab |
