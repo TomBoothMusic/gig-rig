@@ -112,8 +112,17 @@ juce::String ExpressionInput::learningLine() const
     const juce::ScopedLock l (lock);
     int best = -1;
 
+    // The one that has been through the most different values: a pedal, not a switch going from 0 to 127.
+    const auto different = [this] (int cc)
+    {
+        int n = 0;
+        for (bool v : seen[(size_t) cc].values)
+            n += v ? 1 : 0;
+        return n;
+    };
+
     for (int cc = 0; cc < 128; ++cc)
-        if (seen[(size_t) cc].messages > 0 && (best < 0 || seen[(size_t) cc].high - seen[(size_t) cc].low > seen[(size_t) best].high - seen[(size_t) best].low))
+        if (seen[(size_t) cc].messages > 0 && (best < 0 || different (cc) > different (best)))
             best = cc;
 
     if (best < 0)
