@@ -37,8 +37,8 @@ recording loops in time at a gig.
 
 ## The screens
 
-On a phone or tablet the **right-hand edge of every screen is a strip to scroll by** (drawn slightly
-lighter). No slider or fader reaches into it, so a thumb there always scrolls and never moves a level.
+On a phone or tablet the **right-hand edge of every screen is a strip to scroll by** (it is
+the colour of the background). No slider or fader reaches into it, so a thumb there always scrolls and never moves a level.
 
 The seven buttons along the bottom (down the left side when a phone is on its side):
 

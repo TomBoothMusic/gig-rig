@@ -260,15 +260,13 @@ summary { cursor: pointer; color: var(--muted); }
 
 /* ---- a strip to scroll by (Tom, 27 Nov 2026). On a touch screen the right-hand edge of every
    screen and sheet holds no slider and no fader, so a thumb there always scrolls and never
-   moves a level. It is drawn slightly lighter so it can be found. A mouse needs none. */
+   moves a level. It is the colour of the background (Tom's choice). A mouse needs none. */
 :root { --scroll-strip: 0px; }
 @media (pointer: coarse) {
     :root { --scroll-strip: 40px; }
-    main { background: linear-gradient(to left, var(--panel) calc(var(--scroll-strip) + env(safe-area-inset-right, 0px)), transparent 0); }
     .screen { padding-right: calc(var(--gut-r) + var(--scroll-strip)); }
     .strips { margin-right: 0; padding-right: 4px; }
-    .sheet-body { padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + var(--scroll-strip));
-                  background: linear-gradient(to left, var(--panel2) var(--scroll-strip), transparent 0); }
+    .sheet-body { padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + var(--scroll-strip)); }
 }
 /* A narrow phone (360 wide): nothing may push the page wider than the screen. */
 .top-left { flex: 1 1 auto; } .top-right { flex: 0 1 auto; overflow: hidden; }
