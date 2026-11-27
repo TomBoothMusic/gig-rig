@@ -194,3 +194,13 @@ the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was 
 `Documents/GigRig/Kick sounds`: never commit one. Since 27 Nov 2026 the same tab can also listen
 to an input socket for a bare piezo pad (the cheap bench test of the pad that could replace the
 SPD::ONE): `KickPad::listen` on the audio thread, off unless a socket is chosen.
+
+## The controller's bench test program
+
+Built 28 Nov 2026 for Tom's first parts order (a Teensy 4.1, three of the twenty 1.54 inch
+screens, piezo discs). `firmware/bench-test/` is a PlatformIO project, separate from the app;
+CI's "Controller test program" job builds it into `GigRig-Controller-Test.hex` on the Releases
+page and can never hold up an app release. **`docs/bench-test.md` is the guide. Keep it true**,
+and keep its pin tables in step with Tom's own step-by-step page (the "Gig Rig bench tests"
+artifact in the project). CI proves it compiles and nothing more: it has not run on hardware
+until Tom says so. It is a test program, not the final board's controller program.
