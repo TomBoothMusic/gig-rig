@@ -349,6 +349,24 @@ void LooperPanel::slowUpdate()
 
 void LooperPanel::timerCallback()
 {
+    // The kick pad's kick joins a socket of its own (socket 10 unless changed). While the pad is
+    // on and the looper still listens for the stomp on the acoustic's socket (how it starts, from
+    // when the real stomp box shared the acoustic's lead), the stomp follows the kick, so loops
+    // record it on a lane of its own with nothing to set (Tom, 27 Nov 2026: it did not loop).
+    // A stomp socket chosen by hand, different from the acoustic's, is left alone.
+    if (const int kickSocket = engine.kick().getSocket(); engine.kick().isOn() && kickSocket >= 0 && kickSocket < 16)
+    {
+        const int stompId = socketBoxes[(int) LoopSource::stomp]->getSelectedId();
+
+        if (stompId != kickSocket + 1 && (stompId == socketBoxes[(int) LoopSource::acoustic]->getSelectedId() || stompId == noSocketId || stompId == followedKickId))
+        {
+            socketBoxes[(int) LoopSource::stomp]->setSelectedId (kickSocket + 1, juce::dontSendNotification);
+            pushOptions();
+        }
+
+        followedKickId = kickSocket + 1;
+    }
+
     ++ticks;
     snapshot = engine.looper().snapshot();
 

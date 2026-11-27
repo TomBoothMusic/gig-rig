@@ -108,8 +108,10 @@ Tom, 27 Nov 2026: the sound is good, fold it in.
    loops**. That is how it starts.
 2. On the **Mixer** tab, with **Mixer on**, the **Stomp** channel (socket 10) now carries the
    kick. Its EQ and compressor shape it, its fader sets its level.
-3. On the **Looper** tab, set the **Stomp** input socket to **10**. Until then loops do not
-   record the kick, and the Looper's report says so in a line starting **NOTE**.
+3. On the **Looper** tab the **Stomp** input socket follows the kick pad by itself (socket 10)
+   while the pad is on, so loops record the kick with nothing to set. Only a Stomp socket chosen
+   by hand, different from the acoustic's, is left alone; the Looper's report then says so in a
+   line starting **NOTE**.
 4. Every track in Tom's songs that hears the acoustic also hears the stomp (his rule). With the
    two on different sockets a loop keeps them apart, a lane each, and each comes back on its own
    mixer channel.
