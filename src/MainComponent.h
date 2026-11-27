@@ -10,6 +10,7 @@
 #include "LooperPanel.h"
 #include "MixerPanel.h"
 #include "PedalPanel.h"
+#include "RemotePanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
 
@@ -48,6 +49,9 @@ private:
     EffectsPanel effectsPanel { engine };
     MixerPanel mixerPanel { engine };
     AmpCapturePanel ampPanel { engine };
+    RemoteApi remoteApi { engine, pedal, songBook };        // the remote screen (docs/remote.md): what a phone or tablet can see and do
+    RemoteServer remoteServer { remoteApi };                // off until the Remote screen tab switches it on
+    RemotePanel remotePanel { remoteServer };
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 

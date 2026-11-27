@@ -733,6 +733,9 @@ void EffectsRack::loadStateText (const juce::String& text)
 
 void EffectsRack::saveState()
 {
+    if (! memoryOnDisk.load())
+        return;
+
     auto f = stateFile();
     f.getParentDirectory().createDirectory();
     f.replaceWithText (stateText());

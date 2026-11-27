@@ -53,7 +53,7 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`).
   Tom's presets, songs and mixer set-ups: `~/Documents/GigRig/`. Moving them from the laptop: `docs/linux-setup.md`, B4.
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
   `gnome-screenshot -f shot.png` can show what is on screen.
@@ -87,6 +87,20 @@ lines, an overlay on the venue; Tom's decision, 27 Nov 2026), and nothing else i
 **a song never changes the venue itself** (each effect's EQ, cuts and levels, the main output).
 Tom's split (27 Nov 2026): the song carries a reverb's or delay's own settings, the send level is
 the venue's choice. `moveToMixer` in `src/SongBook.cpp` (the Songs tab button) moves old songs over.
+
+## The remote screen (the phone and tablet control app)
+
+Built 27 Nov 2026; **`docs/remote.md` is the guide. Keep it true.** It is a web page (`remote/`,
+plain JavaScript, no libraries, built into the app) served by a small server inside the app
+(`src/RemoteServer.*`), which is **off by default and off must open no port**. `src/RemoteApi.*`
+turns the rig into JSON and JSON back into actions with no network in it; `src/LooperLayout.*`
+writes a song's own looper layout as `looper ...` lines in its song file (the words are saved on
+Tom's disk: never rename them, only add) for the arrangement builder. All checked by
+`src/RemoteSelfTest.cpp`. The page has a demo (`remote/demo.js`, a pretend rig) whose data
+`remote/demo-data.js` is made by `tools/remote_demo.py` from a running app: never edit it by
+hand, and capture it again when `RemoteApi::state` gains a part (the self-test says when).
+The demo's looper is a stand-in, never evidence about timing. Nothing in the remote screen may
+run on the audio thread, and the looper engine was not changed for it.
 
 ## Adding an effect
 

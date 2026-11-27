@@ -104,7 +104,7 @@ MainComponent::MainComponent()
     for (auto* c : std::initializer_list<juce::Component*> { &title, &subtitle, &copyButton, &tabs })
         addAndMakeVisible (c);
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad).
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 
@@ -118,6 +118,17 @@ MainComponent::MainComponent()
 
     engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + kickPanel.reportText(); };
 
+    // The remote screen: a phone or tablet on the same network. Its tab goes last so the tab numbers before it stay as they were.
+    tabs.addTab ("Remote screen", style::background, &remotePanel, false);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + remoteServer.reportText(); };
+    remoteApi.wholeReport = [this] { return devicePanel.reportText() + "\n" + engine.reportText(); };
+    remoteServer.onRigChanged = [this]
+    {
+        effectsPanel.refresh();
+        songsPanel.refresh();
+        mixerPanel.refresh();
+    };
+
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
     if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
@@ -130,6 +141,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    remoteServer.stop();
     engine.close();
 }
 

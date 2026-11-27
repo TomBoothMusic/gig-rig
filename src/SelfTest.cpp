@@ -12,6 +12,7 @@ void runLooperSelfTest (const std::function<void (bool, const juce::String&)>& c
 void runEffectsSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runSongSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runMixerSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
 {
@@ -43,6 +44,10 @@ namespace
 
 juce::String runSelfTest (bool& passed)
 {
+    // The checks build pretend rigs: none of them may write over this machine's own memory of the Mixer and Effects tabs.
+    Mixer::memoryOnDisk = false;
+    EffectsRack::memoryOnDisk = false;
+
     juce::StringArray log;
     int failures = 0;
 
@@ -533,6 +538,7 @@ juce::String runSelfTest (bool& passed)
     runEffectsSelfTest (check);
     runSongSelfTest (check);
     runMixerSelfTest (check);
+    runRemoteSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

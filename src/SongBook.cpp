@@ -1,4 +1,5 @@
 #include "SongBook.h"
+#include "LooperLayout.h"
 #include "effects/Registry.h"
 
 #include <map>
@@ -227,6 +228,10 @@ SongSounds SongSounds::fromText (const juce::String& text)
         {
             s.looper = value;
         }
+        else if (low.startsWith ("looper "))
+        {
+            s.layoutLines.add (line);       // the song's own looper layout; read by layout::fromLines when the song loads
+        }
         else if (low == "tempo")
         {
             s.tempo = value.getDoubleValue();
@@ -376,6 +381,13 @@ juce::String SongSounds::toText (const juce::String& title, const juce::StringAr
     if (program > 0)            t << "program = " << program << "\n";
     if (looper.isNotEmpty())    t << "looper = " << looper << "\n";
     if (tempo > 0.0)            t << "tempo = " << juce::String (tempo, 1) << "\n";
+
+    if (! layoutLines.isEmpty())
+    {
+        t << "# This song's own looper layout, written by the builder on the remote screen (docs/remote.md).\n";
+        for (const auto& l : layoutLines)
+            t << l << "\n";
+    }
 
     for (const auto& c : chains)
     {
@@ -1332,6 +1344,12 @@ void SongBook::rescan()
             continue;
         }
 
+        if (! sounds.layoutLines.isEmpty())
+        {
+            SongSetup scratch;
+            layout::fromLines (sounds.layoutLines, scratch, sounds.notUnderstood);
+        }
+
         if (const int at = entryNamed (name); at >= 0)
         {
             auto& e = entries[(size_t) at];
@@ -1390,30 +1408,140 @@ void SongBook::load (int index, const juce::String& why, bool withSounds)
         return;
 
     current = index;
-    const auto& e = entries[(size_t) index];
-    loadedSong = builtInSong (e.layout);
-
-    if (! e.builtIn)
-    {
-        std::memset (loadedSong.name, 0, sizeof (loadedSong.name));
-        e.name.copyToUTF8 (loadedSong.name, sizeof (loadedSong.name) - 1);
-        loadedSong.rcMemory = 0;
-    }
-
-    // The song's own "tempo =" line replaces the tempo saved in the RC-600 memory as the
-    // looper's guide (Yellow was saved at double speed, so its first loop counted twice the bars).
-    if (e.sounds.tempo > 0.0)
-    {
-        loadedSong.savedBpm = e.sounds.tempo;
-        loadedSong.tempoGuide = true;
-    }
-
+    loadedSong = layoutOf (index);
+    tried = false;
     engine.looper().setSong (loadedSong);
 
     if (withSounds)
         applySounds (why);
     else
         changed();
+}
+
+SongSetup SongBook::layoutOf (int index) const
+{
+    if (index < 0 || index >= numEntries())
+        return builtInSong (0);
+
+    const auto& e = entries[(size_t) index];
+    auto song = builtInSong (e.layout);
+
+    if (! e.builtIn)
+    {
+        std::memset (song.name, 0, sizeof (song.name));
+        e.name.copyToUTF8 (song.name, sizeof (song.name) - 1);
+        song.rcMemory = 0;
+    }
+
+    // The song's own looper lines (written by the builder on the remote screen) sit on top of
+    // the layout it started from. Lines that cannot be used were reported when the folder was read.
+    if (! e.sounds.layoutLines.isEmpty())
+    {
+        juce::StringArray ignored;
+        layout::fromLines (e.sounds.layoutLines, song, ignored);
+    }
+
+    // The song's own "tempo =" line replaces the tempo saved in the RC-600 memory as the
+    // looper's guide (Yellow was saved at double speed, so its first loop counted twice the bars).
+    if (e.sounds.tempo > 0.0)
+    {
+        song.savedBpm = e.sounds.tempo;
+        song.tempoGuide = true;
+    }
+
+    return song;
+}
+
+void SongBook::tryLayout (const SongSetup& wanted)
+{
+    auto song = wanted;
+    std::memcpy (song.name, loadedSong.name, sizeof (song.name));
+    song.rcMemory = loadedSong.rcMemory;
+    loadedSong = song;
+    tried = true;
+    engine.looper().setSong (loadedSong);
+    note = "Trying a looper layout for \"" + currentEntry().name + "\". Nothing is saved yet.";
+    changed();
+}
+
+juce::String SongBook::saveLayout (const SongSetup& wanted, bool withTempo)
+{
+    const auto e = currentEntry();
+    auto s = e.sounds;
+    s.notUnderstood.clear();
+    s.layoutLines = layout::toLines (wanted);
+
+    if (withTempo && wanted.savedBpm >= 30.0 && wanted.savedBpm <= 300.0)
+        s.tempo = wanted.savedBpm;
+
+    if (! e.hasFile)
+    {
+        if (! e.builtIn)
+            s.looper = builtInSong (e.layout).title();
+        if (! e.builtIn || e.program != builtInSong (e.layout).rcMemory)
+            s.program = e.program;
+    }
+
+    if (! writeSong (e.name, s))
+        return note = "Could not write the song's file in " + songFolder.getFullPathName();
+
+    // Was this very layout being tried? Then the looper already has it and the loops can stay.
+    const auto same = [] (const SongSetup& a, const SongSetup& b) { return layout::toLines (a) == layout::toLines (b) && juce::approximatelyEqual (a.savedBpm, b.savedBpm); };
+    auto mine = wanted;
+    if (! withTempo)
+        mine.savedBpm = loadedSong.savedBpm;
+    const bool keepLoops = tried && same (mine, loadedSong);
+
+    rescan();
+
+    if (keepLoops)
+    {
+        tried = false;
+        note = "Saved the looper layout for \"" + e.name + "\". The loops were left alone.";
+        changed();
+    }
+    else
+    {
+        load (current, "its looper layout was saved", false);
+        note = "Saved the looper layout for \"" + e.name + "\".";
+        changed();
+    }
+
+    return {};
+}
+
+juce::String SongBook::addEntryWithLayout (const juce::String& wanted, int program, const SongSetup& song, bool withTempo)
+{
+    if (const auto error = addEntry (wanted, program); error.isNotEmpty())
+        return error;
+
+    return saveLayout (song, withTempo);
+}
+
+juce::String SongBook::forgetLayout()
+{
+    const auto e = currentEntry();
+
+    if (e.sounds.layoutLines.isEmpty())
+    {
+        if (tried)
+            load (current, "the tried layout was dropped", false);
+
+        return note = "\"" + e.name + "\" has no looper layout of its own in its file.";
+    }
+
+    auto s = e.sounds;
+    s.notUnderstood.clear();
+    s.layoutLines.clear();
+
+    if (! writeSong (e.name, s))
+        return note = "Could not write the song's file in " + songFolder.getFullPathName();
+
+    rescan();
+    load (current, "its own looper layout was taken out", false);
+    note = "\"" + e.name + "\" is back on the looper layout it had before.";
+    changed();
+    return {};
 }
 
 void SongBook::applySounds (const juce::String& why)
@@ -1671,6 +1799,7 @@ juce::String SongBook::keepForCurrent()
         s.looper = builtInSong (e.layout).title();
 
     s.tempo = e.sounds.tempo;
+    s.layoutLines = e.sounds.layoutLines;
 
     if (! writeSong (e.name, s))
         return note = "Could not write the song's file in " + songFolder.getFullPathName();
@@ -1966,8 +2095,9 @@ juce::String SongBook::forgetCurrent()
     s.program = e.sounds.program;
     s.tempo = e.sounds.tempo;
     s.looper = e.sounds.looper;
+    s.layoutLines = e.sounds.layoutLines;
     const auto file = songFolder.getChildFile (juce::File::createLegalFileName (e.name) + ".txt");
-    const bool ok = e.builtIn && s.program == 0 ? file.deleteFile() : writeSong (e.name, s);
+    const bool ok = e.builtIn && s.program == 0 && s.layoutLines.isEmpty() ? file.deleteFile() : writeSong (e.name, s);
 
     if (! ok)
         return note = "Could not change " + file.getFullPathName();
@@ -2003,6 +2133,8 @@ juce::String SongBook::addEntry (const juce::String& wanted, int program)
 
     s.program = program;
     s.looper = builtInSong (currentEntry().layout).title();
+    s.layoutLines = currentEntry().sounds.layoutLines;      // a copy of a song with its own layout keeps that layout
+    s.tempo = currentEntry().sounds.tempo;
 
     if (! writeSong (name, s))
         return "Could not write the new entry in " + songFolder.getFullPathName();
