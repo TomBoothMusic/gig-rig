@@ -113,6 +113,9 @@ target_sources(GigRig PRIVATE
     src/Responses.cpp
     src/EffectsSelfTest.cpp
     src/ExpressionPedal.cpp
+    src/Tuner.cpp
+    src/TunerStrip.cpp
+    src/TunerSelfTest.cpp
     src/ExpressionSelfTest.cpp
     src/GlitchWatch.cpp
     src/KickPad.cpp

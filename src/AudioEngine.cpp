@@ -356,6 +356,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     hotSamples = 0;
     kickCore.prepare (rate);
     breakCore.prepare (rate, scratchSize);
+    tunerCore.prepare (rate);
     resetDropoutStats();
 }
 
@@ -834,6 +835,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         // The break music (between sets): with the mixer on it joins the main output, after the
         // main mix is recorded; with it off it goes straight to a pair of returns. Silent, it adds nothing.
         breakCore.hear (inputs, numIns, numSamples);
+        tunerCore.hear (inputs, numIns, numSamples);       // off, this reads one flag and returns
         const bool music = ! fxRack.isAmpCapturing() && breakCore.render (numSamples);
         const auto* afterEffects = fxRack.looperInputs (inputs, numIns);
 
@@ -868,6 +870,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         if (mixing)
         {
             mixCore.setTempo (fxRack.effectsTempo());
+            mixCore.setTuning (tunerCore.wantsSilence());
             mixCore.setBreakFeed (music ? breakCore.left() : nullptr, music ? breakCore.right() : nullptr);
             mixCore.process (inputs, afterEffects, numIns, numSamples);
             mixCore.addOutputs (output, numSamples);

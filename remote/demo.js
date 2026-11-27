@@ -16,7 +16,7 @@ GR.makeDemoRig = (data) =>
     const copy = GR.copy;
     const now = () => performance.now();
     const rig = { changed: true, state: null };
-    let lo, perSong, commands = 0;
+    let lo, perSong, commands = 0, bm, tuner;
 
     // Track states, as in the rig: 0 empty, 1 armed, 2 recording, 3 closing, 4 playing, 5 overdubbing, 6 stopping, 7 stopped
     const freshLooper = () => ({ bank: 0, cur: 0, bar: 0, t0: 0, tracks: Array.from ({ length: 6 }, () => ({ s: 0, a: false, d: false, u: false, len: 0, start: 0, at: 0, next: 4, last: 0, downAt: 0, hold: 0 })) });
@@ -29,6 +29,11 @@ GR.makeDemoRig = (data) =>
         rig.state.rig = { open: true, device: 'Pretend audio (the demo)', rate: 96000, buffer: 64, pedal: false, warnings: [] };
         perSong = copy (data.songs);
         lo = freshLooper();
+        // The demo has no files, so it pretends three mixes are in the break music folder.
+        rig.state.breakMusic.mixes = ['Dinner jazz', 'Sunset chill', 'Dance floor warm-up'];
+        rig.state.breakMusic.mix = '';
+        bm = { playing: false, up: false, fade: 0, at: now(), pos: 0, knobOnBreak: false, venueAt: -1, faded: 0 };
+        tuner = { on: false, since: 0 };
         rig.changed = true;
     };
 
@@ -172,10 +177,16 @@ GR.makeDemoRig = (data) =>
         else if (what)                  act (track, what, 0);
     };
 
+    const startedPlaying = (kind) =>
+    {
+        if (st().breakMusic[kind] && bm.playing && bm.up) { breakStep(); bm.up = false; bm.faded++; bm.knobOnBreak = false; }
+    };
+
     const pedal = (sw, down) =>
     {
         clearTimeout (press.timers[sw]);
         if (! down) return;
+        startedPlaying ('onSwitch');
 
         const bank = lo.bank;
         fire (sw >= 9 ? 42 + (sw - 9) : 13 + bank * 9 + sw, 0);
@@ -206,10 +217,54 @@ GR.makeDemoRig = (data) =>
         });
     };
 
+    // ------------------------------------------------------------ the pretend break music, knob and tuner
+
+    function breakStep()
+    {
+        const t = now(), b = st().breakMusic, dt = (t - bm.at) / 1000;
+        bm.at = t;
+        if (! bm.playing) { bm.fade = 0; return; }
+        bm.pos = (bm.pos + dt) % 3483;
+        bm.fade = bm.up ? Math.min (1, bm.fade + dt / Math.max (0.2, b.fadeUp)) : Math.max (0, bm.fade - dt / Math.max (0.2, b.fadeDown));
+    }
+
+    const clock = (sec) => Math.floor (sec / 60) + ':' + String (Math.floor (sec % 60)).padStart (2, '0');
+
+    const knobScreen = () =>
+    {
+        const m = st().mixer, b = st().breakMusic;
+        if (bm.knobOnBreak) return 'Break music: ' + (bm.playing ? (bm.up ? 'up' : 'faded down') : 'stopped') + ', level ' + b.level + ' dB. Turn = level, push = up or down, hold = back to the venue.';
+        return bm.venueAt >= 0 && m.venues[bm.venueAt] ? 'Venue: push to load "' + m.venues[bm.venueAt] + '".' : 'Venue in use: ' + (m.venue || 'none loaded') + '.';
+    };
+
+    const knob = (what) =>
+    {
+        const m = st().mixer, b = st().breakMusic;
+
+        if (what === 'hold')    { bm.knobOnBreak = ! bm.knobOnBreak; bm.venueAt = -1; return ok (knobScreen()); }
+        if (what !== 'left' && what !== 'right' && what !== 'push') return fail ('The knob can go left or right, be pushed or be held.');
+
+        if (bm.knobOnBreak)
+        {
+            breakStep();
+            if (what === 'push')
+            {
+                if (! bm.playing) { if (! b.mix) return fail ('Choose a mix and press Play first.'); bm.playing = true; bm.up = true; }
+                else bm.up = ! bm.up;
+            }
+            else { b.level = Math.min (b.maxLevel, Math.max (b.minLevel, b.level + (what === 'right' ? 1 : -1))); if (what === 'right' && bm.playing) bm.up = true; }
+        }
+        else if (what === 'push')   { if (bm.venueAt >= 0 && m.venues[bm.venueAt]) { m.venue = m.venues[bm.venueAt]; m.venueChanged = false; bm.venueAt = -1; } }
+        else if (m.venues.length)   bm.venueAt = (Math.max (0, bm.venueAt) + (what === 'right' ? 1 : -1) + (bm.venueAt < 0 ? (what === 'right' ? 0 : 1) : 0) + m.venues.length) % m.venues.length;
+
+        return ok (knobScreen());
+    };
+
     rig.live = () =>
     {
         const t = now();
         tick (t);
+        breakStep();
         const beats = lay().beats || 4, beatMs = lo.bar > 0 ? lo.bar / beats : 0;
         const since = beatMs > 0 ? t - lo.t0 : 0;
         const wobble = (seed) => 0.55 + 0.4 * Math.abs (Math.sin (t / 130 + seed * 1.7)) * Math.abs (Math.sin (t / 471 + seed));
@@ -235,6 +290,19 @@ GR.makeDemoRig = (data) =>
             load: 0.21, late: 0, open: true,
         };
 
+        const b = st().breakMusic;
+        live.breakMusic = { playing: bm.playing, up: bm.up, fade: Math.round (bm.fade * bm.fade * 1000) / 1000, pos: bm.pos, len: 3483, mix: b.mix, level: b.level, knobOnBreak: bm.knobOnBreak, knob: knobScreen(),
+            line: ! bm.playing ? (b.mix ? 'Stopped. "' + b.mix + '" will carry on from ' + clock (bm.pos) + '.' : 'Nothing chosen yet.')
+                : 'Playing "' + b.mix + '": ' + clock (bm.pos) + ' of 58:03, ' + (bm.up ? 'up' : 'faded down (it comes back by hand only)') + ', level ' + b.level + ' dB' };
+
+        // A pretend string being tuned: it starts flat and is brought up to pitch, again and again.
+        const tuning = (t - tuner.since) / 1000, turn = tuning % 9;
+        const cents = turn < 1 ? 0 : turn < 6 ? -32 * Math.exp (-(turn - 1) * 0.9) + 1.2 * Math.sin (t / 300) : 0.6 * Math.sin (t / 400);
+        const string = [['E2', 82.41], ['A2', 110], ['D3', 146.83], ['G3', 196], ['B3', 246.94], ['E4', 329.63]][Math.floor (tuning / 9) % 6];
+        const ref = st().tuner.reference / 440;
+        live.tuner = { on: tuner.on, heard: tuner.on && turn >= 1, name: tuner.on && turn >= 1 ? string[0] : '', cents: tuner.on && turn >= 1 ? Math.round (cents * 10) / 10 : 0,
+                       hz: tuner.on && turn >= 1 ? Math.round (string[1] * ref * Math.pow (2, cents / 1200) * 10) / 10 : 0, socket: tuner.on ? (st().tuner.socket >= 0 ? st().tuner.socket : st().effects.chains[0].socket - 1) : -1 };
+
         const m = st().mixer;
 
         if (m.on)
@@ -247,7 +315,7 @@ GR.makeDemoRig = (data) =>
             {
                 const dry = k === 0 ? sum ((c) => c.fader) : sum ((c) => c.mon[k - 1]);
                 const wet = m.fx.reduce ((a, e, f) => a + fx[f] * gain (k === 0 ? e.ret : e.mon[k - 1]), 0);
-                const v = o.mute ? 0 : Math.min (1, (dry + wet) * gain (o.level));
+                const v = o.mute || (k === 0 && tuner.on && st().tuner.mutes) ? 0 : Math.min (1, (dry + wet) * gain (o.level));
                 return [v, o.mono ? v : v * 0.93];
             });
 
@@ -291,6 +359,7 @@ GR.makeDemoRig = (data) =>
         if (p.effects) s.effects = copy (p.effects);
         if (p.switches) s.switches = copy (p.switches);
         clearAll();
+        startedPlaying ('onSong');
         return ok();
     };
 
@@ -361,6 +430,85 @@ GR.makeDemoRig = (data) =>
             case 'fx.preset':           return ok ('On the rig this loads the preset "' + c.name + '". The demo does not have the preset files, so nothing changed.');
             case 'fx.slotOn':           return setBlock ((fx.chains[c.chain] || { slots: [] }).slots[c.slot], 'on', c.on);
             case 'fx.param':            return setBlock ((fx.chains[c.chain] || { slots: [] }).slots[c.slot], c.id, c.value);
+            case 'fx.add':
+            {
+                const ch = fx.chains[c.chain], type = s.fxCatalogue.find ((e) => e.id === c.type);
+                if (! ch) return fail ('There is no chain with that number.');
+                if (! type) return fail ('There is no effect called "' + c.type + '" to add.');
+                if (ch.slots.length >= s.fxMaxSlots) return fail ('This chain is full: it holds ' + s.fxMaxSlots + ' effects. Remove one first.');
+                const at = Math.min (ch.slots.length, Math.max (0, c.at === undefined ? ch.slots.length : Number (c.at)));
+                const v = {};
+                ((s.types[c.type] || {}).params || []).forEach ((p) => { v[p.id] = p.def; });
+                ch.slots.splice (at, 0, { type: c.type, on: true, v });
+                return ok ('Added at place ' + (at + 1) + '.');
+            }
+            case 'fx.remove':
+            case 'fx.move':
+            {
+                const ch = fx.chains[c.chain];
+                if (! ch) return fail ('There is no chain with that number.');
+                if (! ch.slots[c.slot]) return fail ('That effect is not there any more.');
+                if (op === 'fx.remove') { ch.slots.splice (c.slot, 1); return ok(); }
+                if (! (c.to >= 0 && c.to < ch.slots.length)) return fail ('It is already at that end of the chain.');
+                ch.slots.splice (c.to, 0, ch.slots.splice (c.slot, 1)[0]);
+                return ok();
+            }
+            case 'fx.save':
+            {
+                const ch = fx.chains[c.chain], name = String (c.name || '').trim();
+                if (! ch) return fail ('There is no chain with that number.');
+                if (! name) return fail ('Type a name for the preset first.');
+                if (! fx.presets.includes (name)) { fx.presets.push (name); fx.presets.sort(); }
+                ch.recipe = [name];
+                return ok ('Saved the preset "' + name + '". (The demo does not write files, so loading it back only says what would happen.)');
+            }
+            case 'fx.update':
+            {
+                const ch = fx.chains[c.chain];
+                if (! ch) return fail ('There is no chain with that number.');
+                return ok (ch.recipe.length ? 'On the rig this saves the changes back into ' + ch.recipe.join (', ') + '. The demo does not have the preset files, so nothing was saved.'
+                                            : 'Nothing was saved: this chain was not built from presets.');
+            }
+            case 'mix.save':
+            {
+                const name = String (c.name || '').trim(), list = { act: m.acts, venue: m.venues, monitors: m.monitorSets }[c.kind];
+                if (! name) return fail ('Type a name to save it under first.');
+                if (! list) return fail ('There is no kind of preset called "' + c.kind + '".');
+                if (! list.includes (name)) { list.push (name); list.sort(); }
+                if (c.kind === 'act') { m.act = name; m.actChanged = false; } else if (c.kind === 'venue') { m.venue = name; m.venueChanged = false; } else { m.monitors = name; m.monitorsChanged = false; }
+                return ok ('Saved the ' + (c.kind === 'monitors' ? 'monitor set-up' : c.kind) + ' "' + name + '". (In the demo it lasts until the demo starts again.)');
+            }
+            case 'break.play':
+            {
+                const b = s.breakMusic, name = c.name || b.mix;
+                if (! b.mixes.includes (name)) return fail ('There is no mix called "' + name + '" in the break music folder.');
+                breakStep();
+                if (name !== b.mix || c.fromStart) bm.pos = 0;
+                b.mix = name; bm.playing = true; bm.up = true;
+                return ok();
+            }
+            case 'break.stop':          breakStep(); bm.playing = false; bm.up = false; return ok();
+            case 'break.up':            breakStep(); if (bm.playing) bm.up = true; return ok();
+            case 'break.down':          breakStep(); bm.up = false; return ok();
+            case 'break.level':         s.breakMusic.level = num (c.value, s.breakMusic.minLevel, s.breakMusic.maxLevel); return ok();
+            case 'break.set':
+            {
+                const b = s.breakMusic, k = c.key;
+                if (k === 'fadeDown' || k === 'fadeUp') b[k] = num (c.value, 0.2, 15);
+                else if (k === 'onSwitch' || k === 'onSong' || k === 'onSound') b[k] = !! c.value;
+                else if (k === 'soundDb') b.soundDb = num (c.value, -60, 0);
+                else return fail ('The break music has no "' + k + '".');
+                return ok();
+            }
+            case 'knob':                return knob (c.do);
+            case 'tuner.on':            tuner.on = !! c.on; tuner.since = now(); return ok();
+            case 'tuner.set':
+            {
+                const t = s.tuner, k = c.key;
+                if (k === 'socket') t.socket = Math.round (num (c.value, -1, 31)); else if (k === 'reference') t.reference = num (c.value, t.minReference, t.maxReference);
+                else if (k === 'mutes') t.mutes = !! c.value; else return fail ('The tuner has no "' + k + '".');
+                return ok();
+            }
             case 'mix.on':              m.on = !! c.on; return ok();
             case 'mix.ch':
             {

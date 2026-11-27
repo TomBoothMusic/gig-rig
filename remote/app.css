@@ -50,6 +50,7 @@ main { grid-area: main; overflow-y: auto; overflow-x: hidden; min-height: 0; -we
 .ico-build   { --m: linear-gradient(90deg, #000 0 6px, transparent 6px 8px, #000 8px 14px, transparent 14px 16px, #000 16px 22px); }
 .ico-effects { --m: linear-gradient(90deg, transparent 0 4px, #000 4px 18px, transparent 18px); }
 .ico-mixer   { --m: linear-gradient(90deg, #000 0 3px, transparent 3px 6px, #000 6px 9px, transparent 9px 13px, #000 13px 16px, transparent 16px 19px, #000 19px 22px); }
+.ico-tools   { --m: radial-gradient(circle at 50% 100%, #000 0 4px, transparent 4.5px), conic-gradient(from -60deg at 50% 100%, #000 0 4deg, transparent 4deg 116deg, #000 116deg 120deg, transparent 120deg), linear-gradient(#000 0 2px, transparent 2px); }
 .ico-rig     { --m: linear-gradient(#000 0 14px); border-radius: 4px; }
 
 /* A phone on its side: the tabs move to the left edge so the screen keeps its height. */
@@ -239,3 +240,20 @@ summary { cursor: pointer; color: var(--muted); }
          font-weight: 600; max-width: min(92%, 560px); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 30; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); } .toast.bad { background: var(--bad); color: #fff; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- Tools: the tuner, the break music, the knob ---- */
+.block-tools { grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
+.tuner { display: grid; grid-template-columns: minmax(84px, auto) 1fr; gap: 4px 14px; align-items: center; }
+.tuner.off { opacity: .45; }
+.tuner-note { font-size: 54px; font-weight: 800; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.tuner-note.good { color: var(--ok); }
+.tuner-bar { position: relative; height: 34px; border-radius: 8px; background: var(--raise);
+    background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%); }
+.tuner-bar b { position: absolute; left: 47%; width: 6%; top: 0; bottom: 0; background: color-mix(in srgb, var(--ok) 30%, transparent); }
+.tuner-bar i { position: absolute; top: -4px; bottom: -4px; width: 8px; margin-left: -4px; border-radius: 4px; left: 50%; background: var(--muted); transition: left .08s linear; }
+.tuner-bar i.good { background: var(--ok); } .tuner-bar i.near { background: var(--warn); } .tuner-bar i.far { background: var(--bad); } .tuner-bar i.rest { opacity: .35; }
+.tuner-words { grid-column: 1 / -1; min-height: 1.3em; }
+.tag.ok { background: var(--ok); color: #04200f; }
+.break-fade { height: 6px; border-radius: 3px; background: var(--raise); overflow: hidden; } .break-fade i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s linear; }
+.knob-line { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--raise); border-radius: 8px; padding: 8px 10px; min-height: 2.2em; overflow-wrap: anywhere; }
+.field.grow { flex: 1 1 200px; }

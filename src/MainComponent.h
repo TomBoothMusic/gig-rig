@@ -15,6 +15,7 @@
 #include "RemotePanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
+#include "TunerStrip.h"
 
 namespace gigrig
 {
@@ -56,6 +57,7 @@ private:
     RemoteServer remoteServer { remoteApi };                // off until the Remote screen tab switches it on
     RemotePanel remotePanel { remoteServer };
     BreakMusicPanel breakPanel { engine };
+    TunerStrip tunerStrip { engine };                       // the tuner, in the header beside Copy report
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 

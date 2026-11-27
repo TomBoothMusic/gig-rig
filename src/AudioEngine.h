@@ -3,6 +3,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 
 #include "BreakMusic.h"
+#include "Tuner.h"
 #include "EffectsRack.h"
 #include "GlitchWatch.h"
 #include "KickPad.h"
@@ -236,6 +237,7 @@ public:
 
     /** The break music between sets (docs/break-music.md), and the knob that works it and the venue presets (ENC 5). */
     BreakMusic& breakMusic() noexcept               { return breakCore; }
+    Tuner& tuner() noexcept                         { return tunerCore; }
     VenueKnob& venueKnob() noexcept                 { return knob; }
 
     //==============================================================================
@@ -320,6 +322,7 @@ private:
     double loopTrimMs = 0.0;
     KickPad kickCore;
     BreakMusic breakCore;
+    Tuner tunerCore;
     VenueKnob knob { mixCore, breakCore };
 
     // Measured corrections from this and earlier runs, kept in a small file so the latency

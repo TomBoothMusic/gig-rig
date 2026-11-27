@@ -145,6 +145,13 @@ MainComponent::MainComponent()
     engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + breakPanel.reportText(); };
     songBook.onLoaded = [this] { engine.breakMusic().startedPlaying (BreakMusic::Started::song); };
 
+    // The tuner: in the header, so it is there whichever tab is showing.
+    if (Tuner::memoryOnDisk.load() && Tuner::stateFile().existsAsFile())
+        engine.tuner().loadStateText (Tuner::stateFile().loadFileAsString());
+
+    addAndMakeVisible (tunerStrip);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + engine.tuner().reportText(); };
+
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
     if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
@@ -236,6 +243,8 @@ void MainComponent::resized()
 
     auto header = area.removeFromTop (52);
     copyButton.setBounds (header.removeFromRight (120).reduced (0, 9));
+    header.removeFromRight (10);
+    tunerStrip.setBounds (header.removeFromRight (juce::jmin (540, header.getWidth() - 330)));
     title.setBounds (header.removeFromTop (30));
     subtitle.setBounds (header);
 

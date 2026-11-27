@@ -151,6 +151,12 @@ std::vector<int> slotOwners (const juce::StringArray& recipe, const PresetLoader
     Returns a line for the screen. */
 juce::String saveBackToPresets (EffectsRack&, int chain, const juce::File& presetFolder);
 
+/** "Save" on the Effects tab and on the remote screen: writes a chain as it is now as one preset
+    file, and makes that preset what the chain is built from. Refuses (and says why) to save a
+    chain stacked from several presets under the name of one of them: the others' effects would
+    end up inside it, and every song would get them twice. Sets 'saved' and returns a line for the screen. */
+juce::String saveChainAsPreset (EffectsRack&, int chain, const juce::File& presetFolder, const juce::String& typedName, bool& saved);
+
 /** Reads presets from a folder by name. */
 PresetLoader presetLoaderFor (const juce::File& presetFolder);
 

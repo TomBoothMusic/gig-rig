@@ -1,6 +1,7 @@
 #include "RemoteServer.h"
 #include "LooperLayout.h"
 #include "BinaryData.h"
+#include "effects/Registry.h"
 
 namespace gigrig
 {
@@ -221,6 +222,154 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
         check (! fine (cmd ("{\"op\":\"fx.param\",\"chain\":50,\"slot\":0,\"id\":\"drive\",\"value\":3}")) && ! fine (cmd ("{\"op\":\"self.destruct\"}")) && ! fine (cmd ("[1,2,3]"))
                  && cmd ("{\"op\":\"self.destruct\"}")["error"].toString().contains ("self.destruct"),
                "remote: a chain that is not there, an order this build does not know, and nonsense are all refused with a reason");
+
+
+        // ---- phase 2 (27 Nov 2026): the row of effects, presets, mixer set-ups, break music, the knob, the tuner ----
+        {
+            auto& rack = engine.effects();
+            const auto slotsOf = [&rack] { return rack.chain (0).model().slots; };
+            const auto before0 = slotsOf();
+            const auto st = api.state();
+            const auto firstType = st["fxCatalogue"][0]["id"].toString();
+            check (st["fxCatalogue"].size() == (int) fx::effectTypes().size() && (int) st["fxMaxSlots"] == fx::Chain::maxSlots && firstType.isNotEmpty()
+                     && st["fxCatalogue"][0].hasProperty ("name") && st["fxCatalogue"][0].hasProperty ("group"),
+                   "remote: the state lists every effect that can be added and how many a chain holds");
+
+            auto added = cmd ("{\"op\":\"fx.add\",\"chain\":0,\"type\":\"boost\",\"at\":0}");
+            auto afterAdd = slotsOf();
+            const bool addedFirst = fine (added) && afterAdd.size() == before0.size() + 1 && afterAdd[0].type == "boost" && afterAdd[0].on;
+            cmd ("{\"op\":\"fx.add\",\"chain\":0,\"type\":\"tremolo\"}");
+            afterAdd = slotsOf();
+            check (addedFirst && afterAdd.size() == before0.size() + 2 && afterAdd.back().type == "tremolo" && ! fine (cmd ("{\"op\":\"fx.add\",\"chain\":0,\"type\":\"flux capacitor\"}")),
+                   "remote: an effect is added where the page says (or at the end), switched on, and a type that does not exist is refused");
+
+            // Its settings travel with it when it moves.
+            struct First { juce::String id; float min = 0.0f, max = 1.0f; };
+            const auto firstParam = [&api] (const std::string& type)
+            {
+                const auto p = api.state()["types"][juce::Identifier (juce::String (type))]["params"][0];
+                return First { p["id"].toString(), (float) (double) p["min"], (float) (double) p["max"] };
+            };
+            const auto boostParam = firstParam ("boost");
+            cmd ("{\"op\":\"fx.param\",\"chain\":0,\"slot\":0,\"id\":\"" + boostParam.id + "\",\"value\":" + juce::String (boostParam.max) + "}");
+            const int last = (int) slotsOf().size() - 1;
+            auto moved = cmd ("{\"op\":\"fx.move\",\"chain\":0,\"slot\":0,\"to\":" + juce::String (last) + "}");
+            auto afterMove = slotsOf();
+            const bool movedOk = fine (moved) && afterMove.back().type == "boost" && afterMove[(size_t) last - 1].type == "tremolo"
+                                 && std::abs (afterMove.back().param (boostParam.id.toStdString(), -999.0f) - boostParam.max) < 1.0e-4f;
+            check (movedOk && ! fine (cmd ("{\"op\":\"fx.move\",\"chain\":0,\"slot\":0,\"to\":99}")) && ! fine (cmd ("{\"op\":\"fx.move\",\"chain\":0,\"slot\":99,\"to\":0}")),
+                   "remote: an effect moves along the chain with its settings, and a move off the end is refused");
+
+            auto removed = cmd ("{\"op\":\"fx.remove\",\"chain\":0,\"slot\":" + juce::String (last) + "}");
+            check (fine (removed) && slotsOf().size() == before0.size() + 1 && slotsOf().back().type == "tremolo" && ! fine (cmd ("{\"op\":\"fx.remove\",\"chain\":0,\"slot\":99}")),
+                   "remote: an effect is removed, and one that is not there is refused");
+
+            for (int i = 0; i < fx::Chain::maxSlots + 2; ++i)
+                cmd ("{\"op\":\"fx.add\",\"chain\":0,\"type\":\"boost\"}");
+            check ((int) slotsOf().size() == fx::Chain::maxSlots && cmd ("{\"op\":\"fx.add\",\"chain\":0,\"type\":\"boost\"}")["error"].toString().contains ("full"),
+                   "remote: a full chain refuses another effect and says why");
+            while ((int) slotsOf().size() > 2)
+                cmd ("{\"op\":\"fx.remove\",\"chain\":0,\"slot\":0}");
+
+            auto saved = cmd ("{\"op\":\"fx.save\",\"chain\":0,\"name\":\"Remote test sound\"}");
+            const auto presetFile = presetDir.getChildFile ("Remote test sound.txt");
+            const bool savedOk = fine (saved) && presetFile.existsAsFile() && presetFile.loadFileAsString().contains ("boost") && ! fine (cmd ("{\"op\":\"fx.save\",\"chain\":0,\"name\":\"  \"}"));
+            cmd ("{\"op\":\"fx.remove\",\"chain\":0,\"slot\":0}");
+            const bool gone = slotsOf().size() == 1;
+            auto loaded = cmd ("{\"op\":\"fx.preset\",\"chain\":0,\"name\":\"Remote test sound\"}");
+            check (savedOk && gone && fine (loaded) && slotsOf().size() == 2 && juce::JSON::toString (api.state()["effects"]["presets"]).contains ("Remote test sound"),
+                   "remote: a chain is saved as a preset under a typed name, a blank name is refused, and the preset loads back ("
+                   + juce::String (savedOk ? "" : "not saved: " + saved["error"].toString() + " ") + (gone ? "" : "not removed ") + (fine (loaded) ? "" : "not loaded ") + juce::String ((int) slotsOf().size()) + " effects)");
+
+            // Update its presets: a change made on the page goes back into the preset the chain was made from.
+            const auto p0 = firstParam (slotsOf()[0].type);
+            cmd ("{\"op\":\"fx.param\",\"chain\":0,\"slot\":0,\"id\":\"" + p0.id + "\",\"value\":" + juce::String (p0.min) + "}");
+            cmd ("{\"op\":\"fx.param\",\"chain\":0,\"slot\":1,\"id\":\"" + firstParam (slotsOf()[1].type).id + "\",\"value\":" + juce::String (firstParam (slotsOf()[1].type).max) + "}");
+            const auto textBefore = presetFile.loadFileAsString();
+            auto updated = cmd ("{\"op\":\"fx.update\",\"chain\":0}");
+            check (fine (updated) && presetFile.loadFileAsString() != textBefore, "remote: 'update its presets' writes the chain's changes back into the preset it was made from (" + updated["note"].toString() + ")");
+        }
+
+        {
+            cmd ("{\"op\":\"mix.ch\",\"c\":3,\"key\":\"fader\",\"value\":-7.5}");
+            auto a = cmd ("{\"op\":\"mix.save\",\"kind\":\"act\",\"name\":\"Remote act\"}");
+            auto v = cmd ("{\"op\":\"mix.save\",\"kind\":\"venue\",\"name\":\"Remote venue\"}");
+            auto m = cmd ("{\"op\":\"mix.save\",\"kind\":\"monitors\",\"name\":\"Remote monitors\"}");
+            cmd ("{\"op\":\"mix.ch\",\"c\":3,\"key\":\"fader\",\"value\":0}");
+            auto back = cmd ("{\"op\":\"mix.preset\",\"kind\":\"act\",\"name\":\"Remote act\"}");
+            const auto st = api.state();
+            check (fine (a) && fine (v) && fine (m) && fine (back) && std::abs (mixer.setup().channel[3].faderDb + 7.5f) < 0.01f
+                     && juce::JSON::toString (st["mixer"]["acts"]).contains ("Remote act")
+                     && juce::JSON::toString (st["mixer"]["venues"]).contains ("Remote venue") && juce::JSON::toString (st["mixer"]["monitorSets"]).contains ("Remote monitors")
+                     && ! fine (cmd ("{\"op\":\"mix.save\",\"kind\":\"act\",\"name\":\"\"}")) && ! fine (cmd ("{\"op\":\"mix.save\",\"kind\":\"lighting\",\"name\":\"x\"}")),
+                   "remote: an act, a venue and a monitor set-up are saved from the page under typed names, show in the lists and load back");
+        }
+
+        {
+            auto& music = engine.breakMusic();
+            const auto folder = root.getChildFile ("Break music");
+            folder.createDirectory();
+            music.setFolder (folder);
+            {
+                juce::AudioBuffer<float> buf (2, 9600);
+                for (int i = 0; i < 9600; ++i) { buf.setSample (0, i, 0.2f * std::sin ((float) i * 0.05f)); buf.setSample (1, i, 0.2f * std::sin ((float) i * 0.07f)); }
+                juce::WavAudioFormat wav;
+                auto out = std::unique_ptr<juce::OutputStream> (folder.getChildFile ("Quiet one.wav").createOutputStream());
+                if (auto w = wav.createWriterFor (out, juce::AudioFormatWriterOptions().withSampleRate (48000.0).withNumChannels (2).withBitsPerSample (16)))
+                    w->writeFromAudioSampleBuffer (buf, 0, 9600);
+            }
+
+            const auto st = api.state();
+            const bool listed = juce::JSON::toString (st["breakMusic"]["mixes"]).contains ("Quiet one") && has (st["breakMusic"], { "mix", "level", "minLevel", "maxLevel", "fadeDown", "fadeUp", "onSwitch", "onSong", "onSound", "soundDb" })
+                                && ! juce::JSON::toString (st["breakMusic"]).contains (folder.getParentDirectory().getFullPathName());
+            const bool silentStart = ! music.isPlaying() && ! (bool) api.live()["breakMusic"]["playing"];
+            auto played = cmd ("{\"op\":\"break.play\",\"name\":\"Quiet one\"}");
+            const bool playing = fine (played) && music.isPlaying() && music.isUp() && (bool) api.live()["breakMusic"]["playing"] && api.live()["breakMusic"]["mix"].toString() == "Quiet one";
+            cmd ("{\"op\":\"break.level\",\"value\":-20}");
+            cmd ("{\"op\":\"break.level\",\"value\":40}");
+            const bool levelHeld = std::abs (music.levelDb() - BreakMusic::maxLevelDb) < 0.01f;
+            cmd ("{\"op\":\"break.level\",\"value\":-18}");
+            cmd ("{\"op\":\"break.down\"}");
+            const bool down = ! music.isUp() && music.isPlaying();
+            cmd ("{\"op\":\"break.up\"}");
+            const bool upAgain = music.isUp();
+            cmd ("{\"op\":\"break.set\",\"key\":\"fadeUp\",\"value\":6}");
+            cmd ("{\"op\":\"break.set\",\"key\":\"onSong\",\"value\":true}");
+            const auto set = music.settings();
+            check (listed && silentStart && playing && levelHeld && std::abs (music.levelDb() + 18.0f) < 0.01f && down && upAgain && std::abs (set.fadeUpSeconds - 6.0) < 0.01 && set.onSong
+                     && ! fine (cmd ("{\"op\":\"break.set\",\"key\":\"disco\",\"value\":1}")) && ! fine (cmd ("{\"op\":\"break.play\",\"name\":\"No such mix\"}")),
+                   "remote: the page lists the mixes (and no folder path), plays one, sets its level inside the limits, fades it down and up and changes its settings");
+
+            // The knob: a hold hands it to the break music, a turn is one dB, another hold hands it back.
+            auto held = cmd ("{\"op\":\"knob\",\"do\":\"hold\"}");
+            const bool onBreak = (bool) api.live()["breakMusic"]["knobOnBreak"];
+            cmd ("{\"op\":\"knob\",\"do\":\"left\"}");
+            const bool turned = std::abs (music.levelDb() + 19.0f) < 0.01f;
+            cmd ("{\"op\":\"knob\",\"do\":\"hold\"}");
+            check (fine (held) && onBreak && turned && ! (bool) api.live()["breakMusic"]["knobOnBreak"] && ! fine (cmd ("{\"op\":\"knob\",\"do\":\"spin\"}")),
+                   "remote: the knob's buttons work as the knob will (hold for the break music, a click is one dB, hold to hand it back)");
+
+            cmd ("{\"op\":\"break.stop\"}");
+            check (! music.isPlaying() && ! (bool) api.live()["breakMusic"]["playing"], "remote: the page stops the break music");
+        }
+
+        {
+            auto& tuner = engine.tuner();
+            const auto st = api.state();
+            const bool offFirst = ! tuner.isOn() && ! (bool) api.live()["tuner"]["on"] && has (st["tuner"], { "socket", "reference", "mutes" });
+            cmd ("{\"op\":\"tuner.on\",\"on\":true}");
+            const bool nowOn = tuner.isOn() && (bool) api.live()["tuner"]["on"] && has (api.live()["tuner"], { "heard", "name", "cents", "hz", "socket" });
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"socket\",\"value\":2}");
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"reference\",\"value\":442}");
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"mutes\",\"value\":false}");
+            const bool setOk = tuner.socket() == 2 && std::abs (tuner.reference() - 442.0) < 0.01 && ! tuner.mutes();
+            cmd ("{\"op\":\"tuner.on\",\"on\":false}");
+            tuner.setSocket (-1);
+            tuner.setReference (440.0);
+            tuner.setMutes (true);
+            check (offFirst && nowOn && setOk && ! tuner.isOn() && ! fine (cmd ("{\"op\":\"tuner.set\",\"key\":\"colour\",\"value\":1}")),
+                   "remote: the page switches the tuner on and off and sets its input, its A and whether the main mix goes silent");
+        }
 
         // ---- the server: the page's files, the two JSON texts, an order, and one real trip through a socket ----
         RemoteServer server (api);

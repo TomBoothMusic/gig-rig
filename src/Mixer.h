@@ -304,6 +304,9 @@ public:
         process(). It joins the main output only, after the main mix has been recorded, so it is
         never in a recording, a loop or a monitor. It follows the main output's level and mute. */
     void setBreakFeed (const float* left, const float* right) noexcept  { breakL = left; breakR = right; }
+    /** Audio thread, before process(): true while the tuner wants the main mix silent. It fades
+        over a few milliseconds; the monitors, the recordings and the break music are not touched. */
+    void setTuning (bool silent) noexcept                               { tuningNow = silent; }
 
     /** For the self-test: what an output carried in the last block. */
     const float* outputBuffer (int o, int side) const noexcept  { return outs[(size_t) o].buf[(size_t) side].data(); }
@@ -424,6 +427,8 @@ private:
     int loadHoldLeft = 0;
     const float* breakL = nullptr;
     const float* breakR = nullptr;
+    bool tuningNow = false;
+    float tuneGain = 1.0f;              // 1 = heard, 0 = silent for the tuner
 
     MixRecorder rec;
 

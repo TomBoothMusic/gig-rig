@@ -16,6 +16,7 @@ void runMixerSelfTest (const std::function<void (bool, const juce::String&)>& ch
 void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runBreakMusicSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runExpressionSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
 {
@@ -52,6 +53,7 @@ juce::String runSelfTest (bool& passed)
     EffectsRack::memoryOnDisk = false;
     BreakMusic::memoryOnDisk = false;
     ExpressionInput::memoryOnDisk = false;
+    Tuner::memoryOnDisk = false;
 
     juce::StringArray log;
     int failures = 0;
@@ -65,11 +67,12 @@ juce::String runSelfTest (bool& passed)
     };
 
     // For working on one part without waiting for the rest (never used by the automatic builds):
-    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, remote, mixer, songs.
+    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, songs.
     if (const auto only = juce::SystemStats::getEnvironmentVariable ("GIGRIG_SELFTEST_ONLY", {}); only.isNotEmpty())
     {
         if (only == "break")        runBreakMusicSelfTest (check);
         else if (only == "pedal")   runExpressionSelfTest (check);
+        else if (only == "tuner")   runTunerSelfTest (check);
         else if (only == "remote")  runRemoteSelfTest (check);
         else if (only == "mixer")   runMixerSelfTest (check);
         else if (only == "songs")   runSongSelfTest (check);
@@ -562,6 +565,7 @@ juce::String runSelfTest (bool& passed)
     runRemoteSelfTest (check);
     runBreakMusicSelfTest (check);
     runExpressionSelfTest (check);
+    runTunerSelfTest (check);
 
     passed = failures == 0;
     log.add ({});
