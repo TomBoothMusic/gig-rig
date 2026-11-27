@@ -273,6 +273,29 @@ const icon = (name) =>
 
 const typeOf = (id) => (GR.state.types || {})[id] || { name: id, params: [] };
 
+// Tom's chain colours (28 Nov 2026), the same ones planned for the foot switch screens: red for
+// the vocal, yellow for the acoustic, blue for the electric, orange for the bass. A mixer channel
+// takes the colour of the effects chain on its input socket, so one colour means one sound
+// everywhere. The stomp (green) and the duo partner (purple) are stand-ins until Tom chooses.
+const chainColours = { vocal: '#ff5a52', acoustic: '#ffd23f', electric: '#4c8dff', bass: '#ff9330', stomp: '#34d27b', kick: '#34d27b' };
+
+const colourOfName = (name) =>
+{
+    const n = String (name || '').toLowerCase();
+    if (n.startsWith ('duo')) return '#c08cff';
+    return chainColours[Object.keys (chainColours).find ((k) => n.includes (k))] || '';
+};
+
+const channelColour = (ch) =>
+{
+    if (String (ch.name).toLowerCase().startsWith ('duo')) return colourOfName (ch.name);
+    const chain = ((GR.state.effects || {}).chains || []).find ((x) => x.socket === ch.socket);
+    return (chain && colourOfName (chain.name)) || colourOfName (ch.name);
+};
+
+/** Gives a part of the screen its sound's colour (the styles use it as --chain). */
+const tint = (el, colour) => { if (colour) { el.classList.add ('hue'); el.style.setProperty ('--chain', colour); } return el; };
+
 /** An effect's name cut down to fit a small picture: "1176 style compressor" becomes "1176 comp". */
 const shortName = (name) =>
 {
@@ -411,6 +434,7 @@ function pedalPage (root, c, i)
         () => { GR.ui.fxPage = null; GR.send ({ op: 'fx.remove', chain: c, slot: i }, true); }, { danger: true });
 
     GR.ui.open[key] = true;
+    tint (root, colourOfName (chain.name));
 
     root.append (
         pageHead (back, 'Pedalboard', shortName (type.name), chain.name + ', ' + (i + 1) + ' of ' + chain.slots.length, stepButtons (i, chain.slots.length, go, 'effect')),
@@ -427,7 +451,8 @@ function pedalPage (root, c, i)
             }))));
 }
 
-window.addEventListener ('resize', () => { if (GR.ui.tab === 'effects' && ! GR.ui.fxPage) GR.render(); });
+// The pedalboard's rows and the number of faders in a bank follow the width of the screen.
+window.addEventListener ('resize', () => { if ((GR.ui.tab === 'effects' && ! GR.ui.fxPage) || (GR.ui.tab === 'mixer' && ! GR.ui.mixPage)) GR.render(); });
 
 GR.screens.effects = (root) =>
 {
@@ -444,7 +469,7 @@ GR.screens.effects = (root) =>
     const coarse = window.matchMedia && window.matchMedia ('(pointer: coarse)').matches;
     const width = Math.min (1100, (main ? main.clientWidth : 360)) - 32 - (coarse ? 40 : 0);
     const gap = 14;
-    const cols = GR.clamp (Math.floor ((width + gap) / (60 + gap)), 3, 9);
+    const cols = GR.clamp (Math.floor ((width + gap) / ((width < 520 ? 84 : 118) + gap)), 2, 8);
     const items = [{ jack: 'IN', sub: 'socket ' + chain.socket }].concat (chain.slots.map ((slot, i) => ({ slot, i })), [{ jack: 'OUT', sub: 'to the mixer' }]);
 
     const cells = items.map ((it, n) =>
@@ -464,7 +489,9 @@ GR.screens.effects = (root) =>
         return cell;
     });
 
-    const board = h ('div', { class: 'board' + (chain.on && fx.enabled ? '' : ' dark') }, cells);
+    const board = tint (h ('div', { class: 'board' + (chain.on && fx.enabled ? '' : ' dark') }, cells), colourOfName (chain.name));
+    const chainChips = GR.chips (fx.chains.map ((ch, i) => ({ id: i, label: ch.name, cls: ch.on ? '' : 'dim' })), c, (i) => { GR.ui.fxChain = i; GR.ui.fxPage = null; GR.render(); }, 'scroll');
+    [...chainChips.children].forEach ((chip, i) => tint (chip, colourOfName (fx.chains[i].name)));
     board.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
 
     root.append (
@@ -476,7 +503,7 @@ GR.screens.effects = (root) =>
                     const go = () => { fx.enabled = on; GR.send ({ op: 'fx.enabled', on }); GR.render(); };
                     if (on) go(); else GR.ask ('Switch every effects chain off? The instruments go quiet or dry at once.', 'Switch the effects off', go, { danger: true });
                 }, 'All effects'))),
-        GR.chips (fx.chains.map ((ch, i) => ({ id: i, label: ch.name, cls: ch.on ? '' : 'dim' })), c, (i) => { GR.ui.fxChain = i; GR.ui.fxPage = null; GR.render(); }, 'scroll'),
+        chainChips,
         h ('div', { class: 'row between' },
             h ('button', { class: 'btn', onclick: () => chainPresetSheet (c) }, 'Presets'),
             h ('label', { class: 'inline' }, chain.name + (chain.on ? ' is on' : ' is off'), GR.toggle (chain.on, (on) => { chain.on = on; GR.send ({ op: 'fx.chainOn', chain: c, on }); GR.render(); }, chain.name))),
@@ -574,6 +601,7 @@ function mixPage (root, page)
     // The place in the chain is remembered by kind, so stepping to the next channel stays on the same block.
     GR.ui.mixRail = GR.ui.mixRail || {};
     const picked = GR.clamp (GR.ui.mixRail[kind] || 0, 0, items.length - 1);
+    tint (root, kind === 'ch' ? channelColour (list[i]) : kind === 'fx' ? colourOfName (list[i].name) : '');
 
     root.append (
         pageHead (() => { GR.ui.mixPage = null; GR.render(); }, 'Faders', list[i].name + (kind === 'out' ? ' output' : ''),
@@ -648,8 +676,16 @@ GR.screens.mixer = (root) =>
     root.classList.add ('faders');
 
     // Three banks of faders, as on the CQ: the inputs, the mixer's four effects, the outputs.
-    const banks = [{ id: 'in', label: 'Inputs' }, { id: 'fx', label: 'Effects' }, { id: 'out', label: 'Outputs' }];
-    const bank = banks.some ((b) => b.id === GR.ui.mixBank) ? GR.ui.mixBank : 'in';
+    // An upright phone has room for five faders wide enough for a thumb, so there the inputs take two banks.
+    const narrow = window.matchMedia && window.matchMedia ('(max-width: 520px)').matches;
+    const per = narrow ? 5 : 8;
+    const inBanks = [];
+    for (let from = 0; from < m.channels.length; from += per)
+        inBanks.push ({ id: 'in' + inBanks.length, from, to: Math.min (m.channels.length, from + per),
+                        label: m.channels.length <= per ? 'Inputs' : 'In ' + (from + 1) + ' to ' + Math.min (m.channels.length, from + per) });
+    const banks = inBanks.concat ([{ id: 'fx', label: 'Effects' }, { id: 'out', label: 'Outputs' }]);
+    const bank = banks.some ((b) => b.id === GR.ui.mixBank) ? GR.ui.mixBank : 'in0';
+    const inBank = inBanks.find ((b) => b.id === bank);
 
     const views = mixViews();
     if (! views.some ((v) => v.id === GR.ui.mixView)) GR.ui.mixView = 'main';
@@ -700,20 +736,22 @@ GR.screens.mixer = (root) =>
             f,
             o.mute ? h ('button', { class: 'mute' + (o.muted ? ' on' : ''), onclick: o.mute }, 'Mute') : h ('div', { class: 'mute none' }));
 
+        tint (el, o.colour);
         built[o.key] = { el, o };
         return el;
     };
 
     const strips = [];
 
-    if (bank === 'in')
+    if (inBank)
         m.channels.forEach ((ch, c) =>
         {
+            if (c < inBank.from || c >= inBank.to) return;
             const key = kind === 'main' ? 'fader' : kind === 'mon' ? 'mon' + n : 'fx' + n;
             const db = kind === 'main' ? ch.fader : kind === 'mon' ? ch.mon[n] : ch.fx[n];
 
             strips.push (strip ({
-                key: 'ch' + c, name: ch.name, db, dim: ! ch.on || ch.mute,
+                key: 'ch' + c, name: ch.name, db, dim: ! ch.on || ch.mute, colour: channelColour (ch),
                 sub: ! ch.on ? 'off' : kind === 'fx' && ch.fxSong[n] ? 'song' : ch.linked ? 'right side' : '',
                 change: (v) => { if (kind === 'main') ch.fader = v; else if (kind === 'mon') ch.mon[n] = v; else ch.fx[n] = v; GR.sendValue ('ch' + c + key, { op: 'mix.ch', c, key, value: v }); },
                 open: () => { GR.ui.mixPage = { kind: 'ch', i: c }; GR.render(); },
@@ -729,7 +767,7 @@ GR.screens.mixer = (root) =>
         {
             const toMon = kind === 'mon', key = toMon ? 'mon' + n : 'ret';
             strips.push (strip ({
-                key: 'fx' + f, name: e.name, cls: 'fxret', db: toMon ? e.mon[n] : e.ret, dim: ! e.on, sub: e.on ? '' : 'off',
+                key: 'fx' + f, name: e.name, cls: 'fxret', colour: colourOfName (e.name), db: toMon ? e.mon[n] : e.ret, dim: ! e.on, sub: e.on ? '' : 'off',
                 change: (v) => { if (toMon) e.mon[n] = v; else e.ret = v; GR.sendValue ('fx' + f + key, { op: 'mix.fx', f, key, value: v }); },
                 open: () => { GR.ui.mixPage = { kind: 'fx', i: f }; GR.render(); },
                 meter: (el) => { meters.fx[f] = el; },
@@ -758,17 +796,22 @@ GR.screens.mixer = (root) =>
             h ('span', { class: 'hint', text: bank === 'fx' ? 'The faders are the effects\' level back into' : 'The faders are sending to' }),
             GR.chips (sendViews, bank === 'fx' && kind === 'fx' ? 'main' : view, (id) => { GR.ui.mixView = id; GR.render(); }, 'scroll'));
 
+    const bankTabs = h ('div', { class: 'banks', role: 'tablist', 'aria-label': 'Fader banks' }, banks.map ((b) =>
+        h ('button', { class: 'bank' + (b.id === bank ? ' on' : ''), role: 'tab', 'aria-selected': b.id === bank ? 'true' : 'false', onclick: () => { GR.ui.mixBank = b.id; GR.render(); } }, b.label)));
+    bankTabs.style.gridTemplateColumns = 'repeat(' + banks.length + ', minmax(0, 1fr))';
+    const stripsRow = h ('div', { class: 'strips ' + (bank === 'out' ? 'v-main' : bank === 'fx' && kind === 'fx' ? 'v-main' : viewNow.cls) }, strips);
+    stripsRow.style.gridTemplateColumns = 'repeat(' + per + ', minmax(0, 1fr))';
+
     root.append (
         h ('div', { class: 'row between mix-top' },
-            h ('button', { class: 'btn', onclick: presetSheet }, 'Set-ups: ' + (m.act || 'no act') + ' / ' + (m.venue || 'no venue')),
+            h ('button', { class: 'btn', onclick: presetSheet }, h ('b', { text: 'Set-ups' }), h ('span', { class: 'setups-now', text: ': ' + (m.act || 'no act') + ' / ' + (m.venue || 'no venue') })),
             h ('div', { class: 'row' }, limit,
                 h ('button', { class: 'btn tiny ghost', onclick: () => GR.ask ('Switch the mixer off? The rig goes back to sounding exactly as it did without a mixer, at once.', 'Switch the mixer off',
                     () => GR.send ({ op: 'mix.on', on: false }), { danger: true }) }, 'Mixer off'))),
         m.warnings.map ((w) => h ('div', { class: 'note warn', text: w })),
-        h ('div', { class: 'banks', role: 'tablist', 'aria-label': 'Fader banks' }, banks.map ((b) =>
-            h ('button', { class: 'bank' + (b.id === bank ? ' on' : ''), role: 'tab', 'aria-selected': b.id === bank ? 'true' : 'false', onclick: () => { GR.ui.mixBank = b.id; GR.render(); } }, b.label))),
+        bankTabs,
         sendsRow,
-        h ('div', { class: 'strips ' + (bank === 'out' ? 'v-main' : bank === 'fx' && kind === 'fx' ? 'v-main' : viewNow.cls) }, strips),
+        stripsRow,
         h ('div', { class: 'nudge' },
             h ('div', { class: 'nudge-what' }, nudgeName, nudgeVal),
             h ('div', { class: 'nudge-btns' }, nudgeBtns)));
