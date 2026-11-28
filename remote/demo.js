@@ -642,7 +642,7 @@ GR.makeDemoRig = (data) =>
                 const ch = m.channels[c.c], k = c.key;
                 if (! ch) return fail ('There is no channel with that number.');
                 if (k === 'fader') ch.fader = level (c.value); else if (k === 'mute') ch.mute = !! c.value; else if (k === 'pan') ch.pan = num (c.value, -1, 1);
-                else if (k === 'trim') ch.trim = num (c.value, -24, 24); else if (k === 'on') ch.on = !! c.value;
+                else if (k === 'trim') ch.trim = num (c.value, -24, 24); else if (k === 'on') { ch.on = !! c.value; recFiles(); }
                 else if (/^mon[01]$/.test (k)) ch.mon[Number (k[3])] = level (c.value); else if (/^fx[0-3]$/.test (k)) ch.fx[Number (k[2])] = level (c.value);
                 else if (k === 'recLevel') ch.recLevel = num (c.value, m.offDb, 12); else if (k === 'recPan') ch.recPan = num (c.value, -1, 1);
                 else if (k === 'rec') { if (! m.rec.points.some ((p) => p.id === c.value)) return fail ('A channel can record "none", "raw", "effects", "looper" or "processed".'); ch.rec = c.value; recFiles(); }

@@ -973,6 +973,7 @@ GR.screens.record = (root) =>
     const page = GR.ui.recPage;
     const go = (to) => { GR.ui.recPage = to; GR.render(); };
     const listed = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => x.ch.on && ! x.ch.linked);
+    const unused = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => ! x.ch.on && ! x.ch.linked);     // the duo channels, on a solo night
 
     // ---- one channel: where it is recorded ----
     if (page && page.kind === 'ch' && m.channels[page.i] && ! live0.on)
@@ -997,7 +998,13 @@ GR.screens.record = (root) =>
             pageHead (() => go (null), 'Record', 'Channels', 'Tap one to choose where it is recorded'),
             h ('div', { class: 'choices' }, listed.map ((x) =>
                 tint (h ('button', { class: 'choice go', onclick: () => go ({ kind: 'ch', i: x.c }) },
-                    h ('b', { text: x.ch.name }), h ('small', { text: recPointOf (m, x.ch.rec).label })), channelColour (x.ch)))));
+                    h ('b', { text: x.ch.name }), h ('small', { text: recPointOf (m, x.ch.rec).label })), channelColour (x.ch)))),
+            unused.length ? h ('section', { class: 'card' }, h ('h2', { text: 'Switched off' }),
+                h ('p', { class: 'hint', text: 'A channel that is off is not recorded. Tap one to switch it on.' }),
+                h ('div', { class: 'choices' }, unused.map ((x) =>
+                    tint (h ('button', { class: 'choice', onclick: () => GR.ask ('Switch ' + x.ch.name + ' on? It joins the mix as well as the recording.', 'Switch it on',
+                            () => { x.ch.on = true; GR.send ({ op: 'mix.ch', c: x.c, key: 'on', value: true }, true).then (() => GR.render()); GR.render(); }) },
+                        h ('b', { text: x.ch.name }), h ('small', { text: 'Off' })), channelColour (x.ch))))) : null);
         return;
     }
 
@@ -1110,7 +1117,7 @@ GR.screens.record = (root) =>
         live0.on ? h ('p', { class: 'hint', text: 'What is recorded cannot be changed while it is recording. The recording mix can: its balance, pans, EQ and level are heard in the file from the moment they move.' }) : null,
         h ('div', { class: 'choices' },
             h ('button', { class: 'choice go', disabled: !! live0.on, onclick: () => go ({ kind: 'channels' }) }, h ('b', { text: 'Channels' }),
-                h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own. Choose where each is recorded.' })),
+                h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own.' + (unused.length ? ' ' + unused.length + ' more ' + (unused.length === 1 ? 'is' : 'are') + ' switched off and can be added here.' : ' Choose where each is recorded.') })),
             h ('button', { class: 'choice go', onclick: () => go ({ kind: 'mix' }) }, h ('b', { text: 'Recording mix' }),
                 h ('small', { text: 'Its own balance, pans, EQ and limiter. The room never hears it.' })),
             h ('button', { class: 'choice go' + ((GR.live && GR.live.check && GR.live.check.on) ? ' on' : ''), onclick: () => go ({ kind: 'recs' }) }, h ('b', { text: 'Recordings' }),

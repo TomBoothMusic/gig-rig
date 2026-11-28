@@ -40,8 +40,12 @@ Each mixer channel chooses one. In the file names they are the words in brackets
 | After the looper | `after looper` | The live sound and its loops together, before the channel's own gate, EQ and compressors. This is what a channel starts on. |
 | After the looper, with its EQ and compressors | `after channel processing` | The live sound and its loops together, after the channel's gate, EQ and compressors, before its fader. |
 
-Two things to know:
+Three things to know:
 
+- **Only a channel that is switched on is recorded.** On a solo act the two duo channels are
+  off. To record the duo partner, load the **Duo** act, or switch the channels on: on the
+  phone, **Record**, **Channels**, then tap the channel under **Switched off**; in the app,
+  the **Mixer** tab, the channel, **In use**. A channel that is switched on joins the mix too.
 - A loop is recorded into the looper after the channel's processing (Tom's decision, 27 Nov
   2026), so the loops inside an "after looper" file already carry the EQ and compressors they
   were played with. Only the live sound in that file is without them.
