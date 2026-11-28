@@ -559,6 +559,7 @@ function liveTick()
     liveHead.dot.className = 'dot ' + (GR.lost ? 'bad' : l.open || GR.demo ? 'ok' : 'warn');
     liveHead.dot.title = GR.lost ? 'No answer from the rig' : l.open ? 'Connected, audio running' : 'Connected, but the rig has no audio device open';
 
+    if (GR.strobe) GR.strobe.follow (l);
     if (GR.onLive) GR.onLive (l);
 }
 

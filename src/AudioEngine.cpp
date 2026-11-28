@@ -157,8 +157,70 @@ LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int n
 //==============================================================================
 AudioEngine::AudioEngine()
 {
+    tunerCore.beforeTick = [this] { tellTunerTheGuitars(); };
     juce::AudioDeviceManager manager;
     manager.createAudioDeviceTypes (types);
+}
+
+juce::StringArray AudioEngine::tunerChannels (bool silent) const
+{
+    juce::StringArray names;
+    const auto& setup = mixCore.setup();
+    bool follows = false;       // the right side of a stereo pair does what its left side does
+
+    for (int c = 0; c < numMixChannels; ++c)
+    {
+        const auto& ch = setup.channel[(size_t) c];
+        const bool goes = c > 0 && setup.channel[(size_t) (c - 1)].link ? follows : tunerCore.goesSilent (ch.name);
+        follows = goes;
+
+        if (ch.on && goes == silent)
+            names.add (ch.name);
+    }
+
+    return names;
+}
+
+void AudioEngine::tellTunerTheGuitars()
+{
+    const auto& setup = mixCore.setup();
+    juce::uint32 channels = 0, sockets = 0;
+    bool follows = false;
+
+    for (int c = 0; c < numMixChannels; ++c)
+    {
+        const auto& ch = setup.channel[(size_t) c];
+        const bool goes = c > 0 && setup.channel[(size_t) (c - 1)].link ? follows : tunerCore.goesSilent (ch.name);
+        follows = goes;
+
+        if (! ch.on || ! goes)
+            continue;
+
+        channels |= 1u << c;
+
+        // The tuner listens to a socket as it arrives; the channel listens to it after its effects
+        // chain, which may have come from another socket.
+        bool fromChain = false;
+
+        for (int k = 0; k < EffectsRack::numChains; ++k)
+        {
+            const auto r = fxRack.routing (k);
+
+            if (r.on && (r.looperHears == -2 ? r.source : r.looperHears) == ch.socket && r.source >= 0 && r.source < 32)
+            {
+                sockets |= 1u << r.source;
+                fromChain = true;
+            }
+        }
+
+        if (! fromChain && ch.socket >= 0 && ch.socket < 32)
+            sockets |= 1u << ch.socket;
+    }
+
+    mixCore.setTunerChannels (channels);
+
+    // With the guitars silent and the microphone live, talking must not take the tuner off the guitar.
+    tunerCore.setCandidates (mixCore.isOn() && tunerCore.silence() == Tuner::Silence::guitars ? sockets : 0u);
 }
 
 AudioEngine::~AudioEngine()
@@ -859,6 +921,13 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
             withKick[(size_t) kickSocket] = kickSock.data();
             afterEffects = withKick.data();
         }
+        // The tuner's silence has to be known before the channels are worked on.
+        if (mixing)
+        {
+            const auto quiet = tunerCore.silenceNow();
+            mixCore.setTuning (quiet == Tuner::Silence::mainMix, quiet == Tuner::Silence::guitars, tunerCore.monitorsKeepGuitars());
+        }
+
         // With the mixer on, the looper hears each channel after that channel's own processing.
         const auto* heard = mixing ? mixCore.stripChannels (afterEffects, numIns, numSamples) : afterEffects;
 
@@ -872,7 +941,6 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         if (mixing)
         {
             mixCore.setTempo (fxRack.effectsTempo());
-            mixCore.setTuning (tunerCore.wantsSilence());
             mixCore.setBreakFeed (music ? breakCore.left() : nullptr, music ? breakCore.right() : nullptr);
             mixCore.process (inputs, afterEffects, numIns, numSamples);
             mixCore.addOutputs (output, numSamples);

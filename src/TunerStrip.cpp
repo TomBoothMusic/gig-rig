@@ -9,15 +9,15 @@ TunerStrip::TunerStrip (AudioEngine& e) : engine (e)
 {
     onButton.setClickingTogglesState (true);
     onButton.setColour (juce::TextButton::buttonOnColourId, style::green.darker (0.4f));
-    onButton.setTooltip ("Switches the tuner on and off. While it is on, play one string: the note and how far out it is show here. With the mixer on, the main mix is silent while you tune.");
+    onButton.setTooltip ("Switches the tuner on and off. While it is on, play one string. The tuner fills the screen; with the mixer on, the guitars are silent while you tune and the microphone stays live.");
     onButton.onClick = [this]
     {
         engine.tuner().setOn (onButton.getToggleState());
         repaint();
     };
 
-    optionsButton.setTooltip ("Which input the tuner listens to, what A is tuned to, and whether the main mix goes silent while tuning");
-    optionsButton.onClick = [this] { showOptions(); };
+    optionsButton.setTooltip ("What goes silent while tuning, which input the tuner listens to, what A is tuned to, and whether the tuner fills the screen");
+    optionsButton.onClick = [this] { showOptions (engine, optionsButton); };
 
     addAndMakeVisible (onButton);
     addAndMakeVisible (optionsButton);
@@ -42,34 +42,64 @@ void TunerStrip::timerCallback()
         repaint();
 }
 
-void TunerStrip::showOptions()
+void TunerStrip::showOptions (AudioEngine& engine, juce::Component& target)
 {
     auto& tuner = engine.tuner();
-    juce::PopupMenu menu, inputs, pitch;
+    juce::PopupMenu menu, quiet, guitars, inputs, pitch;
+    const auto how = tuner.silence();
 
-    inputs.addItem (1, "Whichever input is being played", true, tuner.socket() < 0);
+    quiet.addItem (60, "The guitars (voices and the stomp stay live)", true, how == Tuner::Silence::guitars);
+    quiet.addItem (61, "The whole main mix (monitors stay live)", true, how == Tuner::Silence::mainMix);
+    quiet.addItem (62, "Nothing", true, how == Tuner::Silence::nothing);
+
+    // Which mixer channels count as guitars. The names decide to start with; a tick here wins.
+    juce::StringArray channels;
+
+    for (const auto& ch : engine.mixer().setup().channel)
+        if (ch.on && ch.name.isNotEmpty())
+            channels.addIfNotAlreadyThere (ch.name);
+
+    for (int i = 0; i < channels.size(); ++i)
+        guitars.addItem (200 + i, channels[i], true, tuner.goesSilent (channels[i]));
+
+    if (channels.isEmpty())
+        guitars.addItem (199, "The mixer has no channels switched on", false, false);
+
+    inputs.addItem (1, "Whichever guitar is being played", true, tuner.socket() < 0);
 
     for (int s = 0; s < 16; ++s)
         inputs.addItem (2 + s, "Input " + juce::String (s + 1), true, tuner.socket() == s);
 
     for (int hz = 436; hz <= 444; ++hz)
-        pitch.addItem (100 + hz, "A = " + juce::String (hz) + " Hz" + (hz == 440 ? " (the usual)" : ""), true, std::abs (tuner.reference() - (double) hz) < 0.05);
+        pitch.addItem (500 + hz, "A = " + juce::String (hz) + " Hz" + (hz == 440 ? " (the usual)" : ""), true, std::abs (tuner.reference() - (double) hz) < 0.05);
 
-    pitch.addItem (100 + 432, "A = 432 Hz", true, std::abs (tuner.reference() - 432.0) < 0.05);
+    pitch.addItem (500 + 432, "A = 432 Hz", true, std::abs (tuner.reference() - 432.0) < 0.05);
 
+    menu.addSubMenu ("While tuning, silence (mixer on)", quiet);
+    menu.addSubMenu ("Guitar channels (the ones that go silent)", guitars);
+    menu.addItem (51, "Keep the guitars in the monitors while tuning", how == Tuner::Silence::guitars, tuner.monitorsKeepGuitars());
     menu.addSubMenu ("Listen to", inputs);
     menu.addSubMenu ("Tune to", pitch);
-    menu.addItem (50, "Silence the main mix while tuning (mixer on)", true, tuner.mutes());
+    menu.addItem (50, "Fill the screen while tuning", true, tuner.fillsScreen());
 
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (optionsButton), [this] (int picked)
+    juce::Component::SafePointer<juce::Component> safe (&target);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target).withStandardItemHeight (34), [&engine, channels, safe] (int picked)
     {
         auto& t = engine.tuner();
 
-        if (picked == 50)               t.setMutes (! t.mutes());
-        else if (picked >= 100)         t.setReference ((double) (picked - 100));
+        if (picked == 50)               t.setFillsScreen (! t.fillsScreen());
+        else if (picked == 51)          t.setMonitorsKeepGuitars (! t.monitorsKeepGuitars());
+        else if (picked == 60)          t.setSilence (Tuner::Silence::guitars);
+        else if (picked == 61)          t.setSilence (Tuner::Silence::mainMix);
+        else if (picked == 62)          t.setSilence (Tuner::Silence::nothing);
+        else if (picked >= 500)         t.setReference ((double) (picked - 500));
+        else if (picked >= 200)         t.setGoesSilent (channels[picked - 200], ! t.goesSilent (channels[picked - 200]));
         else if (picked >= 1)           t.setSocket (picked - 2);
 
-        repaint();
+        if (safe != nullptr)
+            if (auto* top = safe->getTopLevelComponent())
+                top->repaint();
     });
 }
 

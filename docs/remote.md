@@ -49,7 +49,7 @@ The seven buttons along the bottom (down the left side when a phone is on its si
 | **Build** | The looper arrangement builder. See the next part. |
 | **Effects** | The four chains. Switch a chain or one effect on and off, open an effect to move its settings, load a preset onto a chain. **Add an effect** lists every effect the rig has, by kind, and puts the one you tap on the end of the chain. Open an effect for **Move earlier**, **Move later** and **Remove** (its settings travel with it). **Save as a preset** saves the whole chain under a name you type. **Update its presets** saves the chain's changes back into the preset or presets it was made from, exactly as the same button on the Effects tab does. |
 | **Mixer** | Faders with meters. The row of buttons above them chooses what the faders send to: the main mix, a monitor, or one of the four reverbs and delays. Drag a fader from anywhere on it (it never jumps to your finger). Tap a channel's name for its Trim, pan, every send and its own processing. **Set-ups** loads an act, a venue or a monitor set-up, and saves each one: **Save over** the one that is loaded, or **Save as a new one** under a name you type. If the mixer is off the screen says so and offers to switch it on. |
-| **Tools** | **Tuner**: on and off, a big note and needle, which input it listens to, what A is, and whether the main mix goes silent (`docs/tuner.md`). **Break music**: choose a mix, Play, From the start, Stop, Bring the music up, Fade it down, its level, the fade times and what counts as starting to play (`docs/break-music.md`). **The venue knob (ENC 5)**: Turn left, Turn right, Push and Hold, with the line the board's screen would show. |
+| **Tools** | **Tuner**: on and off, a small note and needle, what goes silent while tuning (the guitars, the whole main mix or nothing), which channels are guitars, which input it listens to and what A is (`docs/tuner.md`). While the tuner is on, the **full-screen strobe** lies over every screen (Done switches the tuner off, Options comes here). **Break music**: choose a mix, Play, From the start, Stop, Bring the music up, Fade it down, its level, the fade times and what counts as starting to play (`docs/break-music.md`). **The venue knob (ENC 5)**: Turn left, Turn right, Push and Hold, with the line the board's screen would show. |
 | **Rig** | Whether audio is running, the warnings, and **Copy report**: the same text as the Copy report button in the app. |
 
 The dot at the top left is green when the page is talking to the rig and audio is running,
@@ -160,6 +160,11 @@ through the fade, the status line, the knob's line) and `tuner` (on, heard, the 
 Hz, the socket). `fxCatalogue` and `fxMaxSlots` sit at the top of the state, not inside
 `effects`, because a song's sounds replace `effects` whole.
 
+**28 Nov 2026, the strobe tuner:** the state's `tuner` gained `silence`, `monitors`, `fullScreen` and
+`channels` (every mixer channel that is on: `name`, `silent`); the live `tuner` gained `strobing`
+and `strength`. The page's strobe (`GR.strobe` in `remote/screens.js`, called from the live tick
+in `core.js`) moves its bands by the cents and Hz in the live part.
+
 The state never holds a folder path or anything else from the computer's own disk layout: the
 demo's data is a copy of a real state and is committed to a repository that may be public.
 
@@ -251,7 +256,7 @@ The orders (`RemoteApi::command`; the demo answers the same ones in `remote/demo
 | `break.set` | `key` (`fadeDown`, `fadeUp`, `onSwitch`, `onSong`, `onSound`, `soundDb`), `value` |
 | `knob` | `do` (`left`, `right`, `push`, `hold`): the venue knob, ENC 5 |
 | `tuner.on` | `on` |
-| `tuner.set` | `key` (`socket`: 0-based, -1 = whichever input is played; `reference`: Hz; `mutes`), `value` |
+| `tuner.set` | `key`, `value`. Keys: `socket` (0-based, -1 = whichever guitar is played), `reference` (Hz), `silence` (`"guitars"`, `"main"` or `"nothing"`), `channel` (with `name`: a mixer channel's name; `value` true = it goes silent while tuning), `monitors` (true = the monitors keep the guitars), `fullScreen`, and the older `mutes` (true = the guitars, false = nothing) |
 
 Every value is checked and limited by the rig, whatever the page sends. A venue loaded from
 the page goes through the same safe load as on the Mixer tab (it fades in and never jumps up).
