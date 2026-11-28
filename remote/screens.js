@@ -839,7 +839,7 @@ GR.screens.tools = (root) =>
 {
     const s = GR.state, tu = s.tuner, bm = s.breakMusic;
     const live0 = GR.live || {};
-    const sockets = [{ id: -1, label: 'Whichever input is being played' }].concat ((s.effects.chains || []).map ((ch) => ({ id: ch.socket - 1, label: ch.name + ' (input ' + ch.socket + ')' })));
+    const sockets = [{ id: -1, label: 'Whichever guitar is being played' }].concat ((s.effects.chains || []).map ((ch) => ({ id: ch.socket - 1, label: ch.name + ' (input ' + ch.socket + ')' })));
     if (! sockets.some ((x) => x.id === tu.socket)) sockets.push ({ id: tu.socket, label: 'Input ' + (tu.socket + 1) });
 
     // ---- the tuner ----
@@ -862,13 +862,23 @@ GR.screens.tools = (root) =>
                 h ('h2', { text: 'Tuner' }),
                 h ('label', { class: 'inline' }, tunerOn ? 'On' : 'Off', GR.toggle (tunerOn, (on) => { GR.send ({ op: 'tuner.on', on }, true).then (() => GR.render()); if (GR.live && GR.live.tuner) GR.live.tuner.on = on; GR.render(); }, 'Tuner'))),
             tunerBody,
-            h ('p', { class: 'hint', text: tu.mutes ? 'With the mixer on, the main mix is silent while the tuner is on. The monitors and the break music carry on.' : 'The main mix carries on while you tune.' }),
+            tunerOn && GR.ui.strobeHidden ? h ('button', { class: 'btn primary', onclick: () => { GR.ui.strobeHidden = false; GR.render(); } }, 'Fill the screen with the strobe') : null,
+            h ('p', { class: 'hint', text: GR.strobe.words (s) }),
             h ('div', { class: 'row wrap' },
+                h ('label', { class: 'field grow' }, 'While tuning, silence', GR.select ([{ id: 'guitars', label: 'The guitars (voices and the stomp stay live)' }, { id: 'main', label: 'The whole main mix' }, { id: 'nothing', label: 'Nothing' }],
+                    GR.strobe.silence (tu), (v) => { tu.silence = v; tu.mutes = v !== 'nothing'; GR.send ({ op: 'tuner.set', key: 'silence', value: v }, true).then (() => GR.render()); GR.render(); }, 'While tuning, silence')),
                 h ('label', { class: 'field grow' }, 'Listen to', GR.select (sockets, tu.socket, (v) => { tu.socket = Number (v); GR.send ({ op: 'tuner.set', key: 'socket', value: Number (v) }, true); }, 'Listen to')),
                 h ('label', { class: 'field' }, 'Tune A to', GR.select ([432, 436, 437, 438, 439, 440, 441, 442, 443, 444].map ((hz) => ({ id: hz, label: hz + ' Hz' + (hz === 440 ? ' (the usual)' : '') })).concat (
                     [432, 436, 437, 438, 439, 440, 441, 442, 443, 444].includes (tu.reference) ? [] : [{ id: tu.reference, label: tu.reference + ' Hz' }]), tu.reference,
                     (v) => { tu.reference = Number (v); GR.send ({ op: 'tuner.set', key: 'reference', value: Number (v) }, true); }, 'Tune A to')),
-                h ('label', { class: 'inline' }, 'Silence the main mix', GR.toggle (tu.mutes, (on) => { tu.mutes = on; GR.send ({ op: 'tuner.set', key: 'mutes', value: on }, true); GR.render(); }, 'Silence the main mix while tuning')))),
+                h ('label', { class: 'inline' }, 'Fill the screen', GR.toggle (tu.fullScreen !== false, (on) => { tu.fullScreen = on; GR.ui.strobeHidden = false; GR.send ({ op: 'tuner.set', key: 'fullScreen', value: on }, true); GR.render(); }, 'Fill the screen with the strobe while tuning'))),
+            GR.strobe.silence (tu) === 'guitars' ? h ('label', { class: 'inline' }, 'Keep the guitars in the monitors', GR.toggle (tu.monitors !== false, (on) => { tu.monitors = on; GR.send ({ op: 'tuner.set', key: 'monitors', value: on }, true); GR.render(); }, 'Keep the guitars in the monitors while tuning')) : null,
+            GR.strobe.silence (tu) === 'guitars' && (tu.channels || []).length ? h ('div', {},
+                h ('h3', { text: 'Which channels are guitars (tap to change)' }),
+                h ('div', { class: 'row wrap' }, tu.channels.map ((ch) =>
+                    h ('button', { class: 'chip' + (ch.silent ? ' on' : ''), 'aria-pressed': ch.silent ? 'true' : 'false',
+                                   onclick: () => { ch.silent = ! ch.silent; GR.send ({ op: 'tuner.set', key: 'channel', name: ch.name, value: ch.silent }, true).then (() => GR.render()); GR.render(); } },
+                        ch.name + (ch.silent ? ': silent' : ': live'))))) : null),
 
         h ('section', { class: 'card' },
             h ('div', { class: 'row between' }, h ('h2', { text: 'Break music' }), state),
@@ -974,4 +984,119 @@ GR.screens.rig = (root) =>
     };
 };
 
+})();
+
+
+// ---------------------------------------------------------------- the strobe tuner, filling the screen
+
+/* While the tuner is on it lies over everything (docs/tuner.md): a big note and four rows of
+ * purple bands that stand still when the string is in tune, slide right when it is sharp and
+ * left when it is flat. The rig's own screen draws its bands from the sound itself; a phone
+ * hears about the note eight times a second, so here the bands are moved along by how far out
+ * the note is (the same speed, a moment behind). */
+GR.strobe = (() =>
+{
+    let box = null, canvas, note, octave, line, foot, flat, sharp, shown = false;
+    let turn = 0, slip = 0, target = 0, glow = 0.16, heard = false, last = 0, frame = 0;
+
+    const silence = (tu) => tu.silence || (tu.mutes === false ? 'nothing' : 'guitars');
+
+    const words = (s) =>
+    {
+        const tu = s.tuner, how = silence (tu), chans = tu.channels || [];
+        const quiet = chans.filter ((c) => c.silent).map ((c) => c.name), live = chans.filter ((c) => ! c.silent).map ((c) => c.name);
+        if (! (s.mixer && s.mixer.on)) return 'The mixer is off, so nothing goes silent: mute the guitar on the real mixer.';
+        if (how === 'main') return 'The whole main mix is silent while the tuner is on. The monitors and the break music carry on.';
+        if (how === 'nothing') return 'Nothing is silent: the guitar can be heard while you tune.';
+        if (! quiet.length) return 'No channel is named as a guitar, so nothing goes silent.';
+        return (tu.monitors !== false ? 'Silent in the PA while tuning (still in the monitors): ' : 'Silent everywhere while tuning: ') + quiet.join (', ') + '.' + (live.length ? ' Still live: ' + live.join (', ') + '.' : '');
+    };
+
+    const build = () =>
+    {
+        canvas = h ('canvas', { class: 'strobe-bands' });
+        note = h ('span', { class: 'strobe-letter', text: '-' });
+        octave = h ('sub');
+        line = h ('div', { class: 'strobe-line' });
+        foot = h ('div', { class: 'strobe-foot' });
+        flat = h ('div', { class: 'strobe-side', text: '\u25C0 FLAT' });
+        sharp = h ('div', { class: 'strobe-side', text: 'SHARP \u25B6' });
+        box = h ('div', { class: 'strobe', role: 'dialog', 'aria-label': 'Tuner' },
+            h ('div', { class: 'strobe-head' },
+                h ('b', { text: 'TUNER' }),
+                h ('span', { class: 'grow' }),
+                h ('button', { class: 'strobe-btn', onclick: () => { GR.ui.strobeHidden = true; GR.go ('tools'); follow (GR.live || {}); } }, 'Options'),
+                h ('button', { class: 'strobe-btn', onclick: () => { GR.send ({ op: 'tuner.on', on: false }, true).then (() => GR.render()); if (GR.live && GR.live.tuner) GR.live.tuner.on = false; follow (GR.live || {}); GR.render(); } }, 'Done')),
+            h ('div', { class: 'strobe-note' }, flat, h ('div', { class: 'strobe-name' }, note, octave), sharp),
+            line, canvas, foot);
+        document.body.append (box);
+    };
+
+    const draw = (time) =>
+    {
+        if (! shown) return;
+        frame = requestAnimationFrame (draw);
+        const dt = Math.min (0.1, (time - (last || time)) / 1000);
+        last = time;
+        slip += (target - slip) * Math.min (1, dt * 10);      // eases between the rig's readings
+        if (heard) turn += slip * dt;
+
+        const scale = window.devicePixelRatio || 1, w = canvas.clientWidth, hgt = canvas.clientHeight;
+        if (canvas.width !== Math.round (w * scale) || canvas.height !== Math.round (hgt * scale)) { canvas.width = Math.round (w * scale); canvas.height = Math.round (hgt * scale); }
+        const g = canvas.getContext ('2d');
+        g.setTransform (scale, 0, 0, scale, 0, 0);
+        g.clearRect (0, 0, w, hgt);
+
+        const rows = 4, gap = Math.max (4, hgt * 0.035), rowH = (hgt - gap * (rows - 1)) / rows;
+
+        for (let row = 0; row < rows; ++row)
+        {
+            const times = 1 << row, period = w / ((w < 520 ? 2 : 3) * times), y = hgt - rowH * (row + 1) - gap * row;
+            const t = turn * times, offset = (t - Math.floor (t)) * period;
+            const blur = GR.clamp ((Math.abs (slip) * times - 7) / 9, 0, 1);
+            g.fillStyle = 'rgba(42, 22, 66, .55)';
+            g.beginPath(); g.roundRect (0, y, w, rowH, 5); g.fill();
+            g.save(); g.clip();
+            if (blur > 0) { g.fillStyle = 'rgba(177, 77, 255, ' + (glow * 0.42 * blur) + ')'; g.fillRect (0, y, w, rowH); }
+            if (blur < 1)
+            {
+                g.fillStyle = 'rgba(177, 77, 255, ' + (glow * (1 - blur)) + ')';
+                for (let x = offset - period; x < w; x += period) { g.beginPath(); g.roundRect (x, y, period * 0.5, rowH, Math.min (5, period * 0.12)); g.fill(); }
+            }
+            g.restore();
+        }
+    };
+
+    const follow = (l) =>
+    {
+        const t = l.tuner || {}, tu = (GR.state && GR.state.tuner) || {};
+        if (! t.on) GR.ui.strobeHidden = false;
+        const want = !! t.on && tu.fullScreen !== false && ! GR.ui.strobeHidden;
+
+        if (want !== shown)
+        {
+            if (want && ! box) build();
+            shown = want;
+            if (box) box.hidden = ! want;
+            cancelAnimationFrame (frame);
+            if (want) { last = 0; turn = 0; frame = requestAnimationFrame (draw); }
+        }
+
+        if (! shown) return;
+
+        heard = !! t.heard;
+        const cents = Number (t.cents) || 0, hz = Number (t.hz) || 0, c = Math.abs (cents), inTune = heard && c < 1;
+        target = heard ? hz - hz / Math.pow (2, cents / 1200) : 0;            // how many cycles a second the string slips against the note
+        glow = ! heard ? 0.16 : 0.45 + 0.55 * (t.strength === undefined ? 0.8 : t.strength);
+        const name = heard ? String (t.name) : '-';
+        note.textContent = name.replace (/[-0-9]/g, '');
+        octave.textContent = heard ? name.replace (/[^-0-9]/g, '') : '';
+        box.className = 'strobe' + (! heard ? ' rest' : inTune ? ' good' : '');
+        flat.className = 'strobe-side' + (heard && ! inTune && cents < 0 ? ' on' : '');
+        sharp.className = 'strobe-side' + (heard && ! inTune && cents > 0 ? ' on' : '');
+        line.textContent = ! heard ? 'Play one string' : inTune ? 'In tune' : (c < 10 ? c.toFixed (1) : Math.round (c)) + (c < 1.05 ? ' cent ' : ' cents ') + (cents < 0 ? 'flat' : 'sharp');
+        foot.textContent = GR.state ? words (GR.state) + (t.socket >= 0 ? ' Listening to input ' + (t.socket + 1) + '.' : '') : '';
+    };
+
+    return { follow, words, silence };
 })();

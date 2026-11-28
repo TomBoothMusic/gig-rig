@@ -304,9 +304,23 @@ public:
         process(). It joins the main output only, after the main mix has been recorded, so it is
         never in a recording, a loop or a monitor. It follows the main output's level and mute. */
     void setBreakFeed (const float* left, const float* right) noexcept  { breakL = left; breakR = right; }
-    /** Audio thread, before process(): true while the tuner wants the main mix silent. It fades
-        over a few milliseconds; the monitors, the recordings and the break music are not touched. */
-    void setTuning (bool silent) noexcept                               { tuningNow = silent; }
+    /** Audio thread, before stripChannels() and process(): what the tuner wants silent in this block.
+        `mainMix`: the whole main mix fades out over a few milliseconds; the monitors, the recordings
+        and the break music are not touched. `guitars`: the live sound of the channels named by
+        setTunerChannels fades out of the main mix and of the sends to the reverbs and delays,
+        while loops already playing, the other channels and reverb tails carry on. With
+        `monitorsKeep` the monitors still carry the guitar (Tom, 19 Nov 2026: the in-ears stay
+        live so he can hear it); without it the guitar fades out where it enters the channel, as
+        a tuner pedal in front of everything would do it, so it is in no monitor and no new loop either. */
+    void setTuning (bool wholeMain, bool guitars, bool monitorsKeep) noexcept
+    {
+        tuningNow = wholeMain;
+        tuningGuitars = guitars && ! monitorsKeep;
+        tuningGuitarsMain = guitars && monitorsKeep;
+    }
+    /** Message thread: the channels that go silent under `guitars`, one bit each. */
+    void setTunerChannels (juce::uint32 mask) noexcept                  { tunerChannels.store (mask); }
+    juce::uint32 tunerChannelMask() const noexcept                      { return tunerChannels.load(); }
 
     /** For the self-test: what an output carried in the last block. */
     const float* outputBuffer (int o, int side) const noexcept  { return outs[(size_t) o].buf[(size_t) side].data(); }
@@ -342,6 +356,8 @@ private:
         std::array<Glide, numMixMonitors> monL, monR;
         std::array<Glide, numMixFx> fxG;
         bool wasOn = false;
+        bool tunedOut = false;          // silent for the tuner, or on the way back from it
+        float tuneMain = 1.0f;          // how much of the live sound the main mix gets: 0 while tuning with the monitors kept
     };
 
     struct Fx
@@ -427,7 +443,9 @@ private:
     int loadHoldLeft = 0;
     const float* breakL = nullptr;
     const float* breakR = nullptr;
-    bool tuningNow = false;
+    bool tuningNow = false, tuningGuitars = false, tuningGuitarsMain = false;
+    std::vector<float> tuneFeed;        // a guitar channel as the main mix hears it while tuning: its loops without its live sound
+    std::atomic<juce::uint32> tunerChannels { 0 };
     float tuneGain = 1.0f;              // 1 = heard, 0 = silent for the tuner
 
     MixRecorder rec;

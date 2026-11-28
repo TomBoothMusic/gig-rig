@@ -238,6 +238,8 @@ public:
     /** The break music between sets (docs/break-music.md), and the knob that works it and the venue presets (ENC 5). */
     BreakMusic& breakMusic() noexcept               { return breakCore; }
     Tuner& tuner() noexcept                         { return tunerCore; }
+    /** The mixer channels (switched on) that go silent while the tuner is on, or with false the ones that stay live. Message thread. */
+    juce::StringArray tunerChannels (bool silent) const;
     VenueKnob& venueKnob() noexcept                 { return knob; }
 
     //==============================================================================
@@ -245,6 +247,7 @@ public:
     void processBlock (const float* const* inputs, int numIns, float* const* outputs, int numOuts, int numSamples) noexcept;
 
 private:
+    void tellTunerTheGuitars();
     void audioDeviceIOCallbackWithContext (const float* const*, int, float* const*, int, int,
                                            const juce::AudioIODeviceCallbackContext&) override;
     void audioDeviceAboutToStart (juce::AudioIODevice*) override;

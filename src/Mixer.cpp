@@ -1411,6 +1411,7 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     chanPre.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
     chanMid.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
     chanPost.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
+    tuneFeed.assign ((size_t) capacity, 0.0f);
     stripped.fill (false);
     silence.assign ((size_t) capacity, 0.0f);
     directData.assign ((size_t) 8 * (size_t) capacity, 0.0f);
@@ -1517,7 +1518,10 @@ const float* const* Mixer::stripChannels (const float* const* feed, int numIns, 
         float* post = chanPost.data() + (size_t) c * (size_t) capacity;
 
         float start, step;
-        ch.trimG.advance (ch.trim.load (std::memory_order_relaxed), fastStep * 4.0f, n, start, step);
+        // The tuner: a guitar's live sound fades out here, before anything hears it (20 ms, no click).
+        const bool tuning = tuningGuitars && (tunerChannels.load (std::memory_order_relaxed) & (1u << c)) != 0;
+        ch.trimG.advance (tuning ? 0.0f : ch.trim.load (std::memory_order_relaxed), tuning || ch.tunedOut ? fastStep * 0.5f : fastStep * 4.0f, n, start, step);
+        ch.tunedOut = tuning || (ch.tunedOut && ch.trimG.now < ch.trim.load (std::memory_order_relaxed));
         for (int i = 0; i < n; ++i)
             pre[i] = live[i] * (start + step * (float) i);
 
@@ -1579,6 +1583,27 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         float* work = chanPost.data() + (size_t) c * (size_t) capacity;
         juce::FloatVectorOperations::add (tapPre, loops, n);
         juce::FloatVectorOperations::add (tapMid, loops, n);
+
+        // The tuner, with the monitors kept: the main mix and the reverbs get this channel's loops
+        // without its live sound (20 ms down and back, no click); the monitors get both as always.
+        const float* forMain = work;
+        const bool tuningMain = tuningGuitarsMain && (tunerChannels.load (std::memory_order_relaxed) & (1u << c)) != 0;
+
+        if (tuningMain || ch.tuneMain < 1.0f)
+        {
+            const float target = tuningMain ? 0.0f : 1.0f, pace = fastStep * 0.5f;
+            float g = ch.tuneMain;
+
+            for (int i = 0; i < n; ++i)
+            {
+                g = target > g ? juce::jmin (target, g + pace) : juce::jmax (target, g - pace);
+                tuneFeed[(size_t) i] = work[i] * g + loops[i];
+            }
+
+            ch.tuneMain = g;
+            forMain = tuneFeed.data();
+        }
+
         juce::FloatVectorOperations::add (work, loops, n);
         float start, step;
 
@@ -1617,10 +1642,10 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         bool sounding = false;
 
         ch.mainL.advance (fader * left, fastStep, n, start, step);
-        addGliding (outs[0].bus[0].data(), work, start, step, n);
+        addGliding (outs[0].bus[0].data(), forMain, start, step, n);
         sounding = sounding || ch.mainL.now != 0.0f;
         ch.mainR.advance (fader * right, fastStep, n, start, step);
-        addGliding (outs[0].bus[1].data(), work, start, step, n);
+        addGliding (outs[0].bus[1].data(), forMain, start, step, n);
         sounding = sounding || ch.mainR.now != 0.0f;
 
         for (int m = 0; m < numMixMonitors; ++m)
@@ -1639,7 +1664,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         for (int f = 0; f < numMixFx; ++f)
         {
             ch.fxG[(size_t) f].advance (fader * ch.fx[(size_t) f].load (std::memory_order_relaxed), fastStep, n, start, step);
-            addGliding (fxs[(size_t) f].in.data(), work, start, step, n);
+            addGliding (fxs[(size_t) f].in.data(), forMain, start, step, n);
             sounding = sounding || ch.fxG[(size_t) f].now != 0.0f;
         }
 

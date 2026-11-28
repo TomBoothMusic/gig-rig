@@ -461,6 +461,24 @@ juce::var RemoteApi::state()
         t->setProperty ("socket", tuner.socket());              // 0-based, -1 = whichever input is being played
         t->setProperty ("reference", tidy (tuner.reference()));
         t->setProperty ("mutes", tuner.mutes());
+        t->setProperty ("silence", Tuner::silenceWord (tuner.silence()));     // "guitars", "main" or "nothing"
+        t->setProperty ("fullScreen", tuner.fillsScreen());
+        t->setProperty ("monitors", tuner.monitorsKeepGuitars());       // under "guitars": the monitors still carry them
+
+        // Every mixer channel that is switched on, and whether it goes silent while tuning.
+        juce::Array<juce::var> channels;
+        const auto silent = engine.tunerChannels (true);
+
+        for (const auto& ch : engine.mixer().setup().channel)
+            if (ch.on && ch.name.isNotEmpty())
+            {
+                auto* o = obj();
+                o->setProperty ("name", ch.name);
+                o->setProperty ("silent", silent.contains (ch.name));
+                channels.add (juce::var (o));
+            }
+
+        t->setProperty ("channels", channels);
         t->setProperty ("minReference", Tuner::minReference);
         t->setProperty ("maxReference", Tuner::maxReference);
         s->setProperty ("tuner", juce::var (t));
@@ -563,6 +581,8 @@ juce::var RemoteApi::live()
         to->setProperty ("cents", tidy (r.cents));
         to->setProperty ("hz", tidy (r.hz));
         to->setProperty ("socket", r.socket);
+        to->setProperty ("strobing", r.strobing);
+        to->setProperty ("strength", tidy ((double) r.strength));
         l->setProperty ("tuner", juce::var (to));
     }
 
@@ -1042,6 +1062,26 @@ juce::String RemoteApi::doBreak (const juce::String& op, const juce::var& c, juc
         if (key == "socket")            tuner.setSocket ((int) value);
         else if (key == "reference")    tuner.setReference ((double) value);
         else if (key == "mutes")        tuner.setMutes ((bool) value);
+        else if (key == "fullScreen")   tuner.setFillsScreen ((bool) value);
+        else if (key == "monitors")     tuner.setMonitorsKeepGuitars ((bool) value);
+        else if (key == "silence")
+        {
+            Tuner::Silence how;
+
+            if (! Tuner::silenceFromWord (value.toString(), how))
+                return juce::String ("The tuner can silence \"guitars\", \"main\" or \"nothing\".");
+
+            tuner.setSilence (how);
+        }
+        else if (key == "channel")
+        {
+            const auto name = c.getProperty ("name", {}).toString();
+
+            if (name.trim().isEmpty())
+                return juce::String ("Which channel?");
+
+            tuner.setGoesSilent (name, (bool) value);
+        }
         else                            return "The tuner has no \"" + key + "\".";
 
         return {};

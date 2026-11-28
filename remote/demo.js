@@ -34,10 +34,23 @@ GR.makeDemoRig = (data) =>
         rig.state.breakMusic.mix = '';
         bm = { playing: false, up: false, fade: 0, at: now(), pos: 0, knobOnBreak: false, venueAt: -1, faded: 0 };
         tuner = { on: false, since: 0 };
+        // Data captured before 28 Nov 2026 has no silence choice: the guitars, known by their names, as on the rig.
+        const tu = rig.state.tuner;
+        if (! tu.silence) tu.silence = tu.mutes === false ? 'nothing' : 'guitars';
+        if (tu.fullScreen === undefined) tu.fullScreen = true;
+        if (tu.monitors === undefined) tu.monitors = true;
+        tuner.byHand = {};
+        tunerChannels();
         rig.changed = true;
     };
 
     const st = () => rig.state;
+    const looksLikeGuitar = (name) => { const n = name.toLowerCase(); return ! /drum|kick|vocal|mic/.test (n) && /guitar|gtr|electric|acoustic|bass|uke|mandolin|banjo/.test (n); };
+    const tunerChannels = () =>
+    {
+        rig.state.tuner.channels = rig.state.mixer.channels.filter ((c) => c.on && c.name).map ((c) =>
+            ({ name: c.name, silent: tuner.byHand[c.name.toLowerCase()] !== undefined ? tuner.byHand[c.name.toLowerCase()] : looksLikeGuitar (c.name) }));
+    };
     const lay = () => st().layout;
     const touch = () => { rig.changed = true; };
     const ok = (note) => ({ ok: true, note: note || '' });
@@ -301,21 +314,23 @@ GR.makeDemoRig = (data) =>
         const string = [['E2', 82.41], ['A2', 110], ['D3', 146.83], ['G3', 196], ['B3', 246.94], ['E4', 329.63]][Math.floor (tuning / 9) % 6];
         const ref = st().tuner.reference / 440;
         live.tuner = { on: tuner.on, heard: tuner.on && turn >= 1, name: tuner.on && turn >= 1 ? string[0] : '', cents: tuner.on && turn >= 1 ? Math.round (cents * 10) / 10 : 0,
-                       hz: tuner.on && turn >= 1 ? Math.round (string[1] * ref * Math.pow (2, cents / 1200) * 10) / 10 : 0, socket: tuner.on ? (st().tuner.socket >= 0 ? st().tuner.socket : st().effects.chains[0].socket - 1) : -1 };
+                       hz: tuner.on && turn >= 1 ? Math.round (string[1] * ref * Math.pow (2, cents / 1200) * 100) / 100 : 0, strobing: tuner.on && turn >= 1.2, strength: tuner.on && turn >= 1 ? Math.round (Math.max (0.3, 1 - (turn - 1) / 10) * 100) / 100 : 0, socket: tuner.on ? (st().tuner.socket >= 0 ? st().tuner.socket : st().effects.chains[0].socket - 1) : -1 };
 
         const m = st().mixer;
 
         if (m.on)
         {
             const gain = (db) => db <= m.offDb + 0.5 ? 0 : Math.pow (10, db / 20);
-            const ch = m.channels.map ((c, i) => c.on ? chPeak[i] * gain (c.trim) : 0);
-            const sum = (pick) => Math.min (1.2, m.channels.reduce ((a, c, i) => a + (c.on && ! c.mute ? ch[i] * gain (pick (c)) : 0), 0));
+            const tunedOut = (c) => tuner.on && st().tuner.silence === 'guitars' && (st().tuner.channels || []).some ((x) => x.name === c.name && x.silent);
+            const keeps = st().tuner.monitors !== false;      // the monitors still carry the guitars
+            const ch = m.channels.map ((c, i) => c.on && ! (tunedOut (c) && ! keeps) ? chPeak[i] * gain (c.trim) : 0);
+            const sum = (pick, forMain) => Math.min (1.2, m.channels.reduce ((a, c, i) => a + (c.on && ! c.mute && ! (forMain && tunedOut (c)) ? ch[i] * gain (pick (c)) : 0), 0));
             const fx = m.fx.map ((e, f) => e.on ? sum ((c) => c.fx[f]) * 0.7 : 0);
             const out = m.outputs.map ((o, k) =>
             {
-                const dry = k === 0 ? sum ((c) => c.fader) : sum ((c) => c.mon[k - 1]);
+                const dry = k === 0 ? sum ((c) => c.fader, true) : sum ((c) => c.mon[k - 1]);
                 const wet = m.fx.reduce ((a, e, f) => a + fx[f] * gain (k === 0 ? e.ret : e.mon[k - 1]), 0);
-                const v = o.mute || (k === 0 && tuner.on && st().tuner.mutes) ? 0 : Math.min (1, (dry + wet) * gain (o.level));
+                const v = o.mute || (k === 0 && tuner.on && st().tuner.silence === 'main') ? 0 : Math.min (1, (dry + wet) * gain (o.level));
                 return [v, o.mono ? v : v * 0.93];
             });
 
@@ -501,12 +516,17 @@ GR.makeDemoRig = (data) =>
                 return ok();
             }
             case 'knob':                return knob (c.do);
-            case 'tuner.on':            tuner.on = !! c.on; tuner.since = now(); return ok();
+            case 'tuner.on':            tuner.on = !! c.on; tuner.since = now(); tunerChannels(); return ok();
             case 'tuner.set':
             {
                 const t = s.tuner, k = c.key;
                 if (k === 'socket') t.socket = Math.round (num (c.value, -1, 31)); else if (k === 'reference') t.reference = num (c.value, t.minReference, t.maxReference);
-                else if (k === 'mutes') t.mutes = !! c.value; else return fail ('The tuner has no "' + k + '".');
+                else if (k === 'mutes') { t.mutes = !! c.value; t.silence = t.mutes ? 'guitars' : 'nothing'; }
+                else if (k === 'silence') { if (! ['guitars', 'main', 'nothing'].includes (c.value)) return fail ('The tuner can silence "guitars", "main" or "nothing".'); t.silence = c.value; t.mutes = c.value !== 'nothing'; }
+                else if (k === 'fullScreen') t.fullScreen = !! c.value;
+                else if (k === 'monitors') t.monitors = !! c.value;
+                else if (k === 'channel') { if (! String (c.name || '').trim()) return fail ('Which channel?'); tuner.byHand[String (c.name).trim().toLowerCase()] = !! c.value; tunerChannels(); }
+                else return fail ('The tuner has no "' + k + '".');
                 return ok();
             }
             case 'mix.on':              m.on = !! c.on; return ok();

@@ -114,6 +114,7 @@ target_sources(GigRig PRIVATE
     src/EffectsSelfTest.cpp
     src/ExpressionPedal.cpp
     src/Tuner.cpp
+    src/StrobeTuner.cpp
     src/TunerStrip.cpp
     src/TunerSelfTest.cpp
     src/ExpressionSelfTest.cpp

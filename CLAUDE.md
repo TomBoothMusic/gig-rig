@@ -125,10 +125,15 @@ expression pedal is in `docs/mixer.md`. Keep them true.**
   the mixer off it goes to a pair of returns. A background thread reads the file; the audio
   thread only empties a queue. `VenueKnob` (same files) is ENC 5: it rests on PA/venue, a hold
   hands it to the break music, and it hands itself back when playing fades the music.
-- **The tuner** (`src/Tuner.*`, header strip `src/TunerStrip.*`, checks `src/TunerSelfTest.cpp`):
-  listens to one socket before any effect; the note is worked out on the message thread. With
-  the mixer on the main mix (only) is silent while it is on. **Mixer off, it must change no
-  sample** (a check).
+- **The tuner** (`src/Tuner.*`, full-screen strobe `src/StrobeTuner.*`, header strip `src/TunerStrip.*`,
+  checks `src/TunerSelfTest.cpp`): listens to one socket before any effect; the note is worked out on
+  the message thread. Since 28 Nov 2026 (Tom's ask) the tuner fills the screen with a purple strobe,
+  and with the mixer on **only the guitar channels go silent** (known by their names, or ticked by
+  hand; they leave the main mix and the mixer's reverbs while voices, the stomp, playing loops and
+  tails carry on; the monitors keep them unless that is unticked, Tom's 19 Nov decision that the
+  in-ears stay live); "the whole main mix" is still a choice. The strobe's picture and its cents both come from `Tuner::phaseAgainst` (the
+  sound against the note's exact frequency): the checks hold it to a tenth of a cent, keep them.
+  **Mixer off, it must change no sample** (a check).
 - **The expression pedal** (`src/ExpressionPedal.*`, checks `src/ExpressionSelfTest.cpp`): a MIDI
   controller found by Learn on the Pedal tab; every move goes to
   `EffectsRack::moveExpressionPedal`, the same door the on-screen Pedal sliders use.

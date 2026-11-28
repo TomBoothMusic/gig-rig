@@ -18,7 +18,7 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | Kick pad | A test: the SPD::ONE Kick over USB plays a kick made inside the app | Built as a test |
 | Remote screen | The rig on a phone or tablet: looper, songs, the arrangement builder, effects, mixer, tools. Off until you switch it on | Built, two phases |
 | Break music | Music between sets played by the rig itself: fades down when you start playing, comes back only by hand | Built, first version |
-| Tuner | Reads the note on any input; with the mixer on the main mix is silent while tuning | Built, first version |
+| Tuner | A full-screen purple strobe tuner; with the mixer on the guitars are silent while tuning and the microphone stays live | Built, second version (28 Nov 2026), waiting for Tom's test |
 | Expression pedal | A real pedal over MIDI works the blend, the wah and the whammy | Built, first version |
 | Later | The rig computer, the board itself | Planned |
 
@@ -127,22 +127,27 @@ heard.** Guides: [docs/break-music.md](docs/break-music.md), [docs/tuner.md](doc
 
 ### Part B: the tuner (15 minutes)
 
-1. At the top right of the window, next to **Copy report**, click **Tuner**. It turns green
-   and a strip appears beside it.
-2. Play the electric's open low E and let it ring. The strip shows **E2**, a needle and words
-   such as **6 flat**. Left of the middle is flat, right is sharp, green is in tune.
-3. Tune all six strings: **E2, A2, D3, G3, B3, E4**.
-4. Check it against the tuner you trust: tune one string with that one, then read the rig's.
-   Write down any string where they disagree by more than two cents.
-5. Do the same on the acoustic and on the bass (**E1, A1, D2, G2**). The low bass strings are
-   the hardest for any tuner: say whether the needle is steady or wanders.
-6. Play a string on one instrument, then one on another. Under the note it says which input it
-   is listening to. It should follow whichever you play.
-7. Click **Options**, then **Listen to**, and choose one input. Now only that input is read.
-   Put it back to **Whichever input is being played**.
-8. Now the silence. On the **Mixer** tab tick **Mixer on** and play so the **Main** meter moves.
-9. Click **Tuner**. The Main meter should drop to nothing with no click, while the monitor
-   meters keep moving. Click **Tuner** again: the main mix comes back as loud as it was.
+The tuner changed on 28 Nov 2026 (after build 138): it now fills the screen with a purple
+strobe, and only the guitars go silent. These steps are for the build with that in it.
+
+1. On the **Mixer** tab tick **Mixer on**. Plug in a guitar and a microphone; play and talk so
+   the **Main** meter moves.
+2. At the top right of the window, next to **Copy report**, click **Tuner**. The whole window
+   goes dark and shows the tuner: a big note, and four rows of purple bands under it.
+3. Play the electric's open low E and let it ring. It shows **E** with a small **2**. The bands
+   slide **left when the string is flat, right when it is sharp**, and **stand still when it is
+   in tune**. The top row is the finest.
+4. Tune all six strings until the bands stop: **E2, A2, D3, G3, B3, E4**.
+5. Check it against your pedal strobe tuner: tune one string with the pedal, then look at the
+   rig. Say whether the rig's bands are still, or which way and how fast they drift.
+6. Do the same on the acoustic and on the bass (**E1, A1, D2, G2**). The low bass strings are
+   the hardest for any tuner: say whether the bands are steady or jumpy.
+7. While a string rings, **talk into the microphone**. Your voice should be in the PA, the
+   guitar should not (it stays in the monitors), and the tuner should stay on the string. The
+   line at the bottom says which channels are silent and which are live.
+8. Press **Options** and untick **Keep the guitars in the monitors while tuning**: now the
+   guitar should be gone from the monitors too. Say which way you want it.
+9. Press **Done**. The guitar comes back with no click.
 10. Untick **Mixer on** again if you normally run without it. Click **Copy report** and paste.
 
 ### Part C: break music (25 minutes)
@@ -219,8 +224,9 @@ the RC-600 set to send the pedal as a controller (in the RC-600's ASSIGN setting
 7. Tap **Mixer** (switch the mixer on if asked). Move a fader, tap **Set-ups**, and under
    **Act** tap **Save as a new one**, type `Phone act`, **Save it**. It should be in the list
    on both screens.
-8. Tap **Tools**. Switch the **Tuner** on and play a string: a big note and a needle. It runs a
-   moment behind the laptop's, which is normal over Wi-Fi. Say whether it is usable.
+8. Tap **Tools**. Switch the **Tuner** on and play a string: the phone fills with the purple
+   strobe tuner. It runs a moment behind the laptop's, which is normal over Wi-Fi. Say whether
+   it is usable. **Done** switches the tuner off.
 9. Still on **Tools**: choose a mix, **Play**, **Fade it down**, **Bring the music up**, move
    **Level**, **Stop**. Each should do on the rig what the same button on the laptop does.
 10. Try the four knob buttons at the bottom of **Tools**, as in Part D.
@@ -1194,7 +1200,7 @@ GigRig --report report.txt      # write the device report, no window
 | `src/Mixer.*`, `src/MixerPanel.*`, `src/MixRecorder.*`, `src/MixerSelfTest.cpp` | The mixer, its tab, recording and its checks ([docs/mixer.md](docs/mixer.md)) |
 | `src/KickPad.*`, `src/KickPadPanel.*`, `src/KickPadSelfTest.cpp` | The kick pad test ([docs/kick-pad.md](docs/kick-pad.md)) |
 | `src/BreakMusic.*`, `src/BreakMusicPanel.*`, `src/BreakMusicSelfTest.cpp` | Break music and the venue knob's hold ([docs/break-music.md](docs/break-music.md)) |
-| `src/Tuner.*`, `src/TunerStrip.*`, `src/TunerSelfTest.cpp` | The tuner ([docs/tuner.md](docs/tuner.md)) |
+| `src/Tuner.*`, `src/StrobeTuner.*`, `src/TunerStrip.*`, `src/TunerSelfTest.cpp` | The tuner and its full-screen strobe ([docs/tuner.md](docs/tuner.md)) |
 | `src/ExpressionPedal.*`, `src/ExpressionSelfTest.cpp` | A real expression pedal over MIDI ([docs/mixer.md](docs/mixer.md)) |
 | `src/RemoteApi.*`, `src/RemoteServer.*`, `src/RemotePanel.*`, `src/LooperLayout.*`, `src/RemoteSelfTest.cpp`, `remote/` | The remote screen for a phone or tablet ([docs/remote.md](docs/remote.md)) |
 | `src/ReconnectWatch.h` | Notices a lost audio device and opens it again |

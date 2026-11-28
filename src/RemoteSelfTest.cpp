@@ -363,12 +363,40 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
             cmd ("{\"op\":\"tuner.set\",\"key\":\"reference\",\"value\":442}");
             cmd ("{\"op\":\"tuner.set\",\"key\":\"mutes\",\"value\":false}");
             const bool setOk = tuner.socket() == 2 && std::abs (tuner.reference() - 442.0) < 0.01 && ! tuner.mutes();
+
+            // 28 Nov 2026: what goes silent (the guitars, the whole main mix, nothing), which channels are guitars, and the full screen.
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"silence\",\"value\":\"main\"}");
+            const bool mainOk = tuner.silence() == Tuner::Silence::mainMix && api.state()["tuner"]["silence"].toString() == "main";
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"silence\",\"value\":\"guitars\"}");
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"fullScreen\",\"value\":false}");
+            cmd ("{\"op\":\"tuner.set\",\"key\":\"monitors\",\"value\":false}");
+            const auto st2 = api.state();
+            const auto* chans = st2["tuner"]["channels"].getArray();
+            const bool wordsOk = tuner.silence() == Tuner::Silence::guitars && ! tuner.fillsScreen() && ! (bool) st2["tuner"]["fullScreen"] && chans != nullptr
+                                     && ! tuner.monitorsKeepGuitars() && ! (bool) st2["tuner"]["monitors"]
+                                     && ! fine (cmd ("{\"op\":\"tuner.set\",\"key\":\"silence\",\"value\":\"everything\"}"));
+            bool chanOk = chans != nullptr && ! chans->isEmpty();
+
+            if (chanOk)
+            {
+                const auto name = (*chans)[0]["name"].toString();
+                const bool was = (bool) (*chans)[0]["silent"];
+                cmd ("{\"op\":\"tuner.set\",\"key\":\"channel\",\"name\":" + juce::JSON::toString (juce::var (name)) + ",\"value\":" + (was ? "false" : "true") + "}");
+                const auto after = api.state();
+                chanOk = tuner.goesSilent (name) != was && (bool) after["tuner"]["channels"][0]["silent"] != was && has (api.live()["tuner"], { "strobing", "strength" })
+                             && ! fine (cmd ("{\"op\":\"tuner.set\",\"key\":\"channel\",\"value\":true}"));
+                tuner.setGoesSilent (name, was);
+            }
+
             cmd ("{\"op\":\"tuner.on\",\"on\":false}");
             tuner.setSocket (-1);
             tuner.setReference (440.0);
-            tuner.setMutes (true);
+            tuner.setSilence (Tuner::Silence::guitars);
+            tuner.setFillsScreen (true);
+            tuner.setMonitorsKeepGuitars (true);
             check (offFirst && nowOn && setOk && ! tuner.isOn() && ! fine (cmd ("{\"op\":\"tuner.set\",\"key\":\"colour\",\"value\":1}")),
-                   "remote: the page switches the tuner on and off and sets its input, its A and whether the main mix goes silent");
+                   "remote: the page switches the tuner on and off and sets its input, its A and whether anything goes silent");
+            check (mainOk && wordsOk && chanOk, "remote: the page chooses what the tuner silences (the guitars, the whole main mix or nothing), which channels are guitars, whether the monitors keep them, and whether it fills the screen");
         }
 
         // ---- the server: the page's files, the two JSON texts, an order, and one real trip through a socket ----

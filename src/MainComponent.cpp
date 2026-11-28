@@ -150,7 +150,15 @@ MainComponent::MainComponent()
         engine.tuner().loadStateText (Tuner::stateFile().loadFileAsString());
 
     addAndMakeVisible (tunerStrip);
-    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + engine.tuner().reportText(); };
+    addChildComponent (strobeTuner);        // shows itself while the tuner is on
+    strobeTuner.onOptions = [this] (juce::Component& beside) { TunerStrip::showOptions (engine, beside); };
+
+    // For pictures in the cloud (no guitar there): GIGRIG_TUNER=demo shows the full-screen tuner on a pretend A string.
+    if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_TUNER", {}) == "demo")
+        strobeTuner.pretend (true);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + engine.tuner().reportText()
+                                                                      + "  Mixer channels that go silent: " + (engine.tunerChannels (true).isEmpty() ? juce::String ("none") : engine.tunerChannels (true).joinIntoString (", "))
+                                                                      + ". Stay live: " + (engine.tunerChannels (false).isEmpty() ? juce::String ("none") : engine.tunerChannels (false).joinIntoString (", ")) + ".\n"; };
 
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
@@ -250,6 +258,7 @@ void MainComponent::resized()
 
     area.removeFromTop (6);
     tabs.setBounds (area);
+    strobeTuner.setBounds (getLocalBounds());
 }
 
 void MainComponent::timerCallback()
