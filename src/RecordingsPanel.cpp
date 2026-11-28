@@ -64,13 +64,15 @@ RecordingsPanel::RecordingsPanel (AudioEngine& e) : engine (e)
         addAndMakeVisible (*b);
     }
 
-    for (auto* b : { &keepBox, &loopBox })
+    for (auto* b : { &keepBox, &loopBox, &loopsBox })
     {
         b->setColour (juce::ToggleButton::textColourId, style::textMain);
         addAndMakeVisible (*b);
     }
 
     loopBox.setToggleState (true, juce::dontSendNotification);
+    loopsBox.setToggleState (true, juce::dontSendNotification);
+    loopsBox.setTooltip ("Ticked, every looper press, kick from the pad, effect switch press and expression pedal move of the recording is made again at the same moment, through the effects and the mixer as they are set now");
     loopBox.setTooltip ("Ticked, the recording starts again when it ends, so a mix can be worked on for as long as it takes");
     playButton.setTooltip ("Plays this recording's raw files through the rig as if Tom were playing. Press again to stop.");
     keepBox.setTooltip ("A kept recording is never removed by the two Clear buttons, and Delete refuses it");
@@ -91,8 +93,8 @@ RecordingsPanel::RecordingsPanel (AudioEngine& e) : engine (e)
         }
         else if (const auto* i = chosen())
         {
-            const auto error = engine.startSoundcheck (i->name, loopBox.getToggleState());
-            say (error.isEmpty() ? "Playing " + i->name + " through the rig." : error, error.isNotEmpty());
+            const auto error = engine.startSoundcheck (i->name, loopBox.getToggleState(), loopsBox.getToggleState());
+            say (error.isEmpty() ? "Playing " + i->name + " through the rig. " + (loopsBox.getToggleState() ? engine.loopReplay().statusLine() : juce::String ("Without its loops, kicks and switches.")) : error, error.isNotEmpty());
         }
 
         showChosen();
@@ -163,7 +165,7 @@ RecordingsPanel::~RecordingsPanel() = default;
 
 juce::String RecordingsPanel::reportText() const
 {
-    return engine.soundcheck().reportText() + engine.recordings().reportText();
+    return engine.soundcheck().reportText() + engine.loopReplay().reportText() + engine.recordings().reportText();
 }
 
 void RecordingsPanel::confirm (const juce::String& title, const juce::String& words, const juce::String& yes, std::function<void()> then)
@@ -357,6 +359,7 @@ void RecordingsPanel::resized()
     playButton.setBounds (right.removeFromTop (48));
     right.removeFromTop (4);
     loopBox.setBounds (right.removeFromTop (24));
+    loopsBox.setBounds (right.removeFromTop (24));
     checkHelp.setBounds (right.removeFromTop (52));
     right.removeFromTop (6);
     keepBox.setBounds (right.removeFromTop (24));

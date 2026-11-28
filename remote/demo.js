@@ -323,7 +323,8 @@ GR.makeDemoRig = (data) =>
             rig.changed = true;
         }
 
-        live.check = { on: vsc.on, name: vsc.name, pos: vsc.on && vsc.len > 0 ? Math.floor ((t - vsc.since) / 1000) % vsc.len : 0, len: vsc.len, missed: 0 };
+        live.check = { on: vsc.on, name: vsc.name, pos: vsc.on && vsc.len > 0 ? Math.floor ((t - vsc.since) / 1000) % vsc.len : 0, len: vsc.len, missed: 0,
+                       loops: vsc.on && vsc.loops ? 'Made again as it plays: 6 looper presses, 48 kicks, 2 effect switch presses, all through the sound as it is now.' : '' };
         live.copy = { on: usb.on, done: usb.on ? Math.min (1, (t - usb.since) / usb.ms) : 0, now: usb.on ? 'Copying ' + usb.names.length + (usb.names.length === 1 ? ' recording' : ' recordings') : '', result: usb.result, failed: false };
 
         const b = st().breakMusic;
@@ -588,7 +589,7 @@ GR.makeDemoRig = (data) =>
                 const x = recOf (c.name);
                 if (! x) return fail ('There is no recording called "' + c.name + '".');
                 if (! (x.check > 0)) return fail ('This recording has no raw files, so it cannot be played back as a soundcheck.');
-                vsc = { on: true, name: x.name, since: now(), len: Math.max (1, Math.round (x.min * 60)) };
+                vsc = { on: true, name: x.name, since: now(), len: Math.max (1, Math.round (x.min * 60)), loops: c.loops !== false };
                 return ok ('Playing ' + x.name + ' through the rig. (The demo only pretends: nothing is heard.)');
             }
             case 'check.stop':
@@ -642,7 +643,7 @@ GR.makeDemoRig = (data) =>
                 const ch = m.channels[c.c], k = c.key;
                 if (! ch) return fail ('There is no channel with that number.');
                 if (k === 'fader') ch.fader = level (c.value); else if (k === 'mute') ch.mute = !! c.value; else if (k === 'pan') ch.pan = num (c.value, -1, 1);
-                else if (k === 'trim') ch.trim = num (c.value, -24, 24); else if (k === 'on') ch.on = !! c.value;
+                else if (k === 'trim') ch.trim = num (c.value, -24, 24); else if (k === 'on') { ch.on = !! c.value; recFiles(); }
                 else if (/^mon[01]$/.test (k)) ch.mon[Number (k[3])] = level (c.value); else if (/^fx[0-3]$/.test (k)) ch.fx[Number (k[2])] = level (c.value);
                 else if (k === 'recLevel') ch.recLevel = num (c.value, m.offDb, 12); else if (k === 'recPan') ch.recPan = num (c.value, -1, 1);
                 else if (k === 'rec') { if (! m.rec.points.some ((p) => p.id === c.value)) return fail ('A channel can record "none", "raw", "effects", "looper" or "processed".'); ch.rec = c.value; recFiles(); }

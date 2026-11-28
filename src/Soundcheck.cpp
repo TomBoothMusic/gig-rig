@@ -57,7 +57,7 @@ void Soundcheck::closeFiles()
     resamplers.clear();
 }
 
-juce::String Soundcheck::start (const juce::File& folder, bool roundAndRound, bool ownThread)
+juce::String Soundcheck::start (const juce::File& folder, bool roundAndRound, bool ownThread, const std::function<void()>& beforePlaying)
 {
     stop();
 
@@ -114,6 +114,7 @@ juce::String Soundcheck::start (const juce::File& folder, bool roundAndRound, bo
         }
 
         primed = false;
+        blockAt = -1;
         gain = 0.0f;
         primeFrames = juce::jmin (ringFrames / 2, juce::jmax (block * 2, (int) (rate * 0.2)));
     }
@@ -140,6 +141,10 @@ juce::String Soundcheck::start (const juce::File& folder, bool roundAndRound, bo
     ended.store (false);
     wantStop.store (false);
     faded.store (false);
+
+    if (beforePlaying != nullptr)
+        beforePlaying();        // the looper presses of this recording are made ready before the first sample
+
     playing.store (true);
 
     if (ownThread)
@@ -340,6 +345,8 @@ const float* const* Soundcheck::feed (const float* const* inputs, int numIns, in
 
     const juce::SpinLock::ScopedTryLockType guard (lock);
 
+    blockAt = -1;
+
     if (! guard.isLocked() || ! playing.load (std::memory_order_relaxed) || numIns > maxInputs || n <= 0 || n > block || numSources <= 0)
         return inputs;
 
@@ -399,6 +406,7 @@ const float* const* Soundcheck::feed (const float* const* inputs, int numIns, in
     if (take > 0)
     {
         fifo.finishedRead (take);
+        blockAt = played.load (std::memory_order_relaxed);
         played.fetch_add (take, std::memory_order_relaxed);
     }
 

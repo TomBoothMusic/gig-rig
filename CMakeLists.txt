@@ -137,6 +137,7 @@ target_sources(GigRig PRIVATE
     src/RecordingsPanel.cpp
     src/RecordingsSelfTest.cpp
     src/Soundcheck.cpp
+    src/LoopReplay.cpp
     src/Pedal.cpp
     src/RemoteApi.cpp
     src/RemotePanel.cpp

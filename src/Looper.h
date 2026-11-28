@@ -258,6 +258,42 @@ public:
         strayBus = stray;
     }
 
+    //==============================================================================
+    // For the virtual soundcheck (docs/recording.md, "Loops, kicks and switches in a soundcheck"). Audio thread only.
+
+    /** A press (or a clear, or the name of a song that has just been loaded) with the sample of
+        this block it happened on. */
+    struct Timed
+    {
+        enum class Kind : juce::uint8 { pedal, clearAll, song };
+
+        int offset = 0;             // samples into the block
+        Kind kind = Kind::pedal;
+        PedalEvent event;
+        char name[24] = {};         // song only
+    };
+
+    /** Presses for the next process() to act on at their own samples, as if a foot had landed
+        there. The array must outlive that call; it is used once. */
+    void setTimedPresses (const Timed* list, int count) noexcept     { timedList = list; numTimed = list != nullptr ? juce::jmax (0, count) : 0; }
+
+    /** Every press, clear and new song the last process() acted on, in order. */
+    int numTapped() const noexcept                                    { return tapCount; }
+    const Timed& tapped (int index) const noexcept                    { return taps[(size_t) index]; }
+
+    /** True while any track holds a loop or is doing anything. */
+    bool holdsAnything() const noexcept
+    {
+        for (const auto& tr : tracks)
+            if (tr.hasBase || tr.state != TrackState::empty)
+                return true;
+
+        return false;
+    }
+
+    /** The name of the song the looper is set up for. */
+    const char* songNameNow() const noexcept                          { return activeSong.name; }
+
     LooperSnapshot snapshot() const;
     /** The tempo now, for the effects (0 = no loop has set it yet). Audio thread only. */
     double tempoNow() const noexcept    { return bar > 0 && rate > 0.0 ? activeSong.beatsPerBar * 60.0 * rate / (double) bar : 0.0; }
@@ -375,6 +411,13 @@ private:
     bool isActive (const Track&) const noexcept;
     void log (LoopLogEntry::Kind, int track, juce::int64 a = 0, double b = 0.0) noexcept;
     void publish() noexcept;
+
+    void tap (Timed::Kind, int offset, const PedalEvent*, const char* name) noexcept;
+
+    const Timed* timedList = nullptr;
+    int numTimed = 0;
+    std::array<Timed, 64> taps {};
+    int tapCount = 0;
 
     float* const* laneBuses = nullptr;
     int numLaneBuses = 0;

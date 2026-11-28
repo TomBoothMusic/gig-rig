@@ -91,6 +91,14 @@ public:
     /** Any thread. True if the effects use this switch (so the looper must not); presses are
         carried out on the message thread. */
     bool takePedal (int sw, bool isDown, bool stillHeld = false);
+    /** Message thread: the same press or release carried out before this returns (takePedal hands
+        it on and returns at once). tapMs is the moment of the press on the tap tempo's clock. For
+        the virtual soundcheck, which makes a recording's switch presses again. */
+    bool takePedalNow (int sw, bool isDown, double tapMs);
+    /** Message thread: for a switch row whose action flips something (a slot, a chain, A/B, the
+        toe switch) 1 or 0 as it stands now; -1 for any other action or an empty row. The virtual
+        soundcheck uses it to start a recording's switches where they were on the night. */
+    int pedalToggleState (const PedalAssign& a) const;
     /** Message thread: what a pedal press does. */
     void doPedalAction (const PedalAssign& a);
     /** Message thread: moves the Pedal of the first whammy in a chain to the toe (down) or the
@@ -141,6 +149,9 @@ public:
     /** Where the expression pedal is now, for volume pedals in a chain that is just being loaded. */
     float livePedal() const noexcept                    { return toeOn ? 100.0f : blendPosition; }
     bool pedalHasMoved() const noexcept                 { return pedalMoved; }
+    /** Where the expression pedal itself was last put (0 heel .. 100 toe), and how many times it has been moved. */
+    float expressionNow() const noexcept                { return expressionAt.load(); }
+    int expressionMoves() const noexcept                { return expressionCount.load(); }
 
     /** Message thread: the one expression pedal (0 heel .. 100 toe). It is the blend (every
         volume pedal follows it) until the toe switch is on; then it rocks the wah or whammy
@@ -369,6 +380,8 @@ private:
     bool dirty = false, tails = true;
     bool toeOn = false;             // the toe switch: the pedal works a wah or whammy, not the blend
     int toeChain = 0;
+    std::atomic<float> expressionAt { 100.0f };
+    std::atomic<int> expressionCount { 0 };
     bool pedalMoved = false;        // the pedal (or a switch standing in for it) has been moved since the app started
     float blendPosition = 100.0f;   // where the blend was left when the toe switch went on
     int ticksSinceChange = 0;

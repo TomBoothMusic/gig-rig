@@ -44,7 +44,10 @@ MainComponent::MainComponent()
             engine.breakMusic().startedPlaying (BreakMusic::Started::footswitch);
 
         if (engine.effects().takePedal (event.sw, event.kind == PedalEvent::Kind::down, event.kind == PedalEvent::Kind::hold))
+        {
+            engine.loopReplay().noteSwitch (event);     // while recording, so a soundcheck can press it again
             return;
+        }
 
         engine.looper().pedal (event);
     };
@@ -145,6 +148,24 @@ MainComponent::MainComponent()
     // Break music: its tab goes after the remote screen's, so the tab numbers before it stay as they were.
     tabs.addTab ("Break music", style::background, &breakPanel, false);
     engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + breakPanel.reportText(); };
+    // A soundcheck that reaches a song change loads the song as a program change would.
+    engine.loopReplay().loadSong = [this] (const juce::String& name)
+    {
+        for (int i = 0; i < songBook.numEntries(); ++i)
+        {
+            char looperName[24] = {};
+            songBook.entry (i).name.copyToUTF8 (looperName, sizeof (looperName) - 1);
+
+            if (juce::String::fromUTF8 (looperName).trim() == name)
+            {
+                songBook.load (i, "the soundcheck");
+                return true;
+            }
+        }
+
+        return false;
+    };
+
     songBook.onLoaded = [this] { engine.breakMusic().startedPlaying (BreakMusic::Started::song); };
 
     // Recording: its tab goes last, so the tab numbers before it stay as they were. Its part of the report is inside the mixer's.

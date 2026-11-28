@@ -5,6 +5,7 @@
 #include "BreakMusic.h"
 #include "Tuner.h"
 #include "Soundcheck.h"
+#include "LoopReplay.h"
 #include "RecordingLibrary.h"
 #include "EffectsRack.h"
 #include "GlitchWatch.h"
@@ -245,7 +246,9 @@ public:
     /** The recordings on the drive: keeping, copying to USB, clearing. */
     RecordingLibrary& recordings() noexcept         { return library; }
     /** Starts a recording (by its folder's name) playing as a virtual soundcheck. Returns an error, or empty. */
-    juce::String startSoundcheck (const juce::String& recordingName, bool roundAndRound = true);
+    juce::String startSoundcheck (const juce::String& recordingName, bool roundAndRound = true, bool withLoops = true, bool ownThread = true);
+    /** The looper presses noted in recordings and made again in a soundcheck. */
+    LoopReplay& loopReplay() noexcept               { return replay; }
     /** The mixer channels (switched on) that go silent while the tuner is on, or with false the ones that stay live. Message thread. */
     juce::StringArray tunerChannels (bool silent) const;
     VenueKnob& venueKnob() noexcept                 { return knob; }
@@ -335,6 +338,8 @@ private:
     BreakMusic breakCore;
     Tuner tunerCore;
     Soundcheck checkCore;
+    LoopReplay replay { loopCore, fxRack, kickCore };
+    std::array<Looper::Timed, 64> replayPresses {};
     RecordingLibrary library;
     VenueKnob knob { mixCore, breakCore };
 

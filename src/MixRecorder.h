@@ -54,6 +54,8 @@ public:
     void write (int slot, const float* left, const float* right, int numSamples) noexcept;
     /** Once per block, after the writes. */
     void endBlock (int numSamples) noexcept;
+    /** Samples (at the engine's rate) recorded so far. */
+    juce::int64 samplesNow() const noexcept     { return samples.load (std::memory_order_relaxed); }
 
 private:
     struct Slot

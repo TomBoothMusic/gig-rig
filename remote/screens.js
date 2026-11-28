@@ -973,6 +973,7 @@ GR.screens.record = (root) =>
     const page = GR.ui.recPage;
     const go = (to) => { GR.ui.recPage = to; GR.render(); };
     const listed = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => x.ch.on && ! x.ch.linked);
+    const unused = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => ! x.ch.on && ! x.ch.linked);     // the duo channels, on a solo night
 
     // ---- one channel: where it is recorded ----
     if (page && page.kind === 'ch' && m.channels[page.i] && ! live0.on)
@@ -986,7 +987,12 @@ GR.screens.record = (root) =>
                 h ('button', { class: 'choice' + (p.id === ch.rec ? ' on' : ''), 'aria-pressed': p.id === ch.rec ? 'true' : 'false',
                                onclick: () => { ch.rec = p.id; GR.send ({ op: 'mix.ch', c: page.i, key: 'rec', value: p.id }, true).then (() => GR.render()); GR.render(); } },
                     h ('b', { text: p.label }), h ('small', { text: p.more })))),
-            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so the two "after the looper" choices are recorded after the effects instead: there are no loops to add.' }) : null);
+            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so the two "after the looper" choices are recorded after the effects instead: there are no loops to add.' }) : null,
+            h ('section', { class: 'card' }, h ('h2', { text: 'Not using this channel?' }),
+                h ('div', { class: 'choices' },
+                    h ('button', { class: 'choice', onclick: () => GR.ask ('Switch ' + ch.name + ' off? It leaves the mix as well as the recording.', 'Switch it off',
+                            () => { ch.on = false; GR.send ({ op: 'mix.ch', c: page.i, key: 'on', value: false }, true).then (() => GR.render()); go ({ kind: 'channels' }); }) },
+                        h ('b', { text: 'Switch this channel off' }), h ('small', { text: 'It moves to the Switched off list, and one tap there brings it back.' })))));
         return;
     }
 
@@ -997,7 +1003,13 @@ GR.screens.record = (root) =>
             pageHead (() => go (null), 'Record', 'Channels', 'Tap one to choose where it is recorded'),
             h ('div', { class: 'choices' }, listed.map ((x) =>
                 tint (h ('button', { class: 'choice go', onclick: () => go ({ kind: 'ch', i: x.c }) },
-                    h ('b', { text: x.ch.name }), h ('small', { text: recPointOf (m, x.ch.rec).label })), channelColour (x.ch)))));
+                    h ('b', { text: x.ch.name }), h ('small', { text: recPointOf (m, x.ch.rec).label })), channelColour (x.ch)))),
+            unused.length ? h ('section', { class: 'card' }, h ('h2', { text: 'Switched off' }),
+                h ('p', { class: 'hint', text: 'A channel that is off is not recorded. Tap one to switch it on.' }),
+                h ('div', { class: 'choices' }, unused.map ((x) =>
+                    tint (h ('button', { class: 'choice', onclick: () => GR.ask ('Switch ' + x.ch.name + ' on? It joins the mix as well as the recording.', 'Switch it on',
+                            () => { x.ch.on = true; GR.send ({ op: 'mix.ch', c: x.c, key: 'on', value: true }, true).then (() => GR.render()); GR.render(); }) },
+                        h ('b', { text: x.ch.name }), h ('small', { text: 'Off' })), channelColour (x.ch))))) : null);
         return;
     }
 
@@ -1031,7 +1043,7 @@ GR.screens.record = (root) =>
         {
             const c = l.check || {}, p = l.copy || {};
             if (!! c.on !== wasCheck || !! p.on !== wasCopy) { wasCheck = !! c.on; wasCopy = !! p.on; GR.render(); return; }
-            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '')
+            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '') + (c.loops ? '. ' + c.loops : '')
                 : p.on ? p.now + ' (' + Math.round ((p.done || 0) * 100) + '%). Leave the drive in.'
                 : p.result ? p.result : Number (recs.free || 0).toFixed (0) + ' GB free on the rig.';
             line.className = 'hint' + ((p.failed && ! p.on && ! c.on) || c.missed > 0 ? ' bad' : '');
@@ -1044,14 +1056,17 @@ GR.screens.record = (root) =>
         const x = recs.list.find ((y) => y.name === page.name);
         const playing = liveCheck.on && liveCheck.name === x.name;
         const line = h ('p', { class: 'hint' });
+        const withLoops = GR.ui.recLoops !== false;     // remembered on this phone only
         root.append (
             pageHead (() => go ({ kind: 'recs' }), 'Recordings', x.name, facts (x)),
             line,
             h ('div', { class: 'choices' },
                 playing
                     ? h ('button', { class: 'choice on', onclick: () => order ({ op: 'check.stop' }) }, h ('b', { text: 'Stop the soundcheck' }), h ('small', { text: 'The sockets hear what is plugged in again.' }))
-                    : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true }) }, h ('b', { text: 'Play as a soundcheck' }),
+                    : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true, loops: withLoops }) }, h ('b', { text: 'Play as a soundcheck' }),
                         h ('small', { text: x.check > 0 ? 'Its raw files play into their sockets, through today\'s effects and mixer, round and round.' : 'It has no raw files, so it cannot be played back.' })),
+                h ('button', { class: 'choice' + (withLoops ? ' on' : ''), 'aria-pressed': withLoops ? 'true' : 'false', disabled: playing || ! (x.check > 0), onclick: () => { GR.ui.recLoops = ! withLoops; GR.render(); } },
+                    h ('b', { text: withLoops ? 'With its loops, kicks and switches' : 'Without its loops, kicks and switches' }), h ('small', { text: 'With: every looper press, kick, effect switch press and pedal move of the recording is made again, through today\'s sound.' })),
                 h ('button', { class: 'choice' + (x.kept ? ' on' : ''), 'aria-pressed': x.kept ? 'true' : 'false', onclick: () => order ({ op: 'recs.keep', name: x.name, on: ! x.kept }) },
                     h ('b', { text: x.kept ? 'Kept' : 'Keep' }), h ('small', { text: 'Clearing never removes a kept recording.' })),
                 h ('button', { class: 'choice', disabled: ! recs.drives.length || !! liveCopy.on, onclick: () => copyTo ([x.name]) }, h ('b', { text: 'Copy to USB' }),
@@ -1110,7 +1125,7 @@ GR.screens.record = (root) =>
         live0.on ? h ('p', { class: 'hint', text: 'What is recorded cannot be changed while it is recording. The recording mix can: its balance, pans, EQ and level are heard in the file from the moment they move.' }) : null,
         h ('div', { class: 'choices' },
             h ('button', { class: 'choice go', disabled: !! live0.on, onclick: () => go ({ kind: 'channels' }) }, h ('b', { text: 'Channels' }),
-                h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own. Choose where each is recorded.' })),
+                h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own.' + (unused.length ? ' ' + unused.length + ' more ' + (unused.length === 1 ? 'is' : 'are') + ' switched off and can be added here.' : ' Choose where each is recorded.') })),
             h ('button', { class: 'choice go', onclick: () => go ({ kind: 'mix' }) }, h ('b', { text: 'Recording mix' }),
                 h ('small', { text: 'Its own balance, pans, EQ and limiter. The room never hears it.' })),
             h ('button', { class: 'choice go' + ((GR.live && GR.live.check && GR.live.check.on) ? ' on' : ''), onclick: () => go ({ kind: 'recs' }) }, h ('b', { text: 'Recordings' }),

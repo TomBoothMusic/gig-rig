@@ -661,6 +661,7 @@ juce::var RemoteApi::live()
         co->setProperty ("pos", std::round (sc.positionSeconds()));
         co->setProperty ("len", std::round (sc.lengthSeconds()));
         co->setProperty ("missed", sc.missedBlocks());
+        co->setProperty ("loops", engine.loopReplay().isArmed() ? engine.loopReplay().statusLine() : juce::String());
         l->setProperty ("check", juce::var (co));
 
         const auto p = engine.recordings().progress();
@@ -979,10 +980,10 @@ juce::String RemoteApi::doRecordings (const juce::String& op, const juce::var& c
 
     if (op == "check.start")
     {
-        if (const auto error = engine.startSoundcheck (name, (bool) c.getProperty ("loop", true)); error.isNotEmpty())
+        if (const auto error = engine.startSoundcheck (name, (bool) c.getProperty ("loop", true), (bool) c.getProperty ("loops", true)); error.isNotEmpty())
             return error;
 
-        answer = "Playing " + name + " through the rig. Its sockets hear the recording until Stop.";
+        answer = "Playing " + name + " through the rig. Its sockets hear the recording until Stop. " + ((bool) c.getProperty ("loops", true) ? engine.loopReplay().statusLine() : juce::String ("Without its loops, kicks and switches."));
         return {};
     }
 
