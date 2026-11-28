@@ -987,7 +987,12 @@ GR.screens.record = (root) =>
                 h ('button', { class: 'choice' + (p.id === ch.rec ? ' on' : ''), 'aria-pressed': p.id === ch.rec ? 'true' : 'false',
                                onclick: () => { ch.rec = p.id; GR.send ({ op: 'mix.ch', c: page.i, key: 'rec', value: p.id }, true).then (() => GR.render()); GR.render(); } },
                     h ('b', { text: p.label }), h ('small', { text: p.more })))),
-            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so the two "after the looper" choices are recorded after the effects instead: there are no loops to add.' }) : null);
+            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so the two "after the looper" choices are recorded after the effects instead: there are no loops to add.' }) : null,
+            h ('section', { class: 'card' }, h ('h2', { text: 'Not using this channel?' }),
+                h ('div', { class: 'choices' },
+                    h ('button', { class: 'choice', onclick: () => GR.ask ('Switch ' + ch.name + ' off? It leaves the mix as well as the recording.', 'Switch it off',
+                            () => { ch.on = false; GR.send ({ op: 'mix.ch', c: page.i, key: 'on', value: false }, true).then (() => GR.render()); go ({ kind: 'channels' }); }) },
+                        h ('b', { text: 'Switch this channel off' }), h ('small', { text: 'It moves to the Switched off list, and one tap there brings it back.' })))));
         return;
     }
 

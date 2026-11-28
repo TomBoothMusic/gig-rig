@@ -46,6 +46,7 @@ Three things to know:
   off. To record the duo partner, load the **Duo** act, or switch the channels on: on the
   phone, **Record**, **Channels**, then tap the channel under **Switched off**; in the app,
   the **Mixer** tab, the channel, **In use**. A channel that is switched on joins the mix too.
+  On the phone, the channel's own page has **Switch this channel off** to put it back.
 - A loop is recorded into the looper after the channel's processing (Tom's decision, 27 Nov
   2026), so the loops inside an "after looper" file already carry the EQ and compressors they
   were played with. Only the live sound in that file is without them.
