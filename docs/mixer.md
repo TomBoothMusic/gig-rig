@@ -289,11 +289,11 @@ The **Load** button beside **Venue / PA** loads the same safe way.
 
 ## Recording
 
-**Record** starts a new folder in `Documents\GigRig\Recordings` named by date and time, with
-one mono WAV for each channel that is on and one stereo WAV of the main mix. Each channel
-chooses what it records: nothing, the plain socket, after its effects, or **after the looper**
-(live and loops together, before the channel's EQ and the mixer's reverb). Files are 24-bit at
-48 kHz even when the app runs at 96 kHz. **Record** again stops.
+Recording has its own tab and its own guide since 28 Nov 2026: [recording.md](recording.md).
+The **Record** button on the Mixer tab is the same button. In short: each channel chooses where
+it is recorded (nothing, the plain socket, after its effects, after the looper, or after the
+looper with its EQ and compressors), and there is a stereo file of the main mix and one of the
+**recording mix**, a second balance with its own levels, pans and EQ that only goes to a file.
 
 ## Safety
 

@@ -274,6 +274,9 @@ juce::var RemoteApi::mixerJson()
         o->setProperty ("fx", sends);
         o->setProperty ("fxSong", own);
         o->setProperty ("strip", chainJson (ch.strip));
+        o->setProperty ("rec", recordWord (ch.record));
+        o->setProperty ("recLevel", tidy (ch.recDb));
+        o->setProperty ("recPan", tidy (ch.recPan));
         channels.add (juce::var (o));
     }
 
@@ -290,6 +293,7 @@ juce::var RemoteApi::mixerJson()
         o->setProperty ("song", mixer.hasSongFx (f));
         o->setProperty ("effect", chainJson (mixer.effectNow (f)));
         o->setProperty ("eq", chainJson (e.eq));
+        o->setProperty ("recLevel", tidy (e.recDb));
         effects.add (juce::var (o));
     }
 
@@ -310,6 +314,42 @@ juce::var RemoteApi::mixerJson()
     m->setProperty ("channels", channels);
     m->setProperty ("fx", effects);
     m->setProperty ("outputs", outputs);
+
+    // The Record screen (docs/recording.md): which mixes are written, the recording mix, and the files Record would make now.
+    {
+        auto* r = obj();
+        r->setProperty ("main", now.rec.mainMix);
+        r->setProperty ("mix", now.rec.mix);
+        r->setProperty ("fx", now.rec.fxTracks);
+        r->setProperty ("level", tidy (now.rec.levelDb));
+        r->setProperty ("chain", chainJson (now.rec.chain));
+
+        juce::Array<juce::var> points, files;
+        static const char* const labels[numRecordPoints] { "Nothing", "The plain socket", "After its effects", "After the looper", "After the looper, with its EQ and compressors" };
+        static const char* const more[numRecordPoints] {
+            "This channel gets no file of its own.",
+            "Straight from the input, before any effect. The safest thing to keep: anything can be redone from it.",
+            "After the guitar or vocal effects, before the looper. No loops in it.",
+            "The live sound and its loops together, before the channel's own gate, EQ and compressors.",
+            "The live sound and its loops together, after the channel's gate, EQ and compressors, before its fader." };
+
+        for (int p = 0; p < numRecordPoints; ++p)
+        {
+            auto* o = obj();
+            o->setProperty ("id", recordWord ((RecordPoint) p));
+            o->setProperty ("label", labels[p]);
+            o->setProperty ("more", more[p]);
+            points.add (juce::var (o));
+        }
+
+        for (const auto& t : mixer.recordTracks())
+            files.add (t.name + (t.channels == 2 ? " (stereo)" : ""));
+
+        r->setProperty ("points", points);
+        r->setProperty ("files", files);
+        m->setProperty ("rec", juce::var (r));
+    }
+
     return juce::var (m);
 }
 
@@ -554,6 +594,26 @@ juce::var RemoteApi::live()
         mo->setProperty ("limit", tidy ((double) mixer.outputLimiterDb (0)));
         mo->setProperty ("guard", mixer.guardTripped());
         l->setProperty ("mix", juce::var (mo));
+    }
+
+    // ---- the recorder ----
+    {
+        auto& rec = mixer.recorder();
+        auto* ro = obj();
+        const auto room = mixer.recordRoom (Mixer::recordingFolder());
+        juce::Array<juce::var> pk;
+        pk.add (tidy ((double) mixer.takeRecordPeak (0)));
+        pk.add (tidy ((double) mixer.takeRecordPeak (1)));
+        ro->setProperty ("on", rec.isRecording());
+        ro->setProperty ("sec", std::round (rec.seconds()));
+        ro->setProperty ("lost", (double) rec.lostSamples());
+        ro->setProperty ("files", rec.fileNames().size());
+        ro->setProperty ("folder", rec.folder().getFileName());        // its name only: never a path from the disk
+        ro->setProperty ("free", tidy (room.freeGb));
+        ro->setProperty ("hours", tidy (room.hours));
+        ro->setProperty ("pk", pk);
+        ro->setProperty ("note", mixer.recordNote());
+        l->setProperty ("rec", juce::var (ro));
     }
 
     // ---- the break music, and the knob that works it and the venue presets ----
@@ -809,6 +869,51 @@ juce::String RemoteApi::doEffects (const juce::String& op, const juce::var& c, j
     return "unknown";
 }
 
+juce::String RemoteApi::doRecord (const juce::String& op, const juce::var& c, juce::var& answer)
+{
+    auto& mixer = engine.mixer();
+
+    if (op == "rec.start")
+    {
+        if (mixer.recorder().isRecording())
+            return "It is already recording.";
+
+        if (const auto error = mixer.startRecording (Mixer::recordingFolder()); error.isNotEmpty())
+            return error;
+
+        answer = "Recording " + juce::String (mixer.recorder().fileNames().size()) + " files.";
+        return {};
+    }
+
+    if (op == "rec.stop")
+    {
+        if (! mixer.recorder().isRecording())
+            return "It is not recording.";
+
+        mixer.stopRecording();
+        answer = "Saved " + juce::String (mixer.recorder().fileNames().size()) + " files in the folder " + mixer.recorder().folder().getFileName() + ".";
+        return {};
+    }
+
+    if (op == "rec.set")
+    {
+        const auto key = c.getProperty ("key", {}).toString();
+        const auto value = c.getProperty ("value", 0.0);
+        auto r = mixer.setup().rec;
+
+        if (key == "main")          r.mainMix = (bool) value;
+        else if (key == "mix")      r.mix = (bool) value;
+        else if (key == "fx")       r.fxTracks = (bool) value;
+        else if (key == "level")    r.levelDb = juce::jlimit (mixOffDb, 10.0f, (float) (double) value);
+        else                        return "The recorder has no \"" + key + "\".";
+
+        mixer.setRecord (r);
+        return {};
+    }
+
+    return "unknown";
+}
+
 juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juce::var& answer)
 {
     auto& mixer = engine.mixer();
@@ -838,6 +943,20 @@ juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juc
         else if (key == "on")           ch.on = (bool) value;
         else if (key == "mon0")         ch.monDb[0] = db (mixOffDb, 10.0f);
         else if (key == "mon1")         ch.monDb[1] = db (mixOffDb, 10.0f);
+        else if (key == "recLevel")     ch.recDb = db (mixOffDb, 12.0f);
+        else if (key == "recPan")       ch.recPan = db (-1.0f, 1.0f);
+        else if (key == "rec")
+        {
+            int point = -1;
+            for (int p = 0; p < numRecordPoints; ++p)
+                if (value.toString() == recordWord ((RecordPoint) p))
+                    point = p;
+
+            if (point < 0)
+                return "A channel can record \"none\", \"raw\", \"effects\", \"looper\" or \"processed\".";
+
+            ch.record = (RecordPoint) point;
+        }
         else if (key.startsWith ("fx") && key.length() == 3)
         {
             const int f = key.getLastCharacter() - '0';
@@ -890,6 +1009,7 @@ juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juc
         else if (key == "mon1")         e.monDb[1] = db (mixOffDb, 10.0f);
         else if (key == "lowCut")       e.lowCutHz = db (20.0f, 2000.0f);
         else if (key == "highCut")      e.highCutHz = db (1000.0f, 20000.0f);
+        else if (key == "recLevel")     e.recDb = db (mixOffDb, 12.0f);
         else                            return "A mixer effect has no \"" + key + "\".";
 
         mixer.setFx (i, e);
@@ -910,6 +1030,15 @@ juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juc
             if (const auto error = setInModel (ch.strip, slot, id, v); error.isNotEmpty())
                 return error;
             mixer.setChannel (i, ch);
+            return {};
+        }
+
+        if (where == "rec")
+        {
+            auto r = now.rec;
+            if (const auto error = setInModel (r.chain, slot, id, v); error.isNotEmpty())
+                return error;
+            mixer.setRecord (r);
             return {};
         }
 
@@ -1116,6 +1245,7 @@ juce::var RemoteApi::command (const juce::var& c)
     else if (op.startsWith ("fx."))                                 error = doEffects (op, c, answer);
     else if (op.startsWith ("break.") || op.startsWith ("tuner.") || op == "knob")              error = doBreak (op, c, answer);
     else if (op.startsWith ("mix."))                                error = doMixer (op, c, answer);
+    else if (op.startsWith ("rec."))                                error = doRecord (op, c, answer);
 
     if (error == "unknown")
         return failed ("This build of the rig does not know \"" + op + "\". The page may be newer than the rig.");

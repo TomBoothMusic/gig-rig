@@ -93,6 +93,21 @@ lines, an overlay on the venue; Tom's decision, 27 Nov 2026), and nothing else i
 Tom's split (27 Nov 2026): the song carries a reverb's or delay's own settings, the send level is
 the venue's choice. `moveToMixer` in `src/SongBook.cpp` (the Songs tab button) moves old songs over.
 
+## Recording
+
+Built 28 Nov 2026; **`docs/recording.md` is the guide. Keep it true.** `src/MixRecorder.*` writes
+the files (the audio thread only queues, a background thread writes; a slow drive loses samples
+from the files, never from the sound). The Mixer feeds it: each channel at its own tap point
+(`RecordPoint`), the main mix, each mixer effect's wet sound, and the **recording mix**, a second
+stereo balance (per-channel level against the main mix and its own pan, then its own EQ, bus
+compressor and limiter) that is only ever written to a file and is only worked on while it is
+recorded. **A rig that is recording must send every return exactly what a rig that is not
+recording sends** (a check); every file of a recording must be the same length. With the mixer
+off `Mixer::recordWithoutMixing` still records the sockets. Screen: `src/RecordingPanel.*`
+(the Recording tab) and the remote page's Record screen (`rec.*` orders). Record points, the
+`reclevel`/`recpan` keys and the `[recording]` sections are saved in act files on Tom's disk:
+never rename, only add. Not built: virtual soundcheck, copy to USB, clearing recordings.
+
 ## The remote screen (the phone and tablet control app)
 
 Built 27 Nov 2026; **`docs/remote.md` is the guide. Keep it true.** It is a web page (`remote/`,

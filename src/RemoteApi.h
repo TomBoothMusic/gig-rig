@@ -54,6 +54,7 @@ private:
     juce::var breakJson();
     juce::String doBreak (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::var effectsJson();
+    juce::String doRecord (const juce::String& op, const juce::var& command, juce::var& answer);
     juce::String doMixer (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::String doEffects (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::String doSongs (const juce::String& op, const juce::var& c, juce::var& answer);

@@ -303,6 +303,10 @@ GR.makeDemoRig = (data) =>
             load: 0.21, late: 0, open: true,
         };
 
+        const recSec = rec.on ? Math.round ((t - rec.since) / 1000) : rec.sec;
+        live.rec = { on: rec.on, sec: recSec, lost: 0, files: rec.files, folder: rec.folder, free: 212, hours: Math.round (2110 / Math.max (1, st().mixer.rec.files.length * 0.6)) / 10,
+                     pk: rec.on && st().mixer.on && st().mixer.rec.mix ? [wobble (3) * 0.4, wobble (5) * 0.4] : [0, 0], note: '' };
+
         const b = st().breakMusic;
         live.breakMusic = { playing: bm.playing, up: bm.up, fade: Math.round (bm.fade * bm.fade * 1000) / 1000, pos: bm.pos, len: 3483, mix: b.mix, level: b.level, knobOnBreak: bm.knobOnBreak, knob: knobScreen(),
             line: ! bm.playing ? (b.mix ? 'Stopped. "' + b.mix + '" will carry on from ' + clock (bm.pos) + '.' : 'Nothing chosen yet.')
@@ -342,6 +346,19 @@ GR.makeDemoRig = (data) =>
 
     // ------------------------------------------------------------ commands, as RemoteApi::command answers them
 
+    // The recorder: a stand-in that keeps time and lists the files the rig would write. It writes nothing.
+    const rec = { on: false, since: 0, sec: 0, files: 0, folder: '' };
+    const recFiles = () =>
+    {
+        const m = st().mixer;
+        const words = { raw: 'raw', effects: 'after effects', looper: m.on ? 'after looper' : 'after effects', processed: m.on ? 'after channel processing' : 'after effects' };
+        const files = m.channels.filter ((ch) => ch.on && ch.rec !== 'none').map ((ch) => ch.name + ' (' + words[ch.rec] + ')');
+        if (m.on && m.rec.fx)   m.fx.forEach ((e, f) => { if (e.on) files.push ('Effect ' + (f + 1) + ' ' + e.name); });
+        if (m.on && m.rec.main) files.push ('Main mix (stereo)');
+        if (m.on && m.rec.mix)  files.push ('Recording mix (stereo)');
+        m.rec.files = files;
+    };
+
     const blocksAt = (c) =>
     {
         const m = st().mixer;
@@ -349,6 +366,7 @@ GR.makeDemoRig = (data) =>
         if (c.where === 'out')  return (m.outputs[c.i] || {}).chain;
         if (c.where === 'fx')   return (m.fx[c.i] || {}).effect;
         if (c.where === 'fxeq') return (m.fx[c.i] || {}).eq;
+        if (c.where === 'rec')  return m.rec.chain;
         return null;
     };
 
@@ -529,7 +547,23 @@ GR.makeDemoRig = (data) =>
                 else return fail ('The tuner has no "' + k + '".');
                 return ok();
             }
-            case 'mix.on':              m.on = !! c.on; return ok();
+            case 'mix.on':              m.on = !! c.on; recFiles(); return ok();
+            case 'rec.start':
+                if (rec.on) return fail ('It is already recording.');
+                recFiles();
+                if (! m.rec.files.length) return fail ('Nothing is set to be recorded. Give at least one channel a record point.');
+                rec.on = true; rec.since = now(); rec.files = m.rec.files.length; rec.folder = 'a pretend folder (the demo writes no files)';
+                return ok ('Recording ' + rec.files + ' files. (The demo only pretends.)');
+            case 'rec.stop':
+                if (! rec.on) return fail ('It is not recording.');
+                rec.sec = Math.round ((now() - rec.since) / 1000); rec.on = false;
+                return ok ('Saved ' + rec.files + ' files. (The demo only pretends: nothing was written.)');
+            case 'rec.set':
+                if (c.key === 'level') m.rec.level = level (c.value);
+                else if (['main', 'mix', 'fx'].includes (c.key)) { m.rec[c.key] = !! c.value; recFiles(); }
+                else return fail ('The recorder has no "' + c.key + '".');
+                m.actChanged = true;
+                return ok();
             case 'mix.ch':
             {
                 const ch = m.channels[c.c], k = c.key;
@@ -537,6 +571,8 @@ GR.makeDemoRig = (data) =>
                 if (k === 'fader') ch.fader = level (c.value); else if (k === 'mute') ch.mute = !! c.value; else if (k === 'pan') ch.pan = num (c.value, -1, 1);
                 else if (k === 'trim') ch.trim = num (c.value, -24, 24); else if (k === 'on') ch.on = !! c.value;
                 else if (/^mon[01]$/.test (k)) ch.mon[Number (k[3])] = level (c.value); else if (/^fx[0-3]$/.test (k)) ch.fx[Number (k[2])] = level (c.value);
+                else if (k === 'recLevel') ch.recLevel = num (c.value, m.offDb, 12); else if (k === 'recPan') ch.recPan = num (c.value, -1, 1);
+                else if (k === 'rec') { if (! m.rec.points.some ((p) => p.id === c.value)) return fail ('A channel can record "none", "raw", "effects", "looper" or "processed".'); ch.rec = c.value; recFiles(); }
                 else return fail ('A channel has no "' + k + '".');
                 m.actChanged = true;
                 return ok();
@@ -555,6 +591,7 @@ GR.makeDemoRig = (data) =>
                 if (! e) return fail ('There is no mixer effect with that number.');
                 if (k === 'ret') e.ret = level (c.value); else if (k === 'on') e.on = !! c.value; else if (/^mon[01]$/.test (k)) e.mon[Number (k[3])] = level (c.value);
                 else if (k === 'lowCut') e.lowCut = num (c.value, 20, 2000); else if (k === 'highCut') e.highCut = num (c.value, 1000, 20000);
+                else if (k === 'recLevel') e.recLevel = num (c.value, m.offDb, 12);
                 else return fail ('A mixer effect has no "' + k + '".');
                 m.venueChanged = true;
                 return ok();

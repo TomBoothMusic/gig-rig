@@ -406,6 +406,11 @@ fx::ChainModel defaultRecordModel()
     return m;
 }
 
+const char* recordWord (RecordPoint p)
+{
+    return recordWords[juce::jlimit (0, numRecordPoints - 1, (int) p)];
+}
+
 juce::String recordPointName (RecordPoint p)
 {
     // "raw", "after effects" and "after looper" are in the names of files Tom already has: leave them.
@@ -841,6 +846,9 @@ juce::File Mixer::presetFolder (Preset kind, const juce::File& rootFolder)
 
 juce::File Mixer::recordingFolder()
 {
+    if (recordingFolderOverride != juce::File())
+        return recordingFolderOverride;
+
     return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("GigRig").getChildFile ("Recordings");
 }
 

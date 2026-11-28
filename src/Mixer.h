@@ -141,6 +141,8 @@ fx::ChainModel defaultOutputModel();
 fx::ChainModel defaultRecordModel();
 /** "after the looper" and so on: a record point as a file name and the screens show it. */
 juce::String recordPointName (RecordPoint);
+/** "none", "raw", "effects", "looper", "processed": a record point as preset files and the remote screen say it. Never rename one. */
+const char* recordWord (RecordPoint);
 /** The effects a mixer effect slot may hold (ids from the effects list). */
 const std::vector<std::string>& mixerFxChoices();
 juce::String mixOutputName (int output);
@@ -241,6 +243,8 @@ public:
 
     // ---- recording: each channel at its record point, and the main mix ----
     static juce::File recordingFolder();
+    /** Set, recordings go here instead (the self-test does, so it never writes into Tom's recordings). */
+    static inline juce::File recordingFolderOverride;
     /** Starts a new folder of WAV files. Returns an error, or an empty string. */
     juce::String startRecording (const juce::File& parentFolder);
     void stopRecording();
