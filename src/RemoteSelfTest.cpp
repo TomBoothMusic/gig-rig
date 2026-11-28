@@ -240,11 +240,63 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
             const bool refused = ! fine (cmd ("{\"op\":\"rec.stop\"}"));
             const auto started = cmd ("{\"op\":\"rec.start\"}");
             const bool running = (bool) api.live()["rec"]["on"] && (int) api.live()["rec"]["files"] > 0 && ! fine (cmd ("{\"op\":\"rec.start\"}"));
+
+            {
+                // A little sound goes by, so the files hold something a soundcheck can play.
+                std::vector<std::vector<float>> in (16, std::vector<float> (64, 0.05f)), out (16, std::vector<float> (64, 0.0f));
+                std::vector<const float*> inPtrs;
+                std::vector<float*> outPtrs;
+                for (auto& v : in)  inPtrs.push_back (v.data());
+                for (auto& v : out) outPtrs.push_back (v.data());
+
+                for (int i = 0; i < 400; ++i)
+                    engine.processBlock (inPtrs.data(), 16, outPtrs.data(), 16, 64);
+            }
+
             const auto stopped = cmd ("{\"op\":\"rec.stop\"}");
             const auto liveText = juce::JSON::toString (api.live()["rec"]);
             check (refused && fine (started) && running && fine (stopped) && ! (bool) api.live()["rec"]["on"] && mixer.recorder().folder().isAChildOf (root)
                      && ! liveText.contains (root.getFullPathName()) && ! juce::JSON::toString (api.state()).contains (root.getFullPathName()),
                    "remote: the page starts and stops a recording, a second start or a stop with nothing running is refused, and no path from the disk is sent to the page");
+
+            // ---- the Recordings page: soundcheck, keep, copy to USB, clear (28 Nov 2026) ----
+            {
+                const auto recName = mixer.recorder().folder().getFileName();
+                const auto q = [] (const juce::String& s) { return "\"" + s + "\""; };
+                const auto listNow = [&api] { return api.state()["recordings"]["list"]; };
+                const auto newest = [&listNow] { const auto l = listNow(); return l.size() > 0 ? l[0] : juce::var(); };
+                const auto first = newest();
+                const bool listed = listNow().size() == 1 && first["name"].toString() == recName && (int) first["check"] > 0 && (int) first["files"] > 0 && ! (bool) first["kept"];
+
+                const auto played = cmd ("{\"op\":\"check.start\",\"name\":" + q (recName) + "}");
+                const bool playing = (bool) api.live()["check"]["on"] && api.live()["check"]["name"].toString() == recName;
+                const bool busy = ! fine (cmd ("{\"op\":\"recs.delete\",\"name\":" + q (recName) + "}"));
+                const auto stoppedCheck = cmd ("{\"op\":\"check.stop\"}");
+                check (listed && fine (played) && playing && busy && fine (stoppedCheck) && ! (bool) api.live()["check"]["on"] && ! fine (cmd ("{\"op\":\"check.stop\"}"))
+                         && ! fine (cmd ("{\"op\":\"check.start\",\"name\":\"no such recording\"}")),
+                       "remote: the page lists the recordings, starts and stops a virtual soundcheck, and a recording that is playing cannot be deleted (" + juce::JSON::toString (listNow(), true) + ")");
+
+                const auto usb = root.getChildFile ("USB");
+                usb.createDirectory();
+                RecordingLibrary::drivesOverride = { usb };
+                RecordingLibrary::useDrivesOverride = true;
+                const auto kept = cmd ("{\"op\":\"recs.keep\",\"name\":" + q (recName) + ",\"on\":true}");
+                const bool keptRefuses = ! fine (cmd ("{\"op\":\"recs.delete\",\"name\":" + q (recName) + "}")) && (bool) newest()["kept"];
+                const bool driveSeen = juce::JSON::toString (api.state()["recordings"]["drives"], true).contains ("\"name\": \"USB\"");
+                const auto copying = cmd ("{\"op\":\"recs.copy\",\"names\":[" + q (recName) + "],\"drive\":\"USB\"}");
+                const bool finished = engine.recordings().waitForCopy (20000);
+                cmd ("{\"op\":\"recs.keep\",\"name\":" + q (recName) + ",\"on\":false}");
+                const bool copied = (bool) newest()["copied"] && usb.getChildFile (RecordingLibrary::driveFolder).getChildFile (recName).isDirectory()
+                                      && api.live()["copy"]["result"].toString().contains ("USB") && ! (bool) api.live()["copy"]["failed"];
+                const auto cleared = cmd ("{\"op\":\"recs.clear\",\"copied\":true}");
+                const auto wholeText = juce::JSON::toString (api.state()) + juce::JSON::toString (api.live());
+                check (fine (kept) && keptRefuses && driveSeen && fine (copying) && finished && copied && fine (cleared) && listNow().size() == 0 && ! wholeText.contains (root.getFullPathName())
+                         && ! fine (cmd ("{\"op\":\"recs.copy\",\"drive\":\"NOT A DRIVE\"}")) && ! fine (cmd ("{\"op\":\"recs.zap\"}")),
+                       "remote: the page keeps a recording, copies it to a USB drive, clears the copied ones, and still no path from the disk is sent to the page");
+                RecordingLibrary::useDrivesOverride = false;
+                RecordingLibrary::drivesOverride.clear();
+            }
+
             cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"rec\",\"value\":\"looper\"}");
             cmd ("{\"op\":\"rec.set\",\"key\":\"main\",\"value\":true}");
             Mixer::recordingFolderOverride = juce::File();

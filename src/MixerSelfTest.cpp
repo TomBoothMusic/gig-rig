@@ -162,6 +162,7 @@ namespace
     MixerSetup bareSetup()
     {
         auto s = defaultMixerSetup();
+        s.rec.checkCopy = false;        // the raw copies for a virtual soundcheck have their own checks (RecordingsSelfTest.cpp)
 
         for (auto& ch : s.channel)
         {
@@ -1084,7 +1085,7 @@ void runMixerSelfTest (const Check& check)
         for (size_t i = 0; i < vocal.size() && worst < 1000.0f; ++i)
             worst = std::max (worst, std::abs (vocal[i] - tone (vocalHz, 0.1, startAt + (juce::int64) i, b.rate)));
 
-        check (error.isEmpty() && ! b.engine.mixer().isOn() && same && worst < 1.0e-6f && ! files.joinIntoString (",").contains ("mix.wav") && files.size() == 5,
+        check (error.isEmpty() && ! b.engine.mixer().isOn() && same && worst < 1.0e-6f && ! files.joinIntoString (",").contains ("mix.wav") && files.size() == 10,     // five channels, and the raw copy of each one's socket
                "recording with the mixer off: each channel's socket is still recorded from the first sample (" + files.joinIntoString (", ") + "), there are no mixes, and every return carries exactly what it did");
     }
 

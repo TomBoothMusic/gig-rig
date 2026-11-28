@@ -4,6 +4,8 @@
 
 #include "BreakMusic.h"
 #include "Tuner.h"
+#include "Soundcheck.h"
+#include "RecordingLibrary.h"
 #include "EffectsRack.h"
 #include "GlitchWatch.h"
 #include "KickPad.h"
@@ -238,6 +240,12 @@ public:
     /** The break music between sets (docs/break-music.md), and the knob that works it and the venue presets (ENC 5). */
     BreakMusic& breakMusic() noexcept               { return breakCore; }
     Tuner& tuner() noexcept                         { return tunerCore; }
+    /** Virtual soundcheck: a recording's raw files played back into the sockets they came from. */
+    Soundcheck& soundcheck() noexcept               { return checkCore; }
+    /** The recordings on the drive: keeping, copying to USB, clearing. */
+    RecordingLibrary& recordings() noexcept         { return library; }
+    /** Starts a recording (by its folder's name) playing as a virtual soundcheck. Returns an error, or empty. */
+    juce::String startSoundcheck (const juce::String& recordingName, bool roundAndRound = true);
     /** The mixer channels (switched on) that go silent while the tuner is on, or with false the ones that stay live. Message thread. */
     juce::StringArray tunerChannels (bool silent) const;
     VenueKnob& venueKnob() noexcept                 { return knob; }
@@ -326,6 +334,8 @@ private:
     KickPad kickCore;
     BreakMusic breakCore;
     Tuner tunerCore;
+    Soundcheck checkCore;
+    RecordingLibrary library;
     VenueKnob knob { mixCore, breakCore };
 
     // Measured corrections from this and earlier runs, kept in a small file so the latency

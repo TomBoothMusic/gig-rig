@@ -122,6 +122,9 @@ void RemoteApi::readLists()
     actList = engine.mixer().presetNames (Mixer::Preset::act);
     venueList = engine.mixer().presetNames (Mixer::Preset::venue);
     monitorList = engine.mixer().presetNames (Mixer::Preset::monitors);
+    recordingList = engine.recordings().list();
+    driveList = engine.recordings().drives();
+    recordingsFreeGb = engine.recordings().freeGb();
 }
 
 //==============================================================================
@@ -321,6 +324,7 @@ juce::var RemoteApi::mixerJson()
         r->setProperty ("main", now.rec.mainMix);
         r->setProperty ("mix", now.rec.mix);
         r->setProperty ("fx", now.rec.fxTracks);
+        r->setProperty ("check", now.rec.checkCopy);
         r->setProperty ("level", tidy (now.rec.levelDb));
         r->setProperty ("chain", chainJson (now.rec.chain));
 
@@ -477,6 +481,38 @@ juce::var RemoteApi::state()
     s->setProperty ("mixer", mixerJson());
     s->setProperty ("breakMusic", breakJson());
 
+    // The recordings on the drive (the Record screen's Recordings page). Names only: never a path from the disk.
+    {
+        juce::Array<juce::var> list, drives;
+
+        for (const auto& i : recordingList)
+        {
+            auto* o = obj();
+            o->setProperty ("name", i.name);
+            o->setProperty ("files", i.files);
+            o->setProperty ("min", tidy (i.seconds / 60.0));
+            o->setProperty ("gb", tidy ((double) i.bytes / 1.0e9));
+            o->setProperty ("kept", i.kept);
+            o->setProperty ("copied", i.copied);
+            o->setProperty ("check", i.soundcheckSockets);
+            list.add (juce::var (o));
+        }
+
+        for (const auto& d : driveList)
+        {
+            auto* o = obj();
+            o->setProperty ("name", d.name);
+            o->setProperty ("free", tidy (d.freeGb));
+            drives.add (juce::var (o));
+        }
+
+        auto* r = obj();
+        r->setProperty ("list", list);
+        r->setProperty ("drives", drives);
+        r->setProperty ("free", tidy (recordingsFreeGb));
+        s->setProperty ("recordings", juce::var (r));
+    }
+
     {
         // Top-level, not inside "effects": a song's sounds replace "effects" whole (in the demo too), and these never change.
         // What "Add an effect" offers, in the Effects tab's order.
@@ -614,6 +650,27 @@ juce::var RemoteApi::live()
         ro->setProperty ("pk", pk);
         ro->setProperty ("note", mixer.recordNote());
         l->setProperty ("rec", juce::var (ro));
+    }
+
+    // ---- the virtual soundcheck, and a copy to USB ----
+    {
+        auto& sc = engine.soundcheck();
+        auto* co = obj();
+        co->setProperty ("on", sc.isPlaying());
+        co->setProperty ("name", sc.name());
+        co->setProperty ("pos", std::round (sc.positionSeconds()));
+        co->setProperty ("len", std::round (sc.lengthSeconds()));
+        co->setProperty ("missed", sc.missedBlocks());
+        l->setProperty ("check", juce::var (co));
+
+        const auto p = engine.recordings().progress();
+        auto* po = obj();
+        po->setProperty ("on", p.running);
+        po->setProperty ("done", tidy (p.done));
+        po->setProperty ("now", p.now);
+        po->setProperty ("result", p.result);
+        po->setProperty ("failed", p.failed);
+        l->setProperty ("copy", juce::var (po));
     }
 
     // ---- the break music, and the knob that works it and the venue presets ----
@@ -904,10 +961,76 @@ juce::String RemoteApi::doRecord (const juce::String& op, const juce::var& c, ju
         if (key == "main")          r.mainMix = (bool) value;
         else if (key == "mix")      r.mix = (bool) value;
         else if (key == "fx")       r.fxTracks = (bool) value;
+        else if (key == "check")    r.checkCopy = (bool) value;
         else if (key == "level")    r.levelDb = juce::jlimit (mixOffDb, 10.0f, (float) (double) value);
         else                        return "The recorder has no \"" + key + "\".";
 
         mixer.setRecord (r);
+        return {};
+    }
+
+    return "unknown";
+}
+
+juce::String RemoteApi::doRecordings (const juce::String& op, const juce::var& c, juce::var& answer)
+{
+    auto& lib = engine.recordings();
+    const auto name = c.getProperty ("name", {}).toString();
+
+    if (op == "check.start")
+    {
+        if (const auto error = engine.startSoundcheck (name, (bool) c.getProperty ("loop", true)); error.isNotEmpty())
+            return error;
+
+        answer = "Playing " + name + " through the rig. Its sockets hear the recording until Stop.";
+        return {};
+    }
+
+    if (op == "check.stop")
+    {
+        if (! engine.soundcheck().isPlaying())
+            return "No soundcheck is playing.";
+
+        engine.soundcheck().stop();
+        answer = "Stopped. The sockets hear what is plugged in again.";
+        return {};
+    }
+
+    if (op == "recs.keep")      return lib.setKept (name, (bool) c.getProperty ("on", true));
+
+    if (op == "recs.delete")
+    {
+        if (const auto error = lib.remove (name); error.isNotEmpty())
+            return error;
+
+        answer = "Deleted " + name + ".";
+        return {};
+    }
+
+    if (op == "recs.clear")
+    {
+        answer = lib.clear ((bool) c.getProperty ("copied", true));
+        return {};
+    }
+
+    if (op == "recs.copy")
+    {
+        juce::StringArray names;
+
+        if (const auto* list = c.getProperty ("names", {}).getArray())
+            for (const auto& n : *list)
+                names.add (n.toString());
+
+        if (const auto error = lib.copy (names, c.getProperty ("drive", {}).toString()); error.isNotEmpty())
+            return error;
+
+        answer = "Copying. Leave the drive in until it says it has finished.";
+        return {};
+    }
+
+    if (op == "recs.cancel")
+    {
+        lib.cancelCopy();
         return {};
     }
 
@@ -1246,6 +1369,7 @@ juce::var RemoteApi::command (const juce::var& c)
     else if (op.startsWith ("break.") || op.startsWith ("tuner.") || op == "knob")              error = doBreak (op, c, answer);
     else if (op.startsWith ("mix."))                                error = doMixer (op, c, answer);
     else if (op.startsWith ("rec."))                                error = doRecord (op, c, answer);
+    else if (op.startsWith ("recs.") || op.startsWith ("check."))   error = doRecordings (op, c, answer);
 
     if (error == "unknown")
         return failed ("This build of the rig does not know \"" + op + "\". The page may be newer than the rig.");

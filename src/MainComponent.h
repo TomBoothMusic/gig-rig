@@ -13,6 +13,7 @@
 #include "MixerPanel.h"
 #include "PedalPanel.h"
 #include "RecordingPanel.h"
+#include "RecordingsPanel.h"
 #include "RemotePanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
@@ -60,6 +61,7 @@ private:
     RemotePanel remotePanel { remoteServer };
     BreakMusicPanel breakPanel { engine };
     RecordingPanel recordingPanel { engine };       // after the mixer panel, which reads the mixer's memory
+    RecordingsPanel recordingsPanel { engine };     // the recordings on the drive: soundcheck, keep, copy to USB, clear
     TunerStrip tunerStrip { engine };                       // the tuner, in the header beside Copy report
     StrobeTuner strobeTuner { engine };                     // the tuner filling the whole window while it is on
     juce::TooltipWindow tooltips { this };

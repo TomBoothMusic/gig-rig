@@ -55,6 +55,7 @@ private:
     juce::String doBreak (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::var effectsJson();
     juce::String doRecord (const juce::String& op, const juce::var& command, juce::var& answer);
+    juce::String doRecordings (const juce::String& op, const juce::var& command, juce::var& answer);
     juce::String doMixer (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::String doEffects (const juce::String& op, const juce::var& c, juce::var& answer);
     juce::String doSongs (const juce::String& op, const juce::var& c, juce::var& answer);
@@ -67,6 +68,9 @@ private:
     bool listsRead = false;
     juce::uint32 listsAt = 0;
     juce::StringArray presetList, actList, venueList, monitorList;
+    std::vector<RecordingLibrary::Info> recordingList;
+    std::vector<RecordingLibrary::Drive> driveList;
+    double recordingsFreeGb = 0.0;
     juce::StringArray typesSeen;        // effect types the last state() used, so types are only described once each
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RemoteApi)

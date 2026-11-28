@@ -57,7 +57,8 @@ private:
     StatusRow status;
     juce::TextButton recordButton { "Record" }, folderButton { "Open the recordings folder" }, copyButton { "Copy recording report" };
     juce::Label clock, help, tracksHeading, pointHeading, levelHeading, panHeading, mixHeading, mixLevelLabel, blockHint, roomLabel;
-    juce::ToggleButton mainBox { "Main mix (stereo, as the PA gets it)" }, mixBox { "Recording mix (stereo, set below)" }, fxBox { "Each mixer reverb and delay as a file of its own" };
+    juce::ToggleButton mainBox { "Main mix (stereo, as the PA gets it)" }, mixBox { "Recording mix (stereo, set below)" }, fxBox { "Each mixer reverb and delay as a file of its own" },
+                       checkBox { "A raw copy of every socket, for a virtual soundcheck" };
     std::array<ChannelRow, numMixChannels> rows;
     std::array<FxRow, numMixFx> fxRows;
     juce::Slider mixLevel;

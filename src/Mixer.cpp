@@ -172,6 +172,7 @@ namespace
         t << "mainmix=" << (s.mainMix ? 1 : 0) << "\n";
         t << "mix=" << (s.mix ? 1 : 0) << "\n";
         t << "effects=" << (s.fxTracks ? 1 : 0) << "\n";
+        t << "soundcheck=" << (s.checkCopy ? 1 : 0) << "\n";
         t << "level=" << num (s.levelDb) << "\n";
         t << "[recording processing]\n" << juce::String (s.chain.toText());
     }
@@ -274,6 +275,7 @@ namespace
                 if (has ("mainmix")) s.rec.mainMix = b ("mainmix");
                 if (has ("mix"))     s.rec.mix = b ("mix");
                 if (has ("effects")) s.rec.fxTracks = b ("effects");
+                if (has ("soundcheck")) s.rec.checkCopy = b ("soundcheck");
                 if (has ("level"))   s.rec.levelDb = juce::jlimit (mixOffDb, 10.0f, f ("level"));
             }
             else if (words[0] == "fx" && (wanted & fxParts) != 0)
@@ -1156,7 +1158,7 @@ std::vector<Mixer::RecordTrack> Mixer::recordTracks() const
 
         // With the mixer off there is no looper point to tap: the channel's socket after its effects is the nearest thing.
         const bool fallsBack = ! mixing && (ch.record == RecordPoint::afterLooper || ch.record == RecordPoint::afterProcessing);
-        tracks.push_back ({ c, ch.name + " (" + recordPointName (fallsBack ? RecordPoint::afterEffects : ch.record) + ")", 1 });
+        tracks.push_back ({ c, ch.name + " (" + recordPointName (fallsBack ? RecordPoint::afterEffects : ch.record) + ")", 1, ch.record == RecordPoint::raw ? ch.socket : -1 });
     }
 
     if (mixing)
@@ -1168,6 +1170,27 @@ std::vector<Mixer::RecordTrack> Mixer::recordTracks() const
 
         if (now.rec.mainMix)    tracks.push_back ({ recSlotMain, "Main mix", 2 });
         if (now.rec.mix)        tracks.push_back ({ recSlotMix, "Recording mix", 2 });
+    }
+
+    // The soundcheck copy: every socket a channel uses, raw, once (a socket already recorded raw needs no second file).
+    if (now.rec.checkCopy)
+    {
+        unsigned covered = 0;
+
+        for (const auto& t : tracks)
+            if (t.socket >= 0 && t.socket < 32)
+                covered |= 1u << t.socket;
+
+        for (int c = 0; c < numMixChannels; ++c)
+        {
+            const auto& ch = now.channel[(size_t) c];
+
+            if (! ch.on || ch.socket < 0 || ch.socket >= 32 || (covered & (1u << ch.socket)) != 0)
+                continue;
+
+            covered |= 1u << ch.socket;
+            tracks.push_back ({ recSlotRaw + c, ch.name + " (raw for soundcheck)", 1, ch.socket });
+        }
     }
 
     return tracks;
@@ -1224,8 +1247,20 @@ juce::String Mixer::startRecording (const juce::File& parentFolder)
         for (const auto& name : rec.fileNames())
             about << name << "\n";
 
+        // The lines a virtual soundcheck reads: which input socket each raw file came from. Never reword them.
+        const auto names = rec.fileNames();
+        bool any = false;
+
+        for (size_t i = 0; i < list.size() && (int) i < names.size(); ++i)
+            if (list[i].socket >= 0)
+            {
+                about << (any ? "" : "\nFor a virtual soundcheck (these lines are read by the app):\n") << "soundcheck: " << names[(int) i] << " = socket " << (list[i].socket + 1) << "\n";
+                any = true;
+            }
+
         about << "\nWhat the words in the names mean:\n"
                  "  raw: the plain input socket, before any effect.\n"
+                 "  raw for soundcheck: the same, kept so this recording can be played back through the rig as a virtual soundcheck.\n"
                  "  after effects: after the guitar or vocal effects chain, before the looper.\n"
                  "  after looper: the live sound and its loops together, before the channel's own gate, EQ and compressors (loops carry the processing they were recorded with).\n"
                  "  after channel processing: the live sound and its loops together, after the channel's gate, EQ and compressors, before its fader.\n"
@@ -1268,7 +1303,8 @@ juce::String Mixer::recordingReportText() const
     t << "Recording mix: " << (now.rec.mix ? "written" : "not written") << ", level " << dbText (now.rec.levelDb)
       << ", EQ " << (now.rec.chain.slots[recEq].on ? "on" : "off") << ", bus compressor " << (now.rec.chain.slots[recBus].on ? "on" : "off")
       << ", limiter " << (now.rec.chain.slots[recLimiter].on ? "on at " + juce::String (now.rec.chain.slots[recLimiter].param ("ceiling", -1.0f), 1) + " dB" : juce::String ("off"))
-      << ". Main mix file: " << (now.rec.mainMix ? "written" : "not written") << ". Reverbs and delays as files of their own: " << (now.rec.fxTracks ? "yes" : "no") << ".\n";
+      << ". Main mix file: " << (now.rec.mainMix ? "written" : "not written") << ". Reverbs and delays as files of their own: " << (now.rec.fxTracks ? "yes" : "no")
+      << ". Raw copy for a virtual soundcheck: " << (now.rec.checkCopy ? "yes" : "no") << ".\n";
 
     for (int c = 0; c < numMixChannels; ++c)
     {
@@ -1819,6 +1855,13 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
 
         // A channel switched off fades out before it stops being worked on. (Its file, if it has
         // one, still gets this block, as silence, so every file of a recording stays the same length.)
+        // The soundcheck copy: this channel's socket, raw, whatever else happens to the channel.
+        if (rec.wants (recSlotRaw + c))
+        {
+            const int s = ch.socket.load (std::memory_order_relaxed);
+            rec.write (recSlotRaw + c, on && s >= 0 && s < numIns && raw[s] != nullptr ? raw[s] : silence.data(), nullptr, n);
+        }
+
         if ((! on && ! ch.wasOn) || ! stripped[(size_t) c])
         {
             if (rec.wants (c))
@@ -2203,7 +2246,15 @@ void Mixer::recordWithoutMixing (const float* const* raw, const float* const* fe
         rec.write (c, plugged && from[socket] != nullptr ? from[socket] : silence.data(), nullptr, n);
     }
 
-    for (int slot = numMixChannels; slot < MixRecorder::maxTracks; ++slot)
+    for (int c = 0; c < numMixChannels; ++c)
+        if (rec.wants (recSlotRaw + c))
+        {
+            auto& ch = chans[(size_t) c];
+            const int socket = ch.socket.load (std::memory_order_relaxed);
+            rec.write (recSlotRaw + c, ch.on.load (std::memory_order_relaxed) && socket >= 0 && socket < numIns && raw[socket] != nullptr ? raw[socket] : silence.data(), nullptr, n);
+        }
+
+    for (int slot = numMixChannels; slot < recSlotRaw; ++slot)
         if (rec.wants (slot))
             rec.write (slot, silence.data(), silence.data(), n);
 

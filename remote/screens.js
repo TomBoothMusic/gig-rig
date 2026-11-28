@@ -937,6 +937,7 @@ GR.screens.tools = (root) =>
 const recClock = (sec) => Math.floor (sec / 3600) + ':' + String (Math.floor (sec / 60) % 60).padStart (2, '0') + ':' + String (Math.floor (sec % 60)).padStart (2, '0');
 const recLow = -30;      // the bottom of a recording mix level: not in the mix at all
 const recLevelParam = (label) => ({ id: 'recLevel', label, unit: 'dB', min: recLow, max: 12, def: 0, kind: 'knob' });
+const recLength = (min) => min >= 60 ? Math.floor (min / 60) + ' h ' + Math.round (min % 60) + ' min' : min >= 1 ? Math.round (min) + ' min' : Math.round (min * 60) + ' s';
 const recPointOf = (m, id) => m.rec.points.find ((p) => p.id === id) || m.rec.points[0];
 const recOff = (v) => v <= recLow + 0.05 ? GR.state.mixer.offDb : v;
 
@@ -948,12 +949,12 @@ function recMixItems()
     const setCh = (c, key, value) => GR.sendValue ('rec' + c + key, { op: 'mix.ch', c, key, value });
 
     return [
-        { ico: 'level', label: 'Balance', title: 'Louder or quieter than in the main mix', build: () => [
-            h ('p', { class: 'hint', text: 'At 0 dB a channel is as loud here as it is in the main mix, and it still follows its fader and mute. All the way down leaves it out of the recording mix.' }),
+        { ico: 'level', label: 'Balance', title: 'Post-fader levels', build: () => [
+            h ('p', { class: 'hint', text: 'Post-fader: 0 dB is the same as the main mix.' }),
             chans.map ((x) => tint (GR.param (recLevelParam (x.ch.name), Math.max (recLow, x.ch.recLevel), (v) => { x.ch.recLevel = recOff (v); setCh (x.c, 'recLevel', recOff (v)); }), channelColour (x.ch))),
             m.fx.map ((e, f) => e.on ? GR.param (recLevelParam (e.name), Math.max (recLow, e.recLevel), (v) => { e.recLevel = recOff (v); GR.sendValue ('recfx' + f, { op: 'mix.fx', f, key: 'recLevel', value: recOff (v) }); }) : null) ] },
-        { ico: 'sends', label: 'Pan', title: 'Left to right, in the recording only', build: () => [
-            h ('p', { class: 'hint', text: 'Where each channel sits in the recording mix. The room still hears the main mix as it is.' }),
+        { ico: 'sends', label: 'Pan', title: 'Pan', build: () => [
+            h ('p', { class: 'hint', text: 'In the recording only.' }),
             chans.map ((x) => x.ch.link ? h ('p', { class: 'hint', text: x.ch.name + ': a stereo pair, hard left and right.' })
                 : tint (GR.param ({ id: 'recPan', label: x.ch.name + ' (-1 left, 1 right)', unit: '', min: -1, max: 1, def: 0, kind: 'knob' }, x.ch.recPan, (v) => { x.ch.recPan = v; setCh (x.c, 'recPan', v); }), channelColour (x.ch))) ] },
     ].concat (r.chain.map ((b, i) => blockItem ('rec.' + i, b, {
@@ -962,7 +963,7 @@ function recMixItems()
     })), [
         { ico: 'level', label: 'Level', title: 'The whole recording mix', build: () => [
             GR.level ('Level into the file', r.level, (v) => { r.level = v; GR.sendValue ('reclevel', { op: 'rec.set', key: 'level', value: v }); }),
-            h ('p', { class: 'hint', text: 'The recording mix is always stereo, and it is only ever written to a file: nothing here changes what the room or the in-ears hear.' }) ] },
+            h ('p', { class: 'hint', text: 'Only ever written to a file.' }) ] },
     ]);
 }
 
@@ -1011,6 +1012,82 @@ GR.screens.record = (root) =>
         return;
     }
 
+    // ---- the recordings on the drive: soundcheck, keep, copy to USB, clear ----
+    const recs = GR.state.recordings || { list: [], drives: [], free: 0 };
+    const liveCheck = (GR.live && GR.live.check) || {}, liveCopy = (GR.live && GR.live.copy) || {};
+    const facts = (x) => [recLength (x.min), x.files + ' files', Number (x.gb).toFixed (x.gb < 1 ? 2 : 1) + ' GB', x.kept ? 'kept' : null, x.copied ? 'copied to USB' : 'not copied',
+                          x.check > 0 ? null : 'no raw files'].filter (Boolean).join (', ');
+    const order = (c) => GR.send (c).then (() => GR.render());
+    const copyTo = (names) =>
+    {
+        const drive = recs.drives[0];
+        if (! drive) { GR.toast ('No USB drive is plugged into the rig.', true); return; }
+        GR.ask ('Copy to the drive "' + drive.name + '"? A USB drive at work can make the sound click, so only copy when nobody is listening.', 'Copy', () => order ({ op: 'recs.copy', names, drive: drive.name }));
+    };
+    const watch = (line) =>
+    {
+        let wasCheck = !! liveCheck.on, wasCopy = !! liveCopy.on;
+        GR.onLive = (l) =>
+        {
+            const c = l.check || {}, p = l.copy || {};
+            if (!! c.on !== wasCheck || !! p.on !== wasCopy) { wasCheck = !! c.on; wasCopy = !! p.on; GR.render(); return; }
+            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '')
+                : p.on ? p.now + ' (' + Math.round ((p.done || 0) * 100) + '%). Leave the drive in.'
+                : p.result ? p.result : Number (recs.free || 0).toFixed (0) + ' GB free on the rig.';
+            line.className = 'hint' + ((p.failed && ! p.on && ! c.on) || c.missed > 0 ? ' bad' : '');
+        };
+        GR.onLive ({ check: liveCheck, copy: liveCopy });
+    };
+
+    if (page && page.kind === 'rec1' && recs.list.some ((x) => x.name === page.name))
+    {
+        const x = recs.list.find ((y) => y.name === page.name);
+        const playing = liveCheck.on && liveCheck.name === x.name;
+        const line = h ('p', { class: 'hint' });
+        root.append (
+            pageHead (() => go ({ kind: 'recs' }), 'Recordings', x.name, facts (x)),
+            line,
+            h ('div', { class: 'choices' },
+                playing
+                    ? h ('button', { class: 'choice on', onclick: () => order ({ op: 'check.stop' }) }, h ('b', { text: 'Stop the soundcheck' }), h ('small', { text: 'The sockets hear what is plugged in again.' }))
+                    : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true }) }, h ('b', { text: 'Play as a soundcheck' }),
+                        h ('small', { text: x.check > 0 ? 'Its raw files play into their sockets, through today\'s effects and mixer, round and round.' : 'It has no raw files, so it cannot be played back.' })),
+                h ('button', { class: 'choice' + (x.kept ? ' on' : ''), 'aria-pressed': x.kept ? 'true' : 'false', onclick: () => order ({ op: 'recs.keep', name: x.name, on: ! x.kept }) },
+                    h ('b', { text: x.kept ? 'Kept' : 'Keep' }), h ('small', { text: 'Clearing never removes a kept recording.' })),
+                h ('button', { class: 'choice', disabled: ! recs.drives.length || !! liveCopy.on, onclick: () => copyTo ([x.name]) }, h ('b', { text: 'Copy to USB' }),
+                    h ('small', { text: recs.drives.length ? 'To "' + recs.drives[0].name + '" (' + Number (recs.drives[0].free).toFixed (0) + ' GB free). Every file is checked.' : 'No USB drive is plugged into the rig.' })),
+                h ('button', { class: 'choice danger', disabled: x.kept || playing, onclick: () => GR.ask ('Delete ' + x.name + ' for good?' + (x.copied ? '' : ' It has NOT been copied to USB.'), 'Delete',
+                        () => GR.send ({ op: 'recs.delete', name: x.name }).then (() => go ({ kind: 'recs' }))) },
+                    h ('b', { text: 'Delete' }), h ('small', { text: x.kept ? 'Switch Keep off first.' : 'Gone for good.' }))));
+        watch (line);
+        return;
+    }
+
+    if (page && (page.kind === 'recs' || page.kind === 'rec1'))
+    {
+        const line = h ('p', { class: 'hint' });
+        root.append (
+            pageHead (() => go (null), 'Record', 'Recordings', 'Newest first. Tap one.'),
+            line,
+            liveCheck.on ? h ('button', { class: 'choice on', onclick: () => order ({ op: 'check.stop' }) }, h ('b', { text: 'Stop the soundcheck' }), h ('small', { text: liveCheck.name })) : null,
+            recs.list.length
+                ? h ('div', { class: 'choices' }, recs.list.map ((x) => h ('button', { class: 'choice go', onclick: () => go ({ kind: 'rec1', name: x.name }) }, h ('b', { text: x.name }), h ('small', { text: facts (x) }))))
+                : h ('p', { class: 'hint', text: 'There are no recordings on the rig yet.' }),
+            h ('section', { class: 'card' },
+                h ('h2', { text: 'All of them' }),
+                h ('div', { class: 'choices' },
+                    liveCopy.on
+                        ? h ('button', { class: 'choice', onclick: () => order ({ op: 'recs.cancel' }) }, h ('b', { text: 'Stop the copy' }), h ('small', { text: 'What is already copied and checked stays on the drive.' }))
+                        : h ('button', { class: 'choice', disabled: ! recs.drives.length, onclick: () => copyTo ([]) }, h ('b', { text: 'Copy all to USB' }),
+                            h ('small', { text: recs.drives.length ? 'Every recording not copied yet, to "' + recs.drives[0].name + '".' : 'No USB drive is plugged into the rig.' })),
+                    h ('button', { class: 'choice', disabled: !! liveCopy.on, onclick: () => GR.ask ('Delete every recording that has been copied to USB and checked? Kept ones stay.', 'Clear', () => order ({ op: 'recs.clear', copied: true })) },
+                        h ('b', { text: 'Clear the copied ones' }), h ('small', { text: 'Kept ones stay.' })),
+                    h ('button', { class: 'choice danger', disabled: !! liveCopy.on, onclick: () => GR.ask ('Delete EVERY recording, copied or not? Only kept ones stay.', 'Clear all', () => order ({ op: 'recs.clear', copied: false })) },
+                        h ('b', { text: 'Clear all but the kept' }), h ('small', { text: 'Copied to USB or not.' })))));
+        watch (line);
+        return;
+    }
+
     GR.ui.recPage = null;
 
     // ---- the front page: the button, and what it will write ----
@@ -1035,14 +1112,17 @@ GR.screens.record = (root) =>
             h ('button', { class: 'choice go', disabled: !! live0.on, onclick: () => go ({ kind: 'channels' }) }, h ('b', { text: 'Channels' }),
                 h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own. Choose where each is recorded.' })),
             h ('button', { class: 'choice go', onclick: () => go ({ kind: 'mix' }) }, h ('b', { text: 'Recording mix' }),
-                h ('small', { text: 'Its own balance, pans, EQ and limiter. The room never hears it.' }))),
+                h ('small', { text: 'Its own balance, pans, EQ and limiter. The room never hears it.' })),
+            h ('button', { class: 'choice go' + ((GR.live && GR.live.check && GR.live.check.on) ? ' on' : ''), onclick: () => go ({ kind: 'recs' }) }, h ('b', { text: 'Recordings' }),
+                h ('small', { text: (GR.live && GR.live.check && GR.live.check.on) ? 'A soundcheck is playing: ' + GR.live.check.name + '.' : ((GR.state.recordings || { list: [] }).list.length) + ' on the rig. Soundcheck, copy to USB, clear.' }))),
         h ('section', { class: 'card' },
             h ('h2', { text: 'Mixes to write' }),
             ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so only the channels can be recorded, at their sockets. Loops and these mixes need the mixer on.' }) : null,
             h ('fieldset', { class: 'plain', disabled: !! live0.on },
                 tick ('Recording mix', 'mix', 'A stereo file with the balance set under Recording mix.'),
                 tick ('Main mix', 'main', 'A stereo file of exactly what the PA was sent.'),
-                tick ('Reverbs and delays', 'fx', 'Each mixer effect alone, as a file of its own.'))),
+                tick ('Reverbs and delays', 'fx', 'Each mixer effect alone, as a file of its own.'),
+                tick ('Soundcheck copy', 'check', 'Every socket raw, so this recording can be played back as a virtual soundcheck.'))),
         h ('section', { class: 'card' },
             h ('h2', { text: live0.on ? 'Being written now' : 'Pressing Record writes ' + r.files.length + (r.files.length === 1 ? ' file' : ' files') }),
             r.files.length ? h ('ol', { class: 'rec-files' }, r.files.map ((f) => h ('li', { text: f }))) : h ('p', { class: 'hint', text: 'Nothing is chosen yet. Give a channel a record point, or tick a mix.' }),

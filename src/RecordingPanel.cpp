@@ -103,7 +103,7 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
     for (auto* l : { &tracksHeading, &pointHeading, &levelHeading, &panHeading, &mixHeading, &mixLevelLabel, &blockHint })
         addAndMakeVisible (*l);
 
-    for (auto* b : { &mainBox, &mixBox, &fxBox })
+    for (auto* b : { &mainBox, &mixBox, &fxBox, &checkBox })
     {
         b->setColour (juce::ToggleButton::textColourId, style::textMain);
         b->onClick = [this]
@@ -115,6 +115,7 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
             r.mainMix = mainBox.getToggleState();
             r.mix = mixBox.getToggleState();
             r.fxTracks = fxBox.getToggleState();
+            r.checkCopy = checkBox.getToggleState();
             mixer.setRecord (r);
         };
         addAndMakeVisible (*b);
@@ -122,6 +123,7 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
 
     mainBox.setTooltip ("A stereo file of the main output, with the venue's EQ and limiter, exactly as the PA was sent it");
     mixBox.setTooltip ("A stereo file of the recording mix: the same channels, with the levels, pans and EQ set on this tab");
+    checkBox.setTooltip ("Also writes each socket in use plain, before any effect, so the Recordings tab can play this recording back through the rig as a virtual soundcheck");
     fxBox.setTooltip ("Each of the mixer's reverbs and delays alone, so a channel recorded dry can have its reverb put back later");
 
     for (int c = 0; c < numMixChannels; ++c)
@@ -273,7 +275,7 @@ juce::String RecordingPanel::signature() const
 {
     const auto& now = mixer.setup();
     juce::String s;
-    s << (int) mixer.isOn() << (int) now.rec.mainMix << (int) now.rec.mix << (int) now.rec.fxTracks << now.rec.levelDb << juce::String (now.rec.chain.toText());
+    s << (int) mixer.isOn() << (int) now.rec.mainMix << (int) now.rec.mix << (int) now.rec.fxTracks << (int) now.rec.checkCopy << now.rec.levelDb << juce::String (now.rec.chain.toText());
 
     for (const auto& ch : now.channel)
         s << ch.name << (int) ch.on << (int) ch.record << ch.recDb << "/" << ch.recPan << (int) ch.link << "|";
@@ -292,6 +294,7 @@ void RecordingPanel::refresh()
     mainBox.setToggleState (now.rec.mainMix, juce::dontSendNotification);
     mixBox.setToggleState (now.rec.mix, juce::dontSendNotification);
     fxBox.setToggleState (now.rec.fxTracks, juce::dontSendNotification);
+    checkBox.setToggleState (now.rec.checkCopy, juce::dontSendNotification);
     mixLevel.setValue (now.rec.levelDb, juce::dontSendNotification);
 
     for (int c = 0; c < numMixChannels; ++c)
@@ -526,6 +529,7 @@ void RecordingPanel::resized()
     mainBox.setBounds (right.removeFromTop (24));
     mixBox.setBounds (right.removeFromTop (24));
     fxBox.setBounds (right.removeFromTop (24));
+    checkBox.setBounds (right.removeFromTop (24));
     right.removeFromTop (8);
     auto levelRow = right.removeFromTop (24);
     mixLevelLabel.setBounds (levelRow.removeFromLeft (150));
