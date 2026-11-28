@@ -21,6 +21,9 @@ switch 8 of the finished board. **Keep this page true when the code changes.**
 - **The monitors keep the guitar**, so you can still hear it in your in-ears (Tom, 19 Nov
   2026). Untick **Keep the guitars in the monitors while tuning** and the guitar is silent
   everywhere, the way a tuner pedal at the front of a pedalboard does it.
+- **A sound crew's direct outs lose the guitar too.** When an outside sound company takes a
+  direct out from each channel, the guitar's direct out goes silent while you tune and the
+  voice's does not (Tom, 28 Nov 2026). Loops on that direct out carry on.
 - **It listens to the guitars only**, so talking into the microphone never takes the tuner off
   the string.
 - **With the mixer off it changes no sound at all.** Mute the guitar on the real mixer, as now.
@@ -120,9 +123,9 @@ took, and the note it is reading if it is on (with **Strobe locked.** when the s
 - **The silence.** `Tuner::silence()`: `guitars`, `mainMix` or `nothing`. For `guitars` the
   engine tells the mixer which channels (`AudioEngine::tellTunerTheGuitars`, called at the
   start of every tick; `Mixer::setTunerChannels`). With the monitors kept
-  (`Tuner::monitorsKeepGuitars`, the default) the mixer gives the main mix and the sends to the
-  reverbs and delays each such channel's **loops without its live sound** (`Mixer::process`,
-  `tuneFeed`, 20 ms down and back) and the monitors get the channel as always; a loop recorded
+  (`Tuner::monitorsKeepGuitars`, the default) the mixer gives the main mix, the sends to the
+  reverbs and delays and the channel's direct out each such channel's **loops without its live sound** (`Mixer::process`,
+  `tuneFeed` and `tuneDirect`, 20 ms down and back) and the monitors get the channel as always; a loop recorded
   meanwhile does have the guitar in it. Without it the mixer fades each one's **live sound to
   nothing where it enters the channel** (`Mixer::stripChannels`), so it is silent in the main
   mix, the monitors and anything recorded meanwhile. Either way loops and reverb tails carry on.

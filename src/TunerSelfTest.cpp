@@ -327,6 +327,10 @@ void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& ch
                 for (auto& o : s.output)
                     for (auto& slot : o.chain.slots) slot.on = false;
 
+                for (auto& ch : s.channel)
+                    if (ch.socket == 7) ch.directReturn = 6;        // the electric's direct out for a sound crew
+                    else if (ch.socket == 5) ch.directReturn = 7;   // and the voice's
+
                 s.output[0].mono = false;
                 s.output[0].firstReturn = 4;
                 s.output[1].firstReturn = 0;
@@ -365,6 +369,7 @@ void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& ch
             voiceOnly.run (0.5);
             both.run (0.5);
             const float before = guitarIn (4, 0.1), monBefore = guitarIn (0, 0.1);
+            const float directBefore = guitarIn (6, 0.1);
 
             // As it comes: the guitar leaves the main mix and stays in the monitors (Tom's in-ears).
             const bool keepsByDefault = tuner.monitorsKeepGuitars();
@@ -374,6 +379,14 @@ void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& ch
             const auto r = tuner.reading();
             const float mainDuring = juce::jmax (guitarIn (4, 0.3), guitarIn (5, 0.3));
             const float monDuring = guitarIn (0, 0.1), mon2During = guitarIn (2, 0.1);
+            const float directDuring = guitarIn (6, 0.3);
+            float voiceDirect = 0.0f, voiceDirectDiff = 0.0f;
+
+            for (size_t i = both.heard[7].size() - 4800; i < both.heard[7].size(); ++i)
+            {
+                voiceDirect = juce::jmax (voiceDirect, std::abs (both.heard[7][i]));
+                voiceDirectDiff = juce::jmax (voiceDirectDiff, std::abs (both.heard[7][i] - voiceOnly.heard[7][i]));
+            }
 
             // No click on the way down: the guitar's part of the main mix never steps more than the note itself does.
             const auto biggestStep = [&] (int ret, double seconds)
@@ -396,6 +409,7 @@ void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& ch
             both.run (0.3);
             step = juce::jmax (step, biggestStep (4, 0.3));
             const float after = guitarIn (4, 0.1), monAfter = guitarIn (0, 0.1);
+            const float directAfter = guitarIn (6, 0.1);
             const auto silentNames = both.engine.tunerChannels (true).joinIntoString (", "), liveNames = both.engine.tunerChannels (false).joinIntoString (", ");
 
             check (byDefault && keepsByDefault && before > 0.045f && monBefore > 0.045f && mainDuring < 1.0e-6f && std::abs (after - before) < 1.0e-5f && step < limit,
@@ -403,6 +417,10 @@ void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& ch
                        + juce::String (mainDuring, 8) + ", biggest step " + juce::String (step, 6) + ")");
             check (std::abs (monDuring - monBefore) < 1.0e-5f && std::abs (mon2During - monBefore) < 1.0e-5f && std::abs (monAfter - monBefore) < 1.0e-5f,
                    "tuner: the monitors keep the guitar while tuning, exactly as loud (" + juce::String (monBefore, 4) + ", " + juce::String (monDuring, 4) + ")");
+            check (directBefore > 0.045f && directDuring < 1.0e-6f && std::abs (directAfter - directBefore) < 1.0e-5f && voiceDirect > 0.25f && voiceDirectDiff == 0.0f
+                       && juce::jmax (biggestStep (6, 1.0), biggestStep (6, 0.3)) < limit,
+                   "tuner: a sound crew's direct out loses the guitar while tuning and gets it back exactly, with no click, and the voice's direct out is untouched to the sample (guitar "
+                       + juce::String (directBefore, 4) + ", " + juce::String (directDuring, 8) + ", " + juce::String (directAfter, 4) + "; voice " + juce::String (voiceDirect, 3) + ")");
             check (r.heard && r.name == "A2" && std::abs (r.cents + 4.0) < 0.3 && r.socket == 7,
                    "tuner: it reads the guitar, not the louder voice, while the voice is live (" + (r.heard ? r.name + " " + juce::String (r.cents, 2) : juce::String ("nothing")) + ", input " + juce::String (r.socket + 1) + ")");
             check (silentNames == "Acoustic, Electric, Bass" && liveNames == "Vocal, Stomp",

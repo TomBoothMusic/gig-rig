@@ -511,6 +511,7 @@ private:
     const float* breakR = nullptr;
     bool tuningNow = false, tuningGuitars = false, tuningGuitarsMain = false;
     std::vector<float> tuneFeed;        // a guitar channel as the main mix hears it while tuning: its loops without its live sound
+    std::vector<float> tuneDirect;      // the same for the sound crew's direct out (before the channel's processing)
     std::atomic<juce::uint32> tunerChannels { 0 };
     float tuneGain = 1.0f;              // 1 = heard, 0 = silent for the tuner
 
