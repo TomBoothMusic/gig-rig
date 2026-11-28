@@ -271,8 +271,9 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
                 const auto played = cmd ("{\"op\":\"check.start\",\"name\":" + q (recName) + "}");
                 const bool playing = (bool) api.live()["check"]["on"] && api.live()["check"]["name"].toString() == recName;
                 const bool busy = ! fine (cmd ("{\"op\":\"recs.delete\",\"name\":" + q (recName) + "}"));
+                const bool plain = fine (cmd ("{\"op\":\"check.start\",\"name\":" + q (recName) + ",\"loops\":false}")) && api.live()["check"]["loops"].toString().isEmpty();
                 const auto stoppedCheck = cmd ("{\"op\":\"check.stop\"}");
-                check (listed && fine (played) && playing && busy && fine (stoppedCheck) && ! (bool) api.live()["check"]["on"] && ! fine (cmd ("{\"op\":\"check.stop\"}"))
+                check (listed && fine (played) && playing && busy && plain && fine (stoppedCheck) && ! (bool) api.live()["check"]["on"] && ! fine (cmd ("{\"op\":\"check.stop\"}"))
                          && ! fine (cmd ("{\"op\":\"check.start\",\"name\":\"no such recording\"}")),
                        "remote: the page lists the recordings, starts and stops a virtual soundcheck, and a recording that is playing cannot be deleted (" + juce::JSON::toString (listNow(), true) + ")");
 

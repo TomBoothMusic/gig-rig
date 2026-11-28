@@ -1043,7 +1043,7 @@ GR.screens.record = (root) =>
         {
             const c = l.check || {}, p = l.copy || {};
             if (!! c.on !== wasCheck || !! p.on !== wasCopy) { wasCheck = !! c.on; wasCopy = !! p.on; GR.render(); return; }
-            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '')
+            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '') + (c.loops ? ' ' + c.loops : '')
                 : p.on ? p.now + ' (' + Math.round ((p.done || 0) * 100) + '%). Leave the drive in.'
                 : p.result ? p.result : Number (recs.free || 0).toFixed (0) + ' GB free on the rig.';
             line.className = 'hint' + ((p.failed && ! p.on && ! c.on) || c.missed > 0 ? ' bad' : '');
@@ -1056,14 +1056,17 @@ GR.screens.record = (root) =>
         const x = recs.list.find ((y) => y.name === page.name);
         const playing = liveCheck.on && liveCheck.name === x.name;
         const line = h ('p', { class: 'hint' });
+        const withLoops = GR.ui.recLoops !== false;     // remembered on this phone only
         root.append (
             pageHead (() => go ({ kind: 'recs' }), 'Recordings', x.name, facts (x)),
             line,
             h ('div', { class: 'choices' },
                 playing
                     ? h ('button', { class: 'choice on', onclick: () => order ({ op: 'check.stop' }) }, h ('b', { text: 'Stop the soundcheck' }), h ('small', { text: 'The sockets hear what is plugged in again.' }))
-                    : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true }) }, h ('b', { text: 'Play as a soundcheck' }),
+                    : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true, loops: withLoops }) }, h ('b', { text: 'Play as a soundcheck' }),
                         h ('small', { text: x.check > 0 ? 'Its raw files play into their sockets, through today\'s effects and mixer, round and round.' : 'It has no raw files, so it cannot be played back.' })),
+                h ('button', { class: 'choice' + (withLoops ? ' on' : ''), 'aria-pressed': withLoops ? 'true' : 'false', disabled: playing || ! (x.check > 0), onclick: () => { GR.ui.recLoops = ! withLoops; GR.render(); } },
+                    h ('b', { text: withLoops ? 'With its loops' : 'Without its loops' }), h ('small', { text: 'With: every looper press of the recording is made again, so the loops are built fresh through today\'s sound.' })),
                 h ('button', { class: 'choice' + (x.kept ? ' on' : ''), 'aria-pressed': x.kept ? 'true' : 'false', onclick: () => order ({ op: 'recs.keep', name: x.name, on: ! x.kept }) },
                     h ('b', { text: x.kept ? 'Kept' : 'Keep' }), h ('small', { text: 'Clearing never removes a kept recording.' })),
                 h ('button', { class: 'choice', disabled: ! recs.drives.length || !! liveCopy.on, onclick: () => copyTo ([x.name]) }, h ('b', { text: 'Copy to USB' }),

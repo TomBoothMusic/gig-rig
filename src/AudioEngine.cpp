@@ -159,6 +159,8 @@ AudioEngine::AudioEngine()
 {
     tunerCore.beforeTick = [this] { tellTunerTheGuitars(); };
 
+    replay.recordingFolder = [this] { return mixCore.recorder().folder(); };
+    replay.soundcheckPlaying = [this] { return checkCore.isPlaying(); };
     library.root = [] { return Mixer::recordingFolder(); };
     library.busy = [this] (const juce::String& name) -> juce::String
     {
@@ -723,7 +725,7 @@ juce::String AudioEngine::measuringStatus() const
              + juce::String (juce::jmin (pingsPerRow, (int) job.pings.size() + 1)) + " of " + juce::String (pingsPerRow);
 }
 
-juce::String AudioEngine::startSoundcheck (const juce::String& name, bool roundAndRound)
+juce::String AudioEngine::startSoundcheck (const juce::String& name, bool roundAndRound, bool withLoops, bool ownThread)
 {
     if (job.active || measuring.load())
         return "A latency test is running. Wait for it to finish.";
@@ -739,7 +741,18 @@ juce::String AudioEngine::startSoundcheck (const juce::String& name, bool roundA
     if (! folder.isDirectory())
         return "There is no recording called \"" + name + "\".";
 
-    return checkCore.start (folder, roundAndRound);
+    const auto error = checkCore.start (folder, roundAndRound, ownThread, [&]
+    {
+        if (withLoops)
+            replay.arm (folder, currentSampleRate, checkCore.passFrames(), roundAndRound);
+        else
+            replay.disarm();
+    });
+
+    if (error.isNotEmpty())
+        replay.disarm();
+
+    return error;
 }
 
 //==============================================================================
@@ -806,7 +819,12 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 
     // Virtual soundcheck: a recording stands in for the sockets it was recorded from, so everything
     // below works on it as it would on Tom playing. Not playing, this reads one flag and changes nothing.
+    const bool checkWasPlaying = checkCore.isPlaying();
     inputs = checkCore.feed (inputs, numIns, numSamples);
+
+    // The looper presses of the recording that is playing, to be made again at their own samples.
+    const int numReplayed = checkWasPlaying && replay.isArmed()
+                              ? replay.pressesFor (checkCore.blockStart(), numSamples, replayPresses.data(), (int) replayPresses.size()) : 0;
 
     for (int ch = 0; ch < juce::jmin (numIns, numMeteredInputs); ++ch)
         if (inputs[ch] != nullptr)
@@ -980,6 +998,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         else
             loopCore.setLaneBuses (nullptr, 0, nullptr);
 
+        loopCore.setTimedPresses (replayPresses.data(), numReplayed);
         loopCore.process (heard, numIns, loopOutputs, numSamples);
 
         if (mixing)
@@ -1008,6 +1027,9 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
                     juce::FloatVectorOperations::add (out, breakCore.right(), numSamples);
             }
         }
+
+        // While recording, every looper press is noted with its sample, so a soundcheck can make it again.
+        replay.noteBlock (loopCore, mixCore.recorder().isRecording(), mixCore.recorder().samplesNow(), numSamples, currentSampleRate);
 
         if (! kickJoins)
             kickToReturns();

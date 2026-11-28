@@ -1,6 +1,7 @@
 #include "Looper.h"
 
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace gigrig
@@ -555,7 +556,10 @@ void Looper::applyPending() noexcept
         activeOptions = pendingOptions;
 
     if (newSong)
+    {
         activeSong = pendingSong;
+        tap (Timed::Kind::song, 0, nullptr, activeSong.name);
+    }
 
     songPending = optionsPending = false;
     anyPending.store (false);
@@ -622,6 +626,21 @@ void Looper::updateTransport() noexcept
 }
 
 //==============================================================================
+void Looper::tap (Timed::Kind kind, int offset, const PedalEvent* event, const char* name) noexcept
+{
+    if (tapCount >= (int) taps.size())
+        return;
+
+    auto& t = taps[(size_t) tapCount++];
+    t.kind = kind;
+    t.offset = offset;
+    t.event = event != nullptr ? *event : PedalEvent();
+    std::memset (t.name, 0, sizeof (t.name));
+
+    if (name != nullptr)
+        std::memcpy (t.name, name, sizeof (t.name) - 1);
+}
+
 void Looper::handle (const Message& m) noexcept
 {
     if (m.type == Message::Type::clearAll)
@@ -1871,6 +1890,7 @@ void Looper::process (const float* const* inputs, int numInputs, float* const* o
         return;
 
     currentBlock = numSamples;
+    tapCount = 0;
     applyPending();
 
     // Every track keeps the last few seconds of its own inputs, mixed. Recordings and overdubs
@@ -1909,21 +1929,59 @@ void Looper::process (const float* const* inputs, int numInputs, float* const* o
     {
         const auto scope = messageFifo.read (messageFifo.getNumReady());
 
-        for (int i = 0; i < scope.blockSize1; ++i)  handle (messages[(size_t) (scope.startIndex1 + i)]);
-        for (int i = 0; i < scope.blockSize2; ++i)  handle (messages[(size_t) (scope.startIndex2 + i)]);
+        const auto take = [this] (const Message& m)
+        {
+            tap (m.type == Message::Type::clearAll ? Timed::Kind::clearAll : Timed::Kind::pedal, 0, &m.event, nullptr);
+            handle (m);
+        };
+
+        for (int i = 0; i < scope.blockSize1; ++i)  take (messages[(size_t) (scope.startIndex1 + i)]);
+        for (int i = 0; i < scope.blockSize2; ++i)  take (messages[(size_t) (scope.startIndex2 + i)]);
     }
 
-    const auto end = now + numSamples;
-    int offset = 0;
+    const auto blockStart = now, end = now + numSamples;
+    int offset = 0, nextPress = 0;
+
+    // The virtual soundcheck's presses: each is acted on at its own sample, exactly as a press
+    // that arrived at the start of a block is. With none (every block of a gig) nothing here runs.
+    const auto timedAt = [&] (int i) { return blockStart + juce::jlimit (0, numSamples - 1, timedList[i].offset); };
+    const auto runTimedPresses = [&]
+    {
+        while (nextPress < numTimed && timedAt (nextPress) <= now)
+        {
+            const auto& t = timedList[nextPress++];
+
+            if (t.kind == Timed::Kind::song)
+                continue;
+
+            tap (t.kind, (int) (now - blockStart), &t.event, nullptr);
+            handle ({ t.kind == Timed::Kind::clearAll ? Message::Type::clearAll : Message::Type::pedal, t.event });
+        }
+    };
+
+    runTimedPresses();
 
     while (now < end)
     {
         fireTimed();
-        const auto next = nextTimed (now, end);
+        auto next = nextTimed (now, end);
+
+        if (nextPress < numTimed)
+            next = juce::jmin (next, juce::jmax (now + 1, timedAt (nextPress)));
+
         render (now, next, outputs, offset);
         offset += (int) (next - now);
         now = next;
+
+        if (nextPress < numTimed && now < end && timedAt (nextPress) <= now)
+        {
+            fireTimed();
+            runTimedPresses();
+        }
     }
+
+    timedList = nullptr;
+    numTimed = 0;
 
     runWriters (end);
     publish();

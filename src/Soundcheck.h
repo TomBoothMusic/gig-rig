@@ -4,6 +4,8 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -52,7 +54,8 @@ public:
     void prepare (double sampleRate, int maxBlock);
 
     /** Starts playing a recording from its start. Returns an error, or an empty string. */
-    juce::String start (const juce::File& recordingFolder, bool roundAndRound = true, bool ownThread = true);
+    juce::String start (const juce::File& recordingFolder, bool roundAndRound = true, bool ownThread = true,
+                        const std::function<void()>& beforePlaying = {});
     /** Fades out and hands the sockets back to what is plugged into them. */
     void stop();
 
@@ -62,6 +65,8 @@ public:
     double positionSeconds() const noexcept;
     double lengthSeconds() const noexcept       { return lengthSecs; }
     bool isLooping() const noexcept             { return looping.load(); }
+    /** One pass of the recording, in samples at the interface's rate. */
+    juce::int64 passFrames() const noexcept     { return fileRate > 0.0 ? (juce::int64) std::llround ((double) fileLength * rate / fileRate) : 0; }
     /** The sockets being stood in for, as a bit for each (bit 0 = socket 1). */
     unsigned sockets() const noexcept           { return playing.load() ? socketMask : 0u; }
     /** Blocks that had to be silent because the drive did not keep up. */
@@ -78,6 +83,9 @@ public:
 
     /** Hands back the inputs with the recording's sockets swapped for the recording. */
     const float* const* feed (const float* const* inputs, int numIns, int numSamples) noexcept;
+    /** After feed(), while playing: how much of the recording had been played before this block
+        (every pass counted on), or -1 if this block played none of it. */
+    juce::int64 blockStart() const noexcept     { return blockAt; }
 
 private:
     void run() override;
@@ -111,6 +119,7 @@ private:
     std::atomic<int> missed { 0 };
     std::atomic<juce::int64> played { 0 };
     bool primed = false;                        // audio thread
+    juce::int64 blockAt = -1;                   // audio thread
     float gain = 0.0f;                          // audio thread: the fade in and out
     int primeFrames = 0;
 

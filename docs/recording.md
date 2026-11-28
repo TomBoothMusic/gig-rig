@@ -125,6 +125,39 @@ What to know:
 - A drive too slow to keep up gives a moment of silence, counted in the report, never a wait.
 - With nothing playing it changes no sample (a check).
 
+## Loops in a soundcheck
+
+Built 28 Nov 2026 (Tom: "I'd love to be able to play the soundcheck back with loops but tweak
+the processing according to the venue"). The loops themselves are **not** saved for this: a
+saved loop already has the EQ and compressors of the night in it. Instead:
+
+- **While a recording is made, every looper press is noted**, to the exact sample, in the
+  recording's folder (`Looper presses.txt`), along with the song that was loaded and any song
+  loaded later.
+- **While that recording plays as a soundcheck, the same presses are made again** at the same
+  samples. The looper builds every loop afresh out of the raw playback, through the effects
+  and the mixer as they are set now. Change the venue EQ and the next time a loop is recorded
+  it is recorded through the new setting, exactly as at the gig.
+
+What to know:
+
+- It is the **With its loops** tick box next to Play (ticked to begin with). Unticked, the
+  soundcheck plays and the looper is left alone.
+- A loop that is already going round keeps the sound it was recorded with, as it does live.
+  With **Round and round** the loops are cleared each time the recording comes back to its
+  start and are built again, so a change is in every loop one pass later.
+- The song the recording was made with is loaded first, unless it is the one loaded already
+  (then it is left alone, with whatever has been changed in it). A song change during the
+  recording is made again at the same place, as a program change from Songbook Pro would be.
+  If the song is no longer in the Songs list, the soundcheck plays without presses and says so.
+- A recording that began with loops already going cannot have them built again, so it plays
+  without presses and says so. Clear the looper before pressing Record for a soundcheck take.
+- The loops the soundcheck built are cleared when it stops.
+- A recording made before this build has no presses noted, and plays as before.
+- **Not made again:** the kick pad's own kicks (they are made inside the app, so they are in no
+  raw file), presses of effect switches, and moves of the expression pedal.
+- The best soundcheck take is short: one song, started with the looper clear. Tick **Keep** on it.
+
 ## The Recordings tab
 
 Every recording on the rig's drive, newest first, with its length, size and whether it is kept,
@@ -151,6 +184,7 @@ Two small files in a recording's folder are the memory of this: `Keep.txt` and
 - Listening to the recording mix on headphones before recording it (Tom, 28 Nov 2026: not needed).
 - Pausing the sound outright during a USB copy (the earlier plan); this build refuses and warns instead.
 - Choosing where in a recording a soundcheck starts.
+- Making the kick pad's kicks, effect switch presses and expression pedal moves again in a soundcheck.
 - The recorder holds 24 files at most.
 
 ## For developers
@@ -163,6 +197,7 @@ Two small files in a recording's folder are the memory of this: `Keep.txt` and
 | `src/Soundcheck.*` | Virtual soundcheck. A reader thread fills a queue; `feed` (audio thread, first thing in `AudioEngine::processBlock`) swaps the sockets' inputs for it. |
 | `src/RecordingLibrary.*` | The recordings on the drive: list, keep, delete, clear, copy to USB (its own thread). |
 | `src/RecordingsPanel.*` | The Recordings tab. On the phone: the Record screen's Recordings pages, orders `check.*` and `recs.*`. |
+| `src/LoopReplay.*` | Loops in a soundcheck. `noteBlock` (audio thread) queues what the looper acted on while recording and the message thread writes `Looper presses.txt`; `pressesFor` hands the looper a soundcheck's presses with their samples (`Looper::setTimedPresses`). |
 | `src/RecordingsSelfTest.cpp` | Their checks ("soundcheck:", "recordings:"); `GIGRIG_SELFTEST_ONLY=recordings` runs them alone. |
 | `remote/screens.js` (`GR.screens.record`) | The Record screen. Orders `rec.start`, `rec.stop`, `rec.set`, and `mix.ch`, `mix.fx`, `mix.param` for the rest. |
 | `src/MixerSelfTest.cpp`, `src/RemoteSelfTest.cpp` | The checks ("recording:", "recording mix:", "recorder:"). |
@@ -172,4 +207,5 @@ Saved words, never to be renamed: record points `none`, `raw`, `effects`, `loope
 `[recording]` (`mainmix`, `mix`, `effects`, `soundcheck`, `level`) and `[recording processing]`. The file
 name words `raw`, `after effects`, `after looper` are in recordings Tom already has. So are the
 `soundcheck: <file> = socket <n>` lines of `About this recording.txt`, and the marker files
-`Keep.txt` and `Copied to USB.txt`.
+`Keep.txt` and `Copied to USB.txt`. So is `Looper presses.txt` and its lines (`rate =`, `start: song = ..., loops = none`,
+`<sample>: switch <n> down|down double|up|hold`, `<sample>: clear all`, `<sample>: song = <name>`).

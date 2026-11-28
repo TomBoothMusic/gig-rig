@@ -121,6 +121,14 @@ soundchecking (a USB drive at work can make the sound click). Screen: `src/Recor
 Checks: `src/RecordingsSelfTest.cpp`. The `soundcheck:` lines and the marker files `Keep.txt` and
 `Copied to USB.txt` are on Tom's disk: never rename them.
 
+**Loops in a soundcheck** (`src/LoopReplay.*`, 28 Nov 2026, Tom's ask): loops are never saved for
+it. While recording, every looper press is noted to the sample in the recording's
+`Looper presses.txt` (on Tom's disk: never rename it or reword its lines), with the songs loaded;
+a soundcheck makes the same presses again at the same samples (`Looper::setTimedPresses`), so the
+loops are built afresh through the effects and mixer as they are now. **A press handed to the
+looper with its sample must do exactly what a foot at that sample does** (a check), and with no
+soundcheck playing the looper's own path is untouched.
+
 ## The remote screen (the phone and tablet control app)
 
 Built 27 Nov 2026; **`docs/remote.md` is the guide. Keep it true.** It is a web page (`remote/`,
