@@ -223,8 +223,12 @@ the recording mix.
 - **Tap a point twice** to put it back: a band to no boost or cut, a cut to off. **Flat** does
   that for every point at once, after asking.
 - **Under the graph** the picked band has big sliders: Frequency, Boost or cut, and Width for the
-  bells (higher is narrower). The row of names picks a band without touching the graph. With a
-  mouse, the wheel over the graph sets the picked bell's width.
+  bells (higher is narrower). The row of names picks a band without touching the graph.
+- **Two fingers on the graph set the picked bell's width** (Tom's ask, 28 Nov 2026): spread them
+  apart for wider, squeeze them together for narrower. The first finger may be holding the point
+  or both may be anywhere on the graph. It suits a phone on its side and bigger screens; with a
+  phone upright the graph is narrow, so use the Width slider. With a mouse, the wheel over the
+  graph does the same.
 - **Live picture of the sound** (channels and outputs): the blue shape behind the curve shows how
   loud the sound is from the lowest notes on the left to the highest on the right. Choose
   **Before the EQ**, **After the EQ** or **Off**. It jumps up at once and falls back slowly, so
@@ -250,8 +254,7 @@ What it is and is not:
   in `src/effects/mixer/MixerBlockChecks.cpp` holds the real EQ to those sums, so the two cannot
   drift apart unnoticed. The picture: `src/Spectrum.*` and `Mixer::lookAt` / `Mixer::picture`,
   order `mix.rta`, `rta` in the live data (`db` = one level per sixth of an octave from `lowHz`).
-- Not built: width by pinching with two fingers (use the Width slider; on the finished board the
-  Adjust knob will do it), a point for each feedback notch, and the curve in the app's own Mixer tab.
+- Not built: a point for each feedback notch, and the curve in the app's own Mixer tab.
 
 ## Not built yet
 
