@@ -1412,6 +1412,7 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     chanMid.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
     chanPost.assign ((size_t) numMixChannels * (size_t) capacity, 0.0f);
     tuneFeed.assign ((size_t) capacity, 0.0f);
+    tuneDirect.assign ((size_t) capacity, 0.0f);
     stripped.fill (false);
     silence.assign ((size_t) capacity, 0.0f);
     directData.assign ((size_t) 8 * (size_t) capacity, 0.0f);
@@ -1584,9 +1585,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         juce::FloatVectorOperations::add (tapPre, loops, n);
         juce::FloatVectorOperations::add (tapMid, loops, n);
 
-        // The tuner, with the monitors kept: the main mix and the reverbs get this channel's loops
-        // without its live sound (20 ms down and back, no click); the monitors get both as always.
+        // The tuner, with the monitors kept: the main mix, the reverbs and the sound crew's direct
+        // out get this channel's loops without its live sound (20 ms down and back, no click); the
+        // monitors get both as always. (Tom, 28 Nov 2026: with an outside sound crew on direct
+        // outs the guitars must still go silent while he tunes.)
         const float* forMain = work;
+        const float* forDirect = tapPre;
         const bool tuningMain = tuningGuitarsMain && (tunerChannels.load (std::memory_order_relaxed) & (1u << c)) != 0;
 
         if (tuningMain || ch.tuneMain < 1.0f)
@@ -1598,10 +1602,12 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
             {
                 g = target > g ? juce::jmin (target, g + pace) : juce::jmax (target, g - pace);
                 tuneFeed[(size_t) i] = work[i] * g + loops[i];
+                tuneDirect[(size_t) i] = (tapPre[i] - loops[i]) * g + loops[i];     // tapPre already holds the loops
             }
 
             ch.tuneMain = g;
             forMain = tuneFeed.data();
+            forDirect = tuneDirect.data();
         }
 
         juce::FloatVectorOperations::add (work, loops, n);
@@ -1629,7 +1635,7 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
                 juce::FloatVectorOperations::clear (to, n);
                 directUsed[(size_t) direct] = true;
             }
-            addGliding (to, tapPre, start2, step2, n);
+            addGliding (to, forDirect, start2, step2, n);
         }
 
         // A monitor can take its sends before the processing, after the tone blocks (gate,
