@@ -44,7 +44,7 @@ xvfb-run -a build/GigRig_artefacts/Release/GigRig --self-test result.txt
 ```
 
 The whole self-test takes a few minutes. While working on one part,
-`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `recordings`, `songs`) in front of the
+`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `recordings`, `songs`, `screens`) in front of the
 last line runs only that part's checks. CI always runs all of them.
 
 Real audio and MIDI are proven only on Tom's hardware.
@@ -57,7 +57,7 @@ Real audio and MIDI are proven only on Tom's hardware.
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
-- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`, `break-music.txt`, `expression-pedal.txt`, `tuner.txt`).
+- App data: `~/.config/GigRig/` (`audio-settings.txt`, `loop-timing-2.txt`, `driver-delay.txt`, `kick-pad.txt`, `effects-rack.txt`, `mixer.txt`, `remote.txt`, `break-music.txt`, `expression-pedal.txt`, `tuner.txt`, `switch-screens.txt`).
   Tom's presets, songs and mixer set-ups: `~/Documents/GigRig/`. Moving them from the laptop: `docs/linux-setup.md`, B4.
 - Updates: `linux/update.sh` (the **Gig Rig: update** icon) fetches, self-tests and switches a build with no `sudo`; it never closes the running app without a yes. A fresh computer: `linux/bootstrap.sh`. The phone as break music: `linux/break-music.sh` (optional, unproven on hardware).
 - The desktop runs X11, so `import -window root shot.png` (ImageMagick) or
@@ -249,3 +249,23 @@ page and can never hold up an app release. **`docs/bench-test.md` is the guide. 
 and keep its pin tables in step with Tom's own step-by-step page (the "Gig Rig bench tests"
 artifact in the project). CI proves it compiles and nothing more: it has not run on hardware
 until Tom says so. It is a test program, not the final board's controller program.
+
+## The footswitch screens
+
+Built 28 Nov 2026 (Tom's ideas of that day, all **undecided until his bench and sun test**).
+**`docs/switch-screens.md` is the guide. Keep it true.** One "tile" per switch (background colour =
+state, words, lane pictures, a pedal drawing). `firmware/shared/SwitchTile.*` holds the tile, its
+drawing, the sample pages and the MIDI system exclusive messages: plain C++14 with no Arduino and
+no JUCE, compiled into **both** the app and the controller's program, so the app's Switch screens
+tab shows dot for dot what the Teensy draws and the app's self-test is the drawing's proof.
+`firmware/shared/TileArt.h` (letters and lane pictures) is made by `tools/make_tile_art.py`: never
+edit it by hand. The app (`src/SwitchScreens.*`, tab `src/SwitchScreensPanel.*`, checks
+`src/SwitchScreensSelfTest.cpp`) builds the tiles from the rig's state on the message thread and
+sends them; the controller (`firmware/bench-test/src/Screens.cpp`) only draws, and shows sample
+pages by itself when no computer is talking. **Colours, words and rules change in the app only;
+keep it that way, so a look never needs a new hex file.** Sending is **off by default and off
+must open no MIDI output** (a check). The numbers of the message commands, item kinds, text sizes,
+pictures and pedal kinds are shared by two programs updated separately, and the keys in
+`switch-screens.txt` are on Tom's disk: never renumber or rename, only add. The app still knows
+the RC-600's 11 switches, not the board's 17; the switch assignment screen comes with the enclosure.
+`firmware/shared/` is also used by the kick pad's messages: keep the two apart.
