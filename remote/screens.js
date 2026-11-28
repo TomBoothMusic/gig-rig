@@ -316,7 +316,13 @@ const blockItem = (key, block, o, after) =>
 {
     const type = typeOf (block.type);
     return { ico: typeIcon[block.type] || 'block', label: shortName (type.name), title: type.name, on: block.on,
-             build: () => { GR.ui.open[key] = true; return [h ('div', { class: 'blocks solo' }, GR.block (key, block, o)), after ? after() : null]; } };
+             build: () =>
+             {
+                 // The mixer's EQ is a curve with a point to drag for each band (eq-curve.js); every other block is its sliders.
+                 if (block.type === 'mixeq' && GR.eqCurve) return [GR.eqCurve (key, block, o, o.rta), after ? after() : null];
+                 GR.ui.open[key] = true;
+                 return [h ('div', { class: 'blocks solo' }, GR.block (key, block, o)), after ? after() : null];
+             } };
 };
 
 // ---------------------------------------------------------------- Effects: the pedalboard, and a page for each pedal
@@ -539,6 +545,7 @@ function channelItems (c)
             GR.param ({ id: 'trim', label: 'Trim', unit: 'dB', min: -24, max: 24, def: 0, kind: 'knob' }, ch.trim, (v) => { ch.trim = v; set ('trim', v); }),
             GR.param ({ id: 'pan', label: 'Pan (-1 left, 1 right)', unit: '', min: -1, max: 1, def: 0, kind: 'knob' }, ch.pan, (v) => { ch.pan = v; set ('pan', v); }) ] },
     ].concat (ch.strip.map ((b, i) => blockItem ('ch' + c + '.' + i, b, {
+        rta: { where: 'ch', i: c },
         setOn: (on) => GR.send ({ op: 'mix.param', where: 'ch', i: c, slot: i, id: 'on', value: on }, true),
         setParam: (id, value) => GR.sendValue ('chp' + c + '.' + i + id, { op: 'mix.param', where: 'ch', i: c, slot: i, id, value }),
     })), [
@@ -581,6 +588,7 @@ function outputItems (o)
     const out = GR.state.mixer.outputs[o];
 
     return out.chain.map ((b, i) => blockItem ('out' + o + '.' + i, b, {
+        rta: { where: 'out', i: o },
         setOn: (on) => GR.send ({ op: 'mix.param', where: 'out', i: o, slot: i, id: 'on', value: on }, true),
         setParam: (id, value) => GR.sendValue ('outp' + o + '.' + i + id, { op: 'mix.param', where: 'out', i: o, slot: i, id, value }),
     })).concat ([

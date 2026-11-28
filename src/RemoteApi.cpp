@@ -632,6 +632,23 @@ juce::var RemoteApi::live()
         l->setProperty ("mix", juce::var (mo));
     }
 
+    // ---- the live picture behind the EQ curve (only while a screen is asking for it) ----
+    if (mixer.lookingAt() != Mixer::Look::nothing)
+    {
+        auto* ro = obj();
+        ro->setProperty ("where", mixer.lookingAt() == Mixer::Look::channel ? "ch" : "out");
+        ro->setProperty ("i", mixer.lookingAtIndex());
+        ro->setProperty ("before", mixer.lookingBefore());
+        ro->setProperty ("lowHz", spectrumLowHz);
+        ro->setProperty ("perOctave", spectrumBandsPerOctave);
+
+        juce::Array<juce::var> db;
+        for (const float v : mixer.picture())
+            db.add ((int) std::lround (v));
+        ro->setProperty ("db", db);
+        l->setProperty ("rta", juce::var (ro));
+    }
+
     // ---- the recorder ----
     {
         auto& rec = mixer.recorder();
@@ -1206,6 +1223,25 @@ juce::String RemoteApi::doMixer (const juce::String& op, const juce::var& c, juc
         return "That part of the mixer is not there.";
     }
 
+    // The EQ curve's live picture: look at one channel or output (asked again every couple of seconds while the curve is on a screen).
+    if (op == "mix.rta")
+    {
+        const auto where = c.getProperty ("where", {}).toString();
+        const int i = (int) c.getProperty ("i", -1);
+        const bool before = (bool) c.getProperty ("before", false);
+
+        if (where == "off")
+            mixer.lookAt (Mixer::Look::nothing, 0, false);
+        else if (where == "ch" && i >= 0 && i < numMixChannels)
+            mixer.lookAt (Mixer::Look::channel, i, before);
+        else if (where == "out" && i >= 0 && i < numMixOutputs)
+            mixer.lookAt (Mixer::Look::output, i, before);
+        else
+            return "The live picture can look at a channel (\"ch\") or an output (\"out\"), or be switched \"off\".";
+
+        return {};
+    }
+
     if (op == "mix.preset")
     {
         const auto kind = c.getProperty ("kind", {}).toString();
@@ -1377,6 +1413,10 @@ juce::var RemoteApi::command (const juce::var& c)
 
     if (error.isNotEmpty())
         return failed (error);
+
+    // The EQ curve's live picture asks again every couple of seconds and changes nothing a window shows.
+    if (op == "mix.rta")
+        return ok ({});
 
     ++done;
     listsRead = false;

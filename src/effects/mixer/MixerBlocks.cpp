@@ -64,14 +64,17 @@ MixEq::MixEq()
 {
     // Ids never change: they are saved in the mixer's presets.
     pLowCut  = addParam ("lowcut",  "Low cut",       "Hz", 20.0f, 400.0f, 20.0f);
-    pLsf     = addParam ("lsf",     "Low shelf at",  "Hz", 40.0f, 400.0f, 100.0f);
+    // Since 28 Nov 2026 every band can go anywhere from 20 Hz to 20 kHz, so a point on the EQ curve
+    // can be dragged to wherever it is needed, as on the CQ12T and the Wing. Only the ranges grew:
+    // every value saved before means what it did.
+    pLsf     = addParam ("lsf",     "Low shelf at",  "Hz", 20.0f, 2000.0f, 100.0f);
     pLsg     = addParam ("lsg",     "Low shelf",     "dB", -15.0f, 15.0f, 0.0f);
 
     static const struct { const char* f; const char* g; const char* q; const char* name; float lo, hi, def; } bands[numBells] {
-        { "b1f", "b1g", "b1q", "Band 1", 60.0f, 1000.0f, 250.0f },
-        { "b2f", "b2g", "b2q", "Band 2", 150.0f, 3000.0f, 800.0f },
-        { "b3f", "b3g", "b3q", "Band 3", 500.0f, 8000.0f, 2500.0f },
-        { "b4f", "b4g", "b4q", "Band 4", 1500.0f, 16000.0f, 6000.0f } };
+        { "b1f", "b1g", "b1q", "Band 1", 20.0f, 20000.0f, 250.0f },
+        { "b2f", "b2g", "b2q", "Band 2", 20.0f, 20000.0f, 800.0f },
+        { "b3f", "b3g", "b3q", "Band 3", 20.0f, 20000.0f, 2500.0f },
+        { "b4f", "b4g", "b4q", "Band 4", 20.0f, 20000.0f, 6000.0f } };
 
     for (int b = 0; b < numBells; ++b)
     {
@@ -81,7 +84,7 @@ MixEq::MixEq()
         pQ[(size_t) b] = addParam (band.q, std::string (band.name) + " width (high = narrow)", "", 0.3f, 10.0f, 1.0f);
     }
 
-    pHsf     = addParam ("hsf",     "High shelf at", "Hz", 2000.0f, 16000.0f, 8000.0f);
+    pHsf     = addParam ("hsf",     "High shelf at", "Hz", 500.0f, 20000.0f, 8000.0f);
     pHsg     = addParam ("hsg",     "High shelf",    "dB", -15.0f, 15.0f, 0.0f);
     pHighCut = addParam ("highcut", "High cut",      "Hz", 2000.0f, 20000.0f, 20000.0f);
 }

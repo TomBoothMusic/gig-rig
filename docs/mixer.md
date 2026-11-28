@@ -71,6 +71,21 @@ The thin amber bar beside a meter shows how far the compressor (or limiter) is t
 The channel EQ is fully parametric: a low cut, a low shelf, **four bells** (each with where,
 how much and how wide), a high shelf and a high cut.
 
+### The EQ curve and its live picture (28 Nov 2026)
+
+On the phone and tablet screen the EQ is a curve with a point to drag for each of those eight
+parts, and a live picture of the sound behind it (an "RTA"): Mixer, **Open** on a fader, **EQ**.
+The steps are in [remote.md](remote.md), "The EQ curve". On this tab it is still sliders.
+
+Two things changed in the mixer itself for it, and neither changes the sound:
+
+- Every band of the EQ can now be set anywhere from 20 Hz to 20 kHz (the shelves from 20 Hz to
+  2 kHz and from 500 Hz to 20 kHz), so a point can be dragged to wherever it is needed. Settings
+  saved before mean exactly what they did.
+- The mixer can hand a screen a copy of one channel or one output to draw. It only copies: a
+  rig that is being looked at sends every return exactly what a rig that is not sends (a check).
+  The report's Mixer part has a line for it ("EQ curve's live picture").
+
 ### The studio-style blocks
 
 All four start switched off, and all are in the Effects tab's list too (under **Studio**), so
@@ -359,6 +374,7 @@ file the words are `switch CTL4 = chain 2 / toe switch`.
 |---|---|
 | `src/Mixer.h/.cpp` | The mixer core, presets, the venue knob's rules, the report. No screen. |
 | `src/MixRecorder.h/.cpp` | Writes the WAV files off the audio thread. |
+| `src/Spectrum.h/.cpp` | The live picture behind the EQ curve: the ring the audio thread copies into (`SpectrumTap`) and the sums that turn it into levels per sixth of an octave (`spectrumBands`). Plain C++. |
 | `src/effects/mixer/MixerBlocks.*` | The mixer's own blocks: `mixeq`, `mixcomp`, `notches`, `limiter`, `linedelay`, `wetfilter`. They follow the Effect interface, so the standard effect checks run on them, but they are listed apart (`mixerEffectTypes()`) so the Effects tab does not offer them. |
 | `src/effects/volume/` | The volume pedal effect. |
 | `src/effects/la2a/`, `warmth/`, `tape/`, `buscomp/` | The studio-style blocks (ordinary effects, group "Studio"). |
