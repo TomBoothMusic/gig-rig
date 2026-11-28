@@ -234,8 +234,8 @@ the RC-600 set to send the pedal as a controller (in the RC-600's ASSIGN setting
 
 ### Part G: the mini PC, when you set it up (not part of this sitting)
 
-1. **One line installs everything.** While the code is private, use the long line in
-   `docs/linux-setup.md`, step B3, as before. Once the repository is public it is this:
+1. **One line installs everything.** Follow the "Mini PC set-up day" page in the Claude
+   project (or `docs/linux-setup.md`, Part B). The line is:
    `wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash`
 2. **Updating is one click.** Press the Super key (the one with the Windows logo), type
    `Gig`, and click **Gig Rig: update**. It fetches the newest build, checks it, switches to
