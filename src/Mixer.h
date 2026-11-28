@@ -3,6 +3,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include "MixRecorder.h"
+#include "Spectrum.h"
 #include "effects/Chain.h"
 #include "effects/mixer/MixerBlocks.h"
 
@@ -281,6 +282,32 @@ public:
     struct Load { double average = 0.0, busiest = 0.0; };
     Load load() const noexcept                          { return { (double) loadAverage.load(), (double) loadBusiest.load() }; }
 
+    // ---- the live frequency picture behind the EQ curve (Spectrum.h) ----
+    // The screen with an EQ curve on it asks to look at one channel or one output, before or
+    // after its processing. The audio thread then copies that sound into a ring of samples and
+    // does nothing else for it: it never writes to the sound, so looking changes no sample (a
+    // check). Asking again keeps it going; five seconds with no ask and it stops by itself, so a
+    // phone that walks away leaves nothing running.
+    //   a channel, before: its live sound after Trim, before its gate and EQ
+    //   a channel, after:  its live sound after its gate, enhancer, warmth and EQ, before its compressors
+    //   an output, before: what its channels and effects add up to, before its own EQ
+    //   an output, after:  what it sends to its sockets
+    // A channel's loops are not in its picture: they were recorded after the EQ, so the EQ no longer moves them.
+    enum class Look { nothing, channel, output };
+    void lookAt (Look what, int index, bool beforeEq)     { lookAt (what, index, beforeEq, juce::Time::getMillisecondCounter()); }
+    /** The same with the clock handed in (the self-test passes its own), and what tick() calls to stop looking when nobody has asked. */
+    void lookAt (Look what, int index, bool beforeEq, juce::uint32 nowMs);
+    void stopLookingIfUnasked (juce::uint32 nowMs);
+    Look lookingAt() const noexcept                     { return look; }
+    int lookingAtIndex() const noexcept                 { return lookIndex; }
+    bool lookingBefore() const noexcept                 { return lookBefore; }
+    /** The picture now: spectrumBandCount levels in dB (Spectrum.h), or empty when nothing is being
+        looked at. Worked out at most about fifteen times a second however often it is asked for. */
+    const std::vector<float>& picture();
+    /** How many times a screen has asked to look, for the report. */
+    int looksAsked() const noexcept                     { return lookCount; }
+    static constexpr int lookTimeoutMs = 5000;
+
     /** Frees old effect sets and saves the mixer's state if it changed. Call about 10 times a second. */
     void tick();
 
@@ -517,6 +544,17 @@ private:
     std::vector<float> tuneDirect;      // the same for the sound crew's direct out (before the channel's processing)
     std::atomic<juce::uint32> tunerChannels { 0 };
     float tuneGain = 1.0f;              // 1 = heard, 0 = silent for the tuner
+
+    // the live frequency picture
+    SpectrumTap lookTap;
+    std::atomic<int> lookCode { -1 };                   // audio thread reads: -1 nothing, else index | 8 (before) | 16 (an output)
+    Look look = Look::nothing;
+    int lookIndex = 0, lookCount = 0;
+    bool lookBefore = false;
+    juce::uint32 lookAskedAt = 0, pictureAt = 0;
+    uint32_t pictureWritten = 0;
+    int pictureIdle = 0;
+    std::vector<float> pictureDb, pictureSamples;
 
     MixRecorder rec;
     RecOut recOut;

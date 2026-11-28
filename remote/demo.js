@@ -361,8 +361,31 @@ GR.makeDemoRig = (data) =>
             live.mix = { ch, gr: m.channels.map ((c, i) => c.on && c.strip.some ((b) => b.on && /comp|la2a/.test (b.type)) ? -Math.min (9, ch[i] * 12) : 0), out, fx, limit: out[0][0] > 0.9 ? -1.5 : 0, guard: false };
         }
 
+        // The EQ curve's live picture: a pretend sound for the channel or output being looked at, lifted
+        // and cut by its EQ when "after" is asked for, so the picture answers the curve as the rig's does.
+        if (looking && t - looking.at < 5000)
+        {
+            const bandsHz = Array.from ({ length: 61 }, (_, i) => 20 * Math.pow (2, i / 6));
+            const hump = (hz, at, wide, db) => db * Math.exp (-Math.pow (Math.log2 (hz / at) / wide, 2));
+            const name = (looking.where === 'ch' ? (m.channels[looking.i] || {}).name : 'mix') || '';
+            const shape = /stomp|kick/i.test (name) ? (hz) => -74 + hump (hz, 62, 0.5, 46) + hump (hz, 2500, 1.2, 16)
+                        : /vocal|speech/i.test (name) ? (hz) => -72 + hump (hz, 220, 0.9, 34) + hump (hz, 2800, 1.3, 26) + hump (hz, 9000, 0.8, 10)
+                        : /bass/i.test (name) ? (hz) => -72 + hump (hz, 90, 0.9, 40) + hump (hz, 900, 1.2, 14)
+                        : /mix/i.test (name) ? (hz) => -52 - 3 * Math.log2 (hz / 100) * 0.4 + hump (hz, 80, 1, 8)
+                        : (hz) => -72 + hump (hz, 180, 1.1, 32) + hump (hz, 3200, 1.4, 24);
+            const block = looking.where === 'ch' ? ((m.channels[looking.i] || {}).strip || []).find ((b) => b.type === 'mixeq')
+                                                 : ((m.outputs[looking.i] || {}).chain || []).find ((b) => b.type === 'mixeq');
+            const eq = ! looking.before && block && block.on && GR.eqResponse ? GR.eqResponse (block.v, bandsHz, 96000) : bandsHz.map (() => 0);
+            const loud = m.on ? 0.75 + 0.25 * Math.sin (t / 420) : 0;
+            live.rta = { where: looking.where, i: looking.i, before: looking.before, lowHz: 20, perOctave: 6,
+                         db: bandsHz.map ((hz, i) => m.on ? Math.round (Math.max (-100, shape (hz) + eq[i] + 20 * Math.log10 (loud) + 5 * Math.sin (t / 130 + i * 1.7) * Math.sin (t / 310 + i))) : -100) };
+        }
+
         return live;
     };
+
+    // The EQ curve's live picture: what the page asked to look at (mix.rta). Like the rig, it stops when nobody has asked for five seconds.
+    let looking = null;
 
     // ------------------------------------------------------------ commands, as RemoteApi::command answers them
 
@@ -671,6 +694,11 @@ GR.makeDemoRig = (data) =>
                 return ok();
             }
             case 'mix.param':           return setBlock ((blocksAt (c) || [])[c.slot], c.id, c.value);
+            case 'mix.rta':
+                commands--;
+                if (c.where === 'off') { looking = null; return ok(); }
+                if ((c.where === 'ch' && m.channels[c.i]) || (c.where === 'out' && m.outputs[c.i])) { looking = { where: c.where, i: c.i, before: !! c.before, at: now() }; return ok(); }
+                return fail ('The live picture can look at a channel ("ch") or an output ("out"), or be switched "off".');
             case 'mix.preset':          return ok ('On the rig this loads the ' + c.kind + ' set-up "' + c.name + '". The demo does not have the files, so nothing changed.');
             case 'mix.keepFx':          if (m.fx[c.f]) m.fx[c.f].song = true; return ok ('Kept for this song. (In the demo it lasts until the demo starts again.)');
             default:                    commands--; return fail ('This build of the rig does not know "' + op + '". The page may be newer than the rig.');

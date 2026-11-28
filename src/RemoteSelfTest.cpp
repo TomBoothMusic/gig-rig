@@ -219,6 +219,21 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
         cmd ("{\"op\":\"mix.on\",\"on\":false}");
         check (nowOn && ! mixer.isOn(), "remote: the page switches the mixer on and off, and the meters come only while it is on");
 
+        // ---- the EQ curve's live picture (28 Nov 2026) ----
+        {
+            const bool quiet = ! api.live().hasProperty ("rta");
+            const int doneBefore = api.commandsDone();
+            const bool asked = fine (cmd ("{\"op\":\"mix.rta\",\"where\":\"ch\",\"i\":2,\"before\":true}"));
+            const auto rta = api.live()["rta"];
+            const bool comes = rta["where"].toString() == "ch" && (int) rta["i"] == 2 && (bool) rta["before"] && rta["db"].size() == spectrumBandCount
+                               && (int) rta["perOctave"] == spectrumBandsPerOctave && (double) rta["lowHz"] == spectrumLowHz;
+            const bool output = fine (cmd ("{\"op\":\"mix.rta\",\"where\":\"out\",\"i\":0}")) && api.live()["rta"]["where"].toString() == "out" && ! (bool) api.live()["rta"]["before"];
+            const bool refused = ! fine (cmd ("{\"op\":\"mix.rta\",\"where\":\"ch\",\"i\":40}")) && ! fine (cmd ("{\"op\":\"mix.rta\",\"where\":\"moon\"}"));
+            const bool off = fine (cmd ("{\"op\":\"mix.rta\",\"where\":\"off\"}")) && ! api.live().hasProperty ("rta");
+            check (quiet && asked && comes && output && refused && off && api.commandsDone() == doneBefore && ! mixer.isOn(),
+                   "remote: the EQ curve's live picture comes only while a screen asks for it (a channel or an output, before or after its EQ), and asking changes nothing else");
+        }
+
         // ---- the Record screen (28 Nov 2026) ----
         {
             Mixer::recordingFolderOverride = root.getChildFile ("Recordings");

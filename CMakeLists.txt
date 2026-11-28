@@ -85,6 +85,7 @@ juce_add_binary_data(GigRigData SOURCES
     remote/core.js
     remote/demo.js
     remote/screens.js
+    remote/eq-curve.js
     remote/builder.js
     remote/demo-data.js)
 
@@ -113,6 +114,7 @@ target_sources(GigRig PRIVATE
     src/Responses.cpp
     src/EffectsSelfTest.cpp
     src/ExpressionPedal.cpp
+    src/Spectrum.cpp
     src/Tuner.cpp
     src/StrobeTuner.cpp
     src/TunerStrip.cpp

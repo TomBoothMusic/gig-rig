@@ -66,6 +66,71 @@ void mixerBlockChecks (const Check& check)
         check (std::abs (shelfLow - 6.0) < 1.0 && std::abs (shelfHigh + 6.0) < 1.0 && std::abs (middle) < 1.0,
                "mixeq: the shelves work (40 Hz " + num (shelfLow) + " dB, 15 kHz " + num (shelfHigh) + " dB, 900 Hz " + num (middle) + " dB)");
 
+        // ---- the curve the screen draws (remote/eq-curve.js) ----
+        // The phone and tablet screen draws the EQ's curve from sums of its own. They are written
+        // out again here, the same way, and the real EQ is held to them: if the EQ ever changes,
+        // this fails, and remote/eq-curve.js must be changed to match (and this with it).
+        {
+            const double pi = 3.14159265358979323846, shelfK = 1.0 / 0.7071;
+            struct Sec { double g, k, m0, m1, m2; };
+            const auto warp = [&] (double hz) { return std::tan (pi * std::clamp (hz, 5.0, rate * 0.45) / rate); };
+            const auto dbOf = [&] (const Sec& sec, double hz)
+            {
+                const double w = std::tan (pi * std::min (hz, rate * 0.499) / rate) / sec.g;
+                const double dr = 1.0 - w * w, di = sec.k * w;
+                const double nr = sec.m0 * dr + sec.m2, ni = (sec.m0 * sec.k + sec.m1) * w;
+                return 10.0 * std::log10 (std::max (1.0e-12, (nr * nr + ni * ni) / (dr * dr + di * di)));
+            };
+            const auto amp = [] (double db) { return std::pow (10.0, db / 40.0); };
+
+            const double lowcut = 90.0, lsf = 150.0, lsg = 4.0, hsf = 6000.0, hsg = 5.0, highcut = 14000.0;
+            const double bf[4] { 300.0, 1200.0, 3500.0, 60.0 }, bg[4] { -6.0, 5.0, -8.0, 3.0 }, bq[4] { 2.0, 0.7, 6.0, 1.5 };      // Band 4 down at 60 Hz: any band may go anywhere now
+
+            fx->setParam ("lsg", 0.0f);
+            fx->setParam ("hsg", 0.0f);
+            fx->setParam ("lowcut", (float) lowcut);   fx->setParam ("highcut", (float) highcut);
+            fx->setParam ("lsf", (float) lsf);         fx->setParam ("lsg", (float) lsg);
+            fx->setParam ("hsf", (float) hsf);         fx->setParam ("hsg", (float) hsg);
+
+            std::vector<Sec> secs;
+            secs.push_back ({ warp (lowcut * std::clamp (0.25 + 0.075 * (lowcut - 20.0), 0.25, 1.0)), shelfK, 1.0, -shelfK, -1.0 });
+            secs.push_back ({ warp (highcut * (1.0 + std::max (0.0, (highcut - 18000.0) / 2000.0))), shelfK, 0.0, 0.0, 1.0 });
+            { const double a = amp (lsg); secs.push_back ({ warp (lsf) / std::sqrt (a), shelfK, 1.0, shelfK * (a - 1.0), a * a - 1.0 }); }
+            { const double a = amp (hsg); secs.push_back ({ warp (hsf) * std::sqrt (a), shelfK, a * a, shelfK * (1.0 - a) * a, 1.0 - a * a }); }
+
+            for (int b = 0; b < 4; ++b)
+            {
+                const auto n = std::to_string (b + 1);
+                fx->setParam ("b" + n + "f", (float) bf[b]);
+                fx->setParam ("b" + n + "g", (float) bg[b]);
+                fx->setParam ("b" + n + "q", (float) bq[b]);
+                const double a = amp (bg[b]), k = 1.0 / (bq[b] * a);
+                secs.push_back ({ warp (bf[b]), k, 1.0, k * (a * a - 1.0), 0.0 });
+            }
+
+            const bool reached = std::abs (fx->getParam (fx->paramIndex ("b4f")) - 60.0f) < 0.01f;
+            double off = 0.0, biggest = 0.0;
+
+            for (double hz : { 40.0, 60.0, 100.0, 180.0, 300.0, 650.0, 1200.0, 2400.0, 3500.0, 5000.0, 9000.0, 16000.0 })
+            {
+                double drawn = 0.0;
+                for (const auto& sec : secs)
+                    drawn += dbOf (sec, hz);
+
+                off = std::max (off, std::abs (gainAt (*fx, hz) - drawn));
+                biggest = std::max (biggest, std::abs (drawn));
+            }
+
+            check (reached && off < 0.25 && biggest > 6.0,
+                   "mixeq: the curve the screen draws is the EQ's real response, with every band in use and Band 4 moved down to 60 Hz (within "
+                   + num (off, 2) + " dB at twelve notes from 40 Hz to 16 kHz)");
+
+            for (const char* id : { "lsg", "hsg", "b1g", "b2g", "b3g", "b4g" })
+                fx->setParam (id, 0.0f);
+            fx->setParam ("lowcut", 20.0f);
+            fx->setParam ("highcut", 20000.0f);
+        }
+
         // Two channels are filtered apart from each other.
         fx->setParam ("lsg", 0.0f);
         fx->setParam ("hsg", 0.0f);

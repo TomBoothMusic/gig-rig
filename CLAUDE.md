@@ -148,6 +148,11 @@ machine without Tom's songs use `tools/remote_demo.py top-up` instead, which add
 missing. The state must never hold a path from the computer's disk (the demo data is public).
 Every new order goes in four places: `RemoteApi::command`, `remote/demo.js`, the table in
 `docs/remote.md` and `src/RemoteSelfTest.cpp`.
+The mixer's EQ is drawn as a curve with draggable points (`remote/eq-curve.js`, 28 Nov 2026): the
+page works the curve out with the same sums as `MixEq`, and a check in `MixerBlockChecks.cpp`
+("the curve the screen draws") holds the real EQ to them, so change both or neither. Its live
+picture (`src/Spectrum.*`, `Mixer::lookAt`, order `mix.rta`) only ever copies the sound: **a rig
+that is being looked at must send every return exactly what one that is not sends** (a check).
 The demo's looper is a stand-in, never evidence about timing. Nothing in the remote screen may
 run on the audio thread, and the looper engine was not changed for it.
 

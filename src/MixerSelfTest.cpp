@@ -1,5 +1,6 @@
 #include "AudioEngine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 
@@ -1272,6 +1273,137 @@ void runMixerSelfTest (const Check& check)
         check (average <= 55.0, "mixer: all 8 channels with gate, source enhancer, warmth, EQ, compressor, the 1176-style and the LA-2A style compressors, 4 reverbs and delays and 3 stereo outputs with their compressors and tape on use "
                                 + juce::String (average, 1) + "% of each block at 96 kHz / 64 samples (budget 55%)");
         juce::ignoreUnused (best);
+    }
+
+    // ---- the live picture behind the EQ curve (Spectrum.h) ----
+    {
+        // The sums: a note reads its own level in its own band, at both sample rates the rig uses.
+        bool notes = true;
+        juce::String noteWords;
+
+        for (double rate : { 96000.0, 48000.0 })
+        {
+            const int n = spectrumWindow (rate);
+            std::vector<float> x ((size_t) n);
+
+            for (const auto [hz, db] : { std::pair<double, double> { 1000.0, -12.0 }, { 55.0, -6.0 }, { 8000.0, -30.0 } })
+            {
+                for (int i = 0; i < n; ++i)
+                    x[(size_t) i] = (float) (std::pow (10.0, db / 20.0) * std::sin (twoPi * hz * i / rate));
+
+                const auto bands = spectrumBands (x.data(), rate);
+                const int top = (int) (std::max_element (bands.begin(), bands.end()) - bands.begin());
+                const int far = juce::jlimit (0, spectrumBandCount - 1, top + (hz < 500.0 ? 18 : -18));     // three octaves away
+                notes = notes && (int) bands.size() == spectrumBandCount && std::abs (std::log2 (spectrumBandHz (top) / hz)) < 0.18
+                              && std::abs (bands[(size_t) top] - db) < 0.8 && bands[(size_t) far] < db - 60.0;
+                noteWords << (noteWords.isEmpty() ? "" : ", ") << juce::String (hz, 0) << " Hz at " << juce::String (db, 0) << " dB reads " << juce::String (bands[(size_t) top], 1);
+            }
+        }
+
+        check (notes, "live picture: a note reads its own level in its own band and nothing three octaves away, at 96 and at 48 kHz (" + noteWords + ")");
+
+        // Pink noise (the same strength in every octave) reads level across the picture, as on a mixer's RTA.
+        {
+            const double rate = 96000.0;
+            const int n = spectrumWindow (rate);
+            std::vector<float> x ((size_t) n);
+            std::vector<double> sum ((size_t) spectrumBandCount, 0.0);
+            juce::Random random (77);
+            double p[7] {};
+
+            for (int frame = 0; frame < 24; ++frame)
+            {
+                for (int i = 0; i < n; ++i)
+                {
+                    // Paul Kellet's pink filter.
+                    const double white = random.nextDouble() * 2.0 - 1.0;
+                    p[0] = 0.99886 * p[0] + white * 0.0555179;  p[1] = 0.99332 * p[1] + white * 0.0750759;
+                    p[2] = 0.96900 * p[2] + white * 0.1538520;  p[3] = 0.86650 * p[3] + white * 0.3104856;
+                    p[4] = 0.55000 * p[4] + white * 0.5329522;  p[5] = -0.7616 * p[5] - white * 0.0168980;
+                    x[(size_t) i] = (float) (0.05 * (p[0] + p[1] + p[2] + p[3] + p[4] + p[5] + p[6] + white * 0.5362));
+                    p[6] = white * 0.115926;
+                }
+
+                const auto bands = spectrumBands (x.data(), rate);
+                for (int b = 0; b < spectrumBandCount; ++b)
+                    sum[(size_t) b] += std::pow (10.0, bands[(size_t) b] / 10.0);
+            }
+
+            double low = 1.0e9, high = -1.0e9;
+            for (int b = 0; b < spectrumBandCount; ++b)
+                if (spectrumBandHz (b) >= 100.0 && spectrumBandHz (b) <= 10000.0)
+                {
+                    const double db = 10.0 * std::log10 (sum[(size_t) b] / 24.0);
+                    low = std::min (low, db);
+                    high = std::max (high, db);
+                }
+
+            check (high - low < 3.0, "live picture: pink noise reads level from 100 Hz to 10 kHz (within " + juce::String (high - low, 1) + " dB)");
+        }
+
+        // In the engine: looking changes no sample, and the picture shows the channel before and after its EQ.
+        Bench plain, looked;
+        std::array<float, 2> seen { -100.0f, -100.0f };
+        float outSeen = -100.0f;
+        const int band440 = (int) std::lround (std::log2 (440.0 / spectrumLowHz) * spectrumBandsPerOctave);
+
+        for (auto* b : { &plain, &looked })
+        {
+            auto s = bareSetup();
+            s.channel[0].on = true;
+            s.channel[0].socket = vocalSocket;
+            s.channel[0].strip.slots[stripEq].on = true;
+            s.channel[0].strip.slots[stripEq].setParam ("b1f", 440.0f);
+            s.channel[0].strip.slots[stripEq].setParam ("b1g", -9.0f);
+            s.output[0].firstReturn = 0;
+            b->engine.mixer().setAll (s);
+            b->engine.mixer().setOn (true);
+            b->source = [b] (int socket, juce::int64 t) { return socket == vocalSocket ? tone (440.0, 0.25, t, b->rate) : 0.0f; };
+            b->run (0.3);
+
+            for (int pass = 0; pass < 3; ++pass)
+            {
+                if (b == &looked)
+                {
+                    if (pass < 2)   b->engine.mixer().lookAt (Mixer::Look::channel, 0, pass == 0);
+                    else            b->engine.mixer().lookAt (Mixer::Look::output, 0, false);
+                }
+
+                b->run (0.5);
+
+                if (b == &looked)
+                {
+                    const auto picture = b->engine.mixer().picture();       // a copy: the next look works it out afresh
+                    if ((int) picture.size() == spectrumBandCount)
+                        (pass < 2 ? seen[(size_t) pass] : outSeen) = picture[(size_t) band440];
+                    juce::Thread::sleep (70);                               // the picture is worked out afresh only every 60 ms
+                }
+            }
+        }
+
+        bool same = true;
+        float loudest = 0.0f;
+        for (int r = 0; r < numReturns; ++r)
+        {
+            same = same && plain.heard[(size_t) r] == looked.heard[(size_t) r];
+            loudest = std::max (loudest, peak (plain.heard[(size_t) r]));
+        }
+
+        check (same && loudest > 0.01f, "live picture: a rig that is being looked at sends every return exactly what a rig that is not sends");
+        check (std::abs (seen[0] + 12.0f) < 1.0f && std::abs (seen[1] + 21.0f) < 1.0f && outSeen > -60.0f && outSeen < -12.0f,
+               "live picture: a 440 Hz note at -12 dB reads " + juce::String (seen[0], 1) + " dB before the channel's EQ and " + juce::String (seen[1], 1)
+               + " dB after it (Band 1 cuts it 9 dB), and shows on the main output (" + juce::String (outSeen, 1) + " dB)");
+
+        // Nobody asking: it stops by itself, and an empty picture is handed out.
+        auto& mixer = looked.engine.mixer();
+        mixer.lookAt (Mixer::Look::channel, 3, false, 1000u);
+        mixer.stopLookingIfUnasked (1000u + (juce::uint32) Mixer::lookTimeoutMs - 100u);
+        const bool still = mixer.lookingAt() == Mixer::Look::channel && mixer.lookingAtIndex() == 3;
+        mixer.stopLookingIfUnasked (1000u + (juce::uint32) Mixer::lookTimeoutMs + 100u);
+        const bool stopped = mixer.lookingAt() == Mixer::Look::nothing && mixer.picture().empty();
+        mixer.lookAt (Mixer::Look::channel, 99, false);
+        check (still && stopped && mixer.lookingAt() == Mixer::Look::nothing && mixer.reportText().contains ("EQ curve's live picture"),
+               "live picture: it stops by itself five seconds after the last screen asked, a channel that is not there is not looked at, and the report has its line");
     }
 
     temp.deleteRecursively();
