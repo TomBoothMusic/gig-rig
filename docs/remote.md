@@ -47,8 +47,8 @@ The seven buttons along the bottom (down the left side when a phone is on its si
 | **Looper** | The six tracks (colour and word for what each is doing, how far through its loop, how many lanes, an UNDONE mark), and the nine switches plus CTL3 and CTL4. Touching a switch is the same as a foot on the real one, hold and double-press included. Each switch says what it does in the song's layout and in the bank that is showing. **Clear all loops** asks first. |
 | **Songs** | The same list as the Songs tab. Tap a song to load it (it asks first if loops are running). **Keep these sounds for this song**, **Put the song's sounds back** and **New song** do what the same buttons on the Songs tab do. |
 | **Build** | The looper arrangement builder. See the next part. |
-| **Effects** | The four chains. Switch a chain or one effect on and off, open an effect to move its settings, load a preset onto a chain. **Add an effect** lists every effect the rig has, by kind, and puts the one you tap on the end of the chain. Open an effect for **Move earlier**, **Move later** and **Remove** (its settings travel with it). **Save as a preset** saves the whole chain under a name you type. **Update its presets** saves the chain's changes back into the preset or presets it was made from, exactly as the same button on the Effects tab does. |
-| **Mixer** | Faders with meters. The row of buttons above them chooses what the faders send to: the main mix, a monitor, or one of the four reverbs and delays. Drag a fader from anywhere on it (it never jumps to your finger). Tap a channel's name for its Trim, pan, every send and its own processing. **Set-ups** loads an act, a venue or a monitor set-up, and saves each one: **Save over** the one that is loaded, or **Save as a new one** under a name you type. If the mixer is off the screen says so and offers to switch it on. |
+| **Effects** | A pedalboard for each of the four chains. Every effect is a small drawing of a pedal, a rack unit or an amp, joined by a line that runs from IN to OUT in the order the sound meets them, snaking back along the next row. A lit lamp means the effect is on. Tap a drawing and the screen becomes that effect's own page: its on switch, its settings, **Move earlier**, **Move later** and **Remove** (its settings travel with it), and two arrows to step to the effect before or after it. **‹ Pedalboard** goes back. **Add an effect** lists every effect the rig has, by kind, puts the one you tap on the end of the chain and opens its page. **Presets** opens a sheet to load a preset onto the chain, **Save as a preset**, and **Update its presets** (saves the chain's changes back into the preset or presets it was made from, exactly as the same button on the Effects tab does). |
+| **Mixer** | Faders only, in three banks chosen by the tabs along the top: **Inputs**, **Effects** (the four reverbs and delays) and **Outputs**. Every fader is the same width in every bank and nothing scrolls sideways. An upright phone shows five faders to a bank, so there the inputs take two tabs (**In 1 to 5** and **In 6 to 8**) and the faders run most of the height of the screen. Each strip is tinted with its sound's colour: red for the vocal, yellow for the acoustic, blue for the electric, orange for the bass (a channel takes the colour of the effects chain on its input socket), and the same colours mark the chains on the Effects screen. On Inputs the row of buttons above the faders chooses what they send to: the main mix, a monitor, or one of the four effects. Drag a fader from anywhere on it (it never jumps to your finger). Tap a fader to pick it, then the four buttons under the faders move it by 1 dB or 0.1 dB (on a keyboard, the up and down arrows; hold Shift for 0.1). They stand in for the board's Adjust knob. **Open** on a fader leaves the faders for that channel's own page: its signal chain runs down the left as small pictures, top to bottom in the order the sound meets them (Input, each block of processing, Sends), and the one you tap fills the rest of the screen. A green dot on a picture means that block is on. The two arrows step to the next channel and stay on the same block. **‹ Faders** goes back. **Set-ups** loads an act, a venue or a monitor set-up, and saves each one: **Save over** the one that is loaded, or **Save as a new one** under a name you type. If the mixer is off the screen says so and offers to switch it on. |
 | **Tools** | **Tuner**: on and off, a big note and needle, which input it listens to, what A is, and whether the main mix goes silent (`docs/tuner.md`). **Break music**: choose a mix, Play, From the start, Stop, Bring the music up, Fade it down, its level, the fade times and what counts as starting to play (`docs/break-music.md`). **The venue knob (ENC 5)**: Turn left, Turn right, Push and Hold, with the line the board's screen would show. |
 | **Rig** | Whether audio is running, the warnings, and **Copy report**: the same text as the Copy report button in the app. |
 
@@ -174,6 +174,29 @@ python3 tools/remote_demo.py top-up http://127.0.0.1:8080
 
 It keeps everything `remote/demo-data.js` has, adds only the parts it lacks, and describes
 every effect in `fxCatalogue` so the demo can add any of them.
+
+## Pages inside a screen (28 Nov 2026)
+
+Tom's rule for the final screens: many pages with few, big controls are better than one crowded
+screen that scrolls, as long as the way in and the way back are obvious. The first step toward
+that is in the Mixer and Effects screens. It changes only what the page shows: it uses the same
+orders as before, and nothing about the sound.
+
+- **Mixer.** The faders are a page of their own, in three banks (Inputs, Effects, Outputs) like
+  the CQ12T's tabs. **Open** on a fader goes to that channel's page, which has the signal chain
+  down the left and one block at a time on the right.
+- **Effects.** The chain is a pedalboard picture, and each effect has its own page. It looks
+  different from a mixer channel on purpose, so nobody mistakes one for the other.
+- **One colour for one sound.** `chainColours` in `remote/screens.js` holds Tom's chain colours, the same ones planned for the foot switch screens. `tint` sets `--chain` on a strip, a page or the pedalboard and the last rules of `remote/app.css` paint it. The stomp's green and the duo partner's purple are stand-ins until Tom chooses.
+- **The drawings are stand-ins.** A pedal's drawing is a shape and a colour chosen in
+  `pedalLook` in `remote/screens.js`, not a likeness. The finished look of each piece of gear
+  comes last (see "The gear look sample" below).
+- **The picked fader.** The buttons under the faders and the arrow keys stand in for the board's
+  Adjust knob (ENC 6), which will turn whichever fader was last touched.
+- For a developer: a page is kept in `GR.ui.mixPage` (`{ kind: 'ch' | 'fx' | 'out', i }`) or
+  `GR.ui.fxPage` (`{ c, i }`), and `chainPage`, `blockItem` and `pageHead` in `remote/screens.js`
+  build one. A new kind of page should start with `pageHead` so the way back is always in the
+  same place.
 
 ## Not built yet
 

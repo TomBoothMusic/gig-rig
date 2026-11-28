@@ -128,7 +128,7 @@ input[type=range]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 
 .block-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .block-name small { color: var(--muted); font-size: 11px; }
 .caret { color: var(--muted); width: 14px; }
-.block-body { padding: 4px 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; border-top: 1px solid var(--line); }
+.block-body { padding: 4px 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 6px 20px; border-top: 1px solid var(--line); }
 
 /* ---- looper */
 .looper-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
@@ -189,37 +189,140 @@ input[type=range]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 
 summary { cursor: pointer; color: var(--muted); }
 .build-switches .pads, .build-switches .pads.ctl { max-width: 700px; }
 
-/* ---- mixer */
-.sends { display: flex; flex-direction: column; gap: 4px; }
-.strips { display: flex; gap: 6px; overflow-x: auto; padding: 4px var(--gut-r) 8px var(--gut-l); margin: 0 calc(-1 * var(--gut-r)) 0 calc(-1 * var(--gut-l)); --view: var(--accent);
-          height: clamp(300px, calc(100dvh - 330px), 620px); }
+/* ---- pages inside a screen: the way back, and a signal chain down the left */
+.page-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.page-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.page-title b { font-size: 17px; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.page-title small { color: var(--muted); font-size: 12px; }
+.btn.back { font-weight: 700; white-space: nowrap; } .btn.step { min-width: var(--tap); padding: 8px 0; font-size: 18px; }
+.chain-page { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; align-items: start; }
+.rail { display: flex; flex-direction: column; gap: 0; position: sticky; top: 0; }
+.rail-item { position: relative; min-height: 60px; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; overflow-wrap: anywhere; margin-bottom: 10px; }
+.rail-item:not(:last-child)::after { content: ""; position: absolute; left: 50%; top: 100%; width: 2px; height: 11px; margin-left: -1px; background: var(--muted); opacity: .6; }
+.rail-item.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.rail-item.off:not(.on) { color: var(--muted); }
+.rail-led { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--play); }
+.rail-item.off .rail-led { background: var(--raise); box-shadow: inset 0 0 0 1px var(--muted); }
+.ico { display: block; width: 24px; height: 24px; } .ico svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pane { min-width: 0; display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.pane-title { margin: 0; font-size: 16px; }
+.blocks.solo .block { border: 0; background: none; border-radius: 0; overflow: visible; }
+.blocks.solo .block-head { padding: 0 0 8px; cursor: default; min-height: 0; } .blocks.solo .caret { display: none; }
+.blocks.solo .block-body { padding: 10px 0 0; }
+.pane .blocks.solo .block-name b { display: none; }
+@media (min-width: 760px) { .chain-page { grid-template-columns: 96px minmax(0, 1fr); gap: 16px; } .rail-item { font-size: 12px; } }
+@media (max-width: 520px) { .chain-page { grid-template-columns: 66px minmax(0, 1fr); gap: 8px; } .pane { padding: 10px; } .pane .g1176 { zoom: .7; } .rail-item { font-size: 10px; }
+    .btn.back { padding: 8px 10px; } .btn.step { min-width: 40px; } .page-head { gap: 6px; } }
+@media (orientation: landscape) and (max-height: 520px) { .chain-page { grid-template-columns: 118px minmax(0, 1fr); } .rail-item { min-height: 44px; flex-direction: row; gap: 6px; margin-bottom: 6px; } .rail-item:not(:last-child)::after { height: 7px; } .ico { width: 18px; height: 18px; flex: none; } }
+
+/* ---- effects: the pedalboard */
+.board { display: grid; gap: 14px; padding: 12px 10px; border-radius: 14px; border: 1px solid var(--line);
+         background: repeating-linear-gradient(0deg, #0000 0 22px, #0003 22px 24px), #20252c; }
+.board.dark .pedal { filter: saturate(.3) brightness(.7); }
+.board-cell { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.cable { position: absolute; background: #c9ced6; border-radius: 2px; z-index: 0; }
+.cable.l { left: -7px; width: calc(50% + 7px); top: 50%; height: 4px; margin-top: -2px; } .cable.r { right: -7px; width: calc(50% + 7px); top: 50%; height: 4px; margin-top: -2px; }
+.cable.t { top: -7px; height: calc(50% + 7px); left: 50%; width: 4px; margin-left: -2px; } .cable.b { bottom: -7px; height: calc(50% + 7px); left: 50%; width: 4px; margin-left: -2px; }
+.jack { position: relative; z-index: 1; width: 58px; height: 58px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #0a0a0a 0 9px, #8d949c 10px 16px, #3a4048 17px); border: 2px solid #c9ced6;
+        display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+.jack b { position: absolute; top: -18px; font-size: 11px; letter-spacing: .08em; color: var(--fg); } .jack small { position: absolute; bottom: -17px; font-size: 9px; color: var(--muted); white-space: nowrap; }
+.pedal-btn { position: relative; z-index: 1; background: none; border: 0; padding: 0; width: 100%; max-width: 170px; display: block; }
+.pedal-btn:active .pedal { transform: scale(.96); }
+.pedal { --pc: #56616d; --ink: #f2f2f2; position: relative; aspect-ratio: 3 / 4; width: 100%; border-radius: 8px; background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 82%, #fff), var(--pc) 45%, color-mix(in srgb, var(--pc) 75%, #000));
+         border: 1px solid #000; box-shadow: 0 3px 6px #000a, inset 0 1px 0 #ffffff40; color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 8% 6% 9%; overflow: hidden; }
+.pedal.light { --ink: #16181b; } .pedal:not(.on) { filter: saturate(.4) brightness(.55); }
+.pedal-name { font-size: 11px; font-weight: 800; line-height: 1.05; text-align: center; text-transform: uppercase; letter-spacing: .02em; overflow-wrap: anywhere; max-height: 3.2em; overflow: hidden; }
+.pedal-knobs { display: flex; gap: 8%; justify-content: center; width: 100%; }
+.pedal-knobs i { width: 24%; max-width: 34px; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #555, #0c0c0c 70%); box-shadow: 0 1px 2px #000, inset 0 0 0 1px #ffffff30; position: relative; }
+.pedal-knobs i::after { content: ""; position: absolute; left: 50%; top: 8%; width: 2px; height: 38%; margin-left: -1px; background: #fff; border-radius: 1px; transform-origin: 50% 110%; transform: rotate(calc(-50deg + var(--n, 0) * 45deg)); }
+.pedal-lamp { position: absolute; top: 5%; right: 7%; width: 7px; height: 7px; border-radius: 50%; background: #3a1512; box-shadow: inset 0 0 0 1px #0008; }
+.pedal.on .pedal-lamp { background: #ff3b30; box-shadow: 0 0 6px 2px #ff3b30aa; }
+.pedal-switch { width: 30%; max-width: 44px; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #f4f4f4, #777 75%); box-shadow: 0 2px 3px #000a, 0 0 0 2px #0006; }
+.pedal-sliders { display: flex; gap: 5%; width: 92%; height: 34%; justify-content: center; background: #0003; border-radius: 3px; padding: 4% 3%; }
+.pedal-sliders i { flex: 1; background: linear-gradient(90deg, #0000 40%, #0009 40% 60%, #0000 60%); position: relative; }
+.pedal-sliders i::after { content: ""; position: absolute; left: 0; right: 0; height: 5px; border-radius: 1px; background: #111; top: var(--t, 40%); }
+.pedal.k-rocker { padding: 6%; justify-content: flex-start; gap: 6%; }
+.pedal-tread { width: 82%; flex: 1; border-radius: 6px; background: repeating-linear-gradient(0deg, #0b0b0b 0 5px, #2c2c2c 5px 7px); box-shadow: inset 0 0 0 2px #0008, 0 1px 0 #ffffff25; }
+.pedal.k-rack { aspect-ratio: 3 / 4; padding: 0; background: none; border: 0; box-shadow: none; justify-content: center; gap: 6px; overflow: visible; color: var(--fg); }
+.pedal.k-rack .pedal-face { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 4px; background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 85%, #fff), var(--pc) 50%, color-mix(in srgb, var(--pc) 80%, #000));
+    border: 1px solid #000; box-shadow: 0 3px 6px #000a, inset 0 1px 0 #ffffff40; display: flex; align-items: center; gap: 6%; padding: 0 9%; }
+.pedal.k-rack .pedal-face::before, .pedal.k-rack .pedal-face::after { content: ""; position: absolute; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: #9aa; box-shadow: 0 0 0 1px #000; }
+.pedal.k-rack .pedal-face::before { left: 3px; } .pedal.k-rack .pedal-face::after { right: 3px; }
+.pedal.k-rack .pedal-knobs { flex: 1; gap: 6%; justify-content: flex-start; } .pedal.k-rack .pedal-knobs i { width: 30%; max-width: 24px; }
+.pedal-window { width: 30%; aspect-ratio: 4 / 3; border-radius: 2px; background: #2a2416; box-shadow: inset 0 0 0 1px #000; }
+.pedal.on .pedal-window { background: radial-gradient(circle at 50% 80%, #fff3c4, #e2b55a 75%); }
+.pedal.k-rack .pedal-lamp { top: 8%; right: 8%; width: 5px; height: 5px; }
+.pedal.k-amp { padding: 0; justify-content: flex-start; border-radius: 6px; }
+.pedal.k-amp .pedal-face { position: relative; width: 100%; height: 22%; background: #c9ccd0; display: flex; align-items: center; padding: 0 8%; border-bottom: 1px solid #000; }
+.pedal.k-amp .pedal-knobs { justify-content: flex-start; gap: 5%; } .pedal.k-amp .pedal-knobs i { width: 16%; }
+.pedal.k-amp .pedal-lamp { top: 30%; }
+.pedal-cloth { flex: 1; width: 86%; margin: 7% 0 5%; border-radius: 3px; background: repeating-linear-gradient(45deg, #b9a97a 0 2px, #8f8158 2px 4px); box-shadow: inset 0 0 0 2px #0007; }
+.pedal.k-amp .pedal-name { padding-bottom: 6%; }
+.pedal-page { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.pedal-hero { width: 96px; margin: 0 auto; }
+.pedal-page > .blocks { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+@media (min-width: 700px) { .pedal-page { grid-template-columns: 150px minmax(0, 1fr); align-items: start; } .pedal-hero { width: 150px; } .pedal-name { font-size: 13px; } .pedal-hero .pedal-name { font-size: 14px; } .pedal-lamp { width: 10px; height: 10px; } }
+@media (orientation: landscape) and (max-height: 520px) { .pedal-page { grid-template-columns: 84px minmax(0, 1fr); align-items: start; } .pedal-hero { width: 84px; } }
+
+/* ---- mixer: three banks of faders, every fader the same width whatever the bank */
+.screen-mixer.faders { min-height: 100%; }
+.banks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; max-width: 1180px; }
+.bank { min-height: var(--tap); border-radius: 10px 10px 0 0; border: 1px solid var(--line); border-bottom: 3px solid var(--line); background: var(--panel2); font-weight: 700; color: var(--muted); }
+.bank.on { border-bottom-color: var(--accent); color: var(--accent); background: var(--panel); }
+.sends { display: flex; flex-direction: column; gap: 4px; } .sends-none { min-height: 40px; display: flex; align-items: center; }
+.strips { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; --view: var(--accent); flex: 1 1 auto; min-height: 320px; max-width: 1180px; }
 .strips.v-mon { --view: var(--mon); } .strips.v-fx { --view: var(--fx); }
-.strip { flex: 1 0 68px; max-width: 110px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--view); border-radius: 10px; display: flex; flex-direction: column; gap: 4px; padding: 4px; min-height: 0; }
-.strip.fxret { background: #1a1826; } .strip.master { background: #221d12; border-color: #4a3a17; border-top-color: var(--view); position: sticky; right: 0; }
+.strip { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--view); border-radius: 10px; display: flex; flex-direction: column; gap: 4px; padding: 3px; min-height: 0; }
+.strip.fxret { background: #1a1826; } .strip.master { background: #221d12; border-color: #4a3a17; border-top-color: var(--view); }
+.strip.picked { box-shadow: 0 0 0 2px var(--fg); }
 .strip.dim .fader, .strip.dim .strip-name { opacity: .5; }
-.strip-name { background: none; border: 0; font-weight: 700; font-size: 12px; min-height: 40px; line-height: 1.15; padding: 2px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-wrap: anywhere; }
-.strip-name small { color: var(--muted); font-weight: 500; font-size: 10px; }
+.strip-name { font-weight: 700; font-size: 10px; height: 36px; line-height: 1.15; padding: 1px 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow-wrap: anywhere; }
+.strip-name small { color: var(--muted); font-weight: 500; font-size: 9px; }
+.strip-open { min-height: 34px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); font-size: 11px; font-weight: 700; }
 .gr { height: 4px; background: var(--raise); border-radius: 2px; overflow: hidden; direction: rtl; } .gr i { display: block; height: 100%; width: 0; background: var(--warn); } .gr.none { visibility: hidden; }
 .fader { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
-.fader-well { flex: 1; min-height: 0; display: flex; gap: 4px; justify-content: center; padding: 14px 0 12px; }
-.meter { width: 6px; background: var(--raise); border-radius: 3px; position: relative; overflow: hidden; }
+.fader-well { flex: 1; min-height: 0; display: flex; gap: 3px; justify-content: center; padding: 14px 0 12px; }
+.meter { width: 5px; flex: none; background: var(--raise); border-radius: 3px; position: relative; overflow: hidden; }
 .meter i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--play); transition: height .09s linear; }
 .meter i.hot { background: var(--dub); } .meter i.clip { background: var(--rec); }
-.fader-track { position: relative; width: 44px; touch-action: pan-x; cursor: ns-resize; }
+.fader-track { position: relative; flex: 0 1 48px; min-width: 0; touch-action: none; cursor: ns-resize; }
 .fader-track::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--raise); }
 .fader-fill { position: absolute; left: 50%; bottom: 0; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--view); opacity: .7; }
-.fader-zero { position: absolute; left: 4px; right: 4px; bottom: 75%; height: 2px; background: var(--muted); opacity: .6; }
-.fader-cap { position: absolute; left: 2px; right: 2px; height: 26px; margin-bottom: -13px; border-radius: 6px; background: linear-gradient(#f4f6f8, #b9c2cc); border: 1px solid #000; box-shadow: 0 2px 6px #0008; }
-.fader-cap::after { content: ""; position: absolute; left: 4px; right: 4px; top: 11px; height: 2px; background: #222; }
-.fader-track.moving .fader-cap { background: var(--view); }
-.fader-val { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; }
-.mute { min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); font-size: 12px; font-weight: 700; }
+.fader-zero { position: absolute; left: 2px; right: 2px; bottom: 75%; height: 2px; background: var(--muted); opacity: .6; }
+.fader-cap { position: absolute; left: 0; right: 0; height: 28px; margin-bottom: -14px; border-radius: 6px; background: linear-gradient(#f4f6f8, #b9c2cc); border: 1px solid #000; box-shadow: 0 2px 6px #0008; }
+.fader-cap::after { content: ""; position: absolute; left: 3px; right: 3px; top: 12px; height: 2px; background: #222; }
+.fader-track.moving .fader-cap, .strip.picked .fader-cap { background: var(--view); }
+.fader-val { text-align: center; font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.mute { min-height: 36px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); font-size: 11px; font-weight: 700; }
 .mute.on { background: var(--bad); border-color: var(--bad); color: #fff; } .mute.none { visibility: hidden; }
 .mix-top { flex-wrap: wrap; } .mix-top > .btn { min-width: 0; flex: 1 1 200px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nudge { display: flex; align-items: center; justify-content: space-between; gap: 8px; max-width: 1180px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px 6px 12px; }
+.nudge-what { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; } .nudge-what b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.nudge-what output { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); min-height: 1.2em; }
+.nudge-btns { display: flex; gap: 6px; flex: none; } .nudge-btn { min-width: 52px; padding: 8px 4px; font-variant-numeric: tabular-nums; }
+@media (min-width: 700px) {
+    .strips { gap: 10px; } .strip { padding: 6px; gap: 6px; } .strip-name { font-size: 13px; height: 40px; } .strip-name small { font-size: 11px; }
+    .strip-open, .mute { font-size: 13px; min-height: 40px; } .fader-val { font-size: 14px; } .meter { width: 8px; } .fader-well { gap: 8px; } .fader-track { flex-basis: 56px; } .fader-cap { height: 34px; margin-bottom: -17px; } .fader-cap::after { top: 15px; }
+    .nudge-btn { min-width: 72px; } .nudge-what b { font-size: 15px; }
+}
+/* An upright phone: five faders to a bank, and everything but the faders squeezed so they run most of the screen's height with nothing to scroll. */
+@media (max-width: 520px) {
+    .screen-mixer.faders { gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+    .mix-top { flex-wrap: nowrap; } .mix-top > .btn { flex: 1 1 0; } .setups-now { display: none; }
+    .screen-mixer .sends > .hint, .sends-none { display: none; }
+    .bank { font-size: 12px; line-height: 1.1; padding: 2px; }
+    .strips { gap: 6px; min-height: 300px; } .strip { padding: 4px; }
+    .strip-name { font-size: 10.5px; letter-spacing: -.3px; height: 30px; }
+    .fader-track { flex-basis: 44px; } .fader-val { font-size: 12px; }
+    .nudge { padding: 4px 6px 4px 10px; } .nudge-what { flex: 1; } .nudge-btn { min-width: 46px; } .nudge-btns { gap: 4px; }
+    .board { gap: 14px 10px; padding: 12px 8px; }
+}
 @media (orientation: landscape) and (max-height: 520px) {
-    .strips { height: calc(100dvh - 172px); min-height: 190px; }
-    .screen-mixer .sends > .hint, .screen-mixer > .row:last-child .hint { display: none; }
-    .strip-name { min-height: 28px; } .fader-well { padding: 12px 0 10px; } .mute { min-height: 28px; }
+    .strips { min-height: 250px; }
+    .screen-mixer .sends > .hint, .sends-none { display: none; }
+    .strip-name { height: 26px; } .fader-well { padding: 12px 0 10px; } .mute, .strip-open { min-height: 28px; }
+    .banks .bank { min-height: 36px; } .nudge { padding: 2px 8px; } .nudge-btn { min-height: 36px; }
 }
 
 /* ---- rig */
@@ -265,9 +368,25 @@ summary { cursor: pointer; color: var(--muted); }
 @media (pointer: coarse) {
     :root { --scroll-strip: 40px; }
     .screen { padding-right: calc(var(--gut-r) + var(--scroll-strip)); }
-    .strips { margin-right: 0; padding-right: 4px; }
     .sheet-body { padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + var(--scroll-strip)); }
 }
 /* A narrow phone (360 wide): nothing may push the page wider than the screen. */
 .top-left { flex: 1 1 auto; } .top-right { flex: 0 1 auto; overflow: hidden; }
 .tab > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- one colour for one sound (Tom, 28 Nov 2026): --chain is set on anything that belongs to a
+   chain, and these rules paint it. Red vocal, yellow acoustic, blue electric, orange bass. */
+.strip.hue { border-top-color: var(--chain); border-color: color-mix(in srgb, var(--chain) 40%, var(--line)); border-top-color: var(--chain);
+             background: linear-gradient(180deg, color-mix(in srgb, var(--chain) 26%, var(--panel)), color-mix(in srgb, var(--chain) 9%, var(--panel)) 70%); }
+.strip.hue .strip-name { color: color-mix(in srgb, var(--chain) 55%, #fff); }
+.strip.hue .strip-open { border-color: color-mix(in srgb, var(--chain) 45%, var(--line)); background: color-mix(in srgb, var(--chain) 18%, var(--raise)); }
+.strip.hue.picked { box-shadow: 0 0 0 2px var(--chain), 0 0 14px color-mix(in srgb, var(--chain) 50%, transparent); }
+.strip.hue.picked .fader-cap { background: var(--chain); }
+.chip.hue { border-color: color-mix(in srgb, var(--chain) 70%, var(--line)); color: color-mix(in srgb, var(--chain) 60%, #fff); }
+.chip.hue.on { background: var(--chain); border-color: var(--chain); color: #14110a; }
+.board.hue { border: 2px solid var(--chain); background: repeating-linear-gradient(0deg, #0000 0 22px, #0003 22px 24px), color-mix(in srgb, var(--chain) 14%, #1c2027); }
+.screen.hue .page-head { border-left: 6px solid var(--chain); padding-left: 8px; border-radius: 4px; }
+.screen.hue .page-title b { color: color-mix(in srgb, var(--chain) 60%, #fff); }
+.screen.hue .rail-item.on { background: var(--chain); border-color: var(--chain); color: #14110a; }
+.screen.hue .pane, .screen.hue .pedal-page > .blocks { border-color: color-mix(in srgb, var(--chain) 45%, var(--line)); }
+.screen.hue .rail-item:not(.on) { border-color: color-mix(in srgb, var(--chain) 30%, var(--line)); }
