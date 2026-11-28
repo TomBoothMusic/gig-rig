@@ -158,6 +158,26 @@ LatencyRow summarisePings (const std::vector<std::vector<PingHit>>& pings, int n
 AudioEngine::AudioEngine()
 {
     tunerCore.beforeTick = [this] { tellTunerTheGuitars(); };
+
+    library.root = [] { return Mixer::recordingFolder(); };
+    library.busy = [this] (const juce::String& name) -> juce::String
+    {
+        if (mixCore.recorder().isRecording() && mixCore.recorder().folder().getFileName() == name)
+            return "It is being recorded now.";
+
+        if (checkCore.isPlaying() && checkCore.name() == name)
+            return "It is playing as a soundcheck. Stop the soundcheck first.";
+
+        return {};
+    };
+    library.copyBlocked = [this] () -> juce::String
+    {
+        // A USB drive at work can make the sound click (found on the laptop, 20 Nov 2026), so never while it matters.
+        if (mixCore.recorder().isRecording())   return "Stop the recording first: a USB drive at work can make the sound click.";
+        if (checkCore.isPlaying())              return "Stop the soundcheck first: a USB drive at work can make the sound click.";
+        return {};
+    };
+
     juce::AudioDeviceManager manager;
     manager.createAudioDeviceTypes (types);
 }
@@ -419,6 +439,7 @@ void AudioEngine::prepare (double rate, int block, int ins, int outs)
     kickCore.prepare (rate);
     breakCore.prepare (rate, scratchSize);
     tunerCore.prepare (rate);
+    checkCore.prepare (rate, scratchSize);
     resetDropoutStats();
 }
 
@@ -702,6 +723,25 @@ juce::String AudioEngine::measuringStatus() const
              + juce::String (juce::jmin (pingsPerRow, (int) job.pings.size() + 1)) + " of " + juce::String (pingsPerRow);
 }
 
+juce::String AudioEngine::startSoundcheck (const juce::String& name, bool roundAndRound)
+{
+    if (job.active || measuring.load())
+        return "A latency test is running. Wait for it to finish.";
+
+    if (mixCore.recorder().isRecording() && mixCore.recorder().folder().getFileName() == name)
+        return "This recording is still being recorded. Stop it first.";
+
+    if (name.isEmpty() || name.containsAnyOf ("/\\:"))
+        return "There is no recording called \"" + name + "\".";
+
+    const auto folder = Mixer::recordingFolder().getChildFile (name);
+
+    if (! folder.isDirectory())
+        return "There is no recording called \"" + name + "\".";
+
+    return checkCore.start (folder, roundAndRound);
+}
+
 //==============================================================================
 void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numIns,
                                                     float* const* outputs, int numOuts, int numSamples,
@@ -763,6 +803,10 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
 
     if (numSamples <= 0 || numSamples > scratchSize || (int) scratch.size() < scratchSize)
         return;
+
+    // Virtual soundcheck: a recording stands in for the sockets it was recorded from, so everything
+    // below works on it as it would on Tom playing. Not playing, this reads one flag and changes nothing.
+    inputs = checkCore.feed (inputs, numIns, numSamples);
 
     for (int ch = 0; ch < juce::jmin (numIns, numMeteredInputs); ++ch)
         if (inputs[ch] != nullptr)

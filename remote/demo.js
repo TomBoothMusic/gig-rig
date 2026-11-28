@@ -41,6 +41,13 @@ GR.makeDemoRig = (data) =>
         if (tu.monitors === undefined) tu.monitors = true;
         tuner.byHand = {};
         tunerChannels();
+        // The demo has no drive, so it pretends three recordings are on the rig and a USB stick is plugged in.
+        rig.state.recordings = { free: 212, drives: [{ name: 'USB STICK', free: 58 }], list: [
+            { name: '2026-11-27 20-04-12', files: 12, min: 47.5, gb: 3.9, kept: false, copied: false, check: 5 },
+            { name: '2026-11-21 19-31-40', files: 12, min: 132.0, gb: 10.8, kept: false, copied: true, check: 5 },
+            { name: '2026-11-20 16-02-05', files: 7, min: 6.2, gb: 0.3, kept: true, copied: true, check: 5 }] };
+        vsc = { on: false, name: '', since: 0, len: 0 };
+        usb = { on: false, since: 0, names: [], result: '', ms: 6000 };
         recFiles();     // the list of files a recording would write, worked out for the demo's own mixer
         rig.changed = true;
     };
@@ -308,6 +315,17 @@ GR.makeDemoRig = (data) =>
         live.rec = { on: rec.on, sec: recSec, lost: 0, files: rec.files, folder: rec.folder, free: 212, hours: Math.round (2110 / Math.max (1, st().mixer.rec.files.length * 0.6)) / 10,
                      pk: rec.on && st().mixer.on && st().mixer.rec.mix ? [wobble (3) * 0.4, wobble (5) * 0.4] : [0, 0], note: '' };
 
+        if (usb.on && t - usb.since >= usb.ms)
+        {
+            usb.on = false;
+            usb.names.forEach ((n) => { const x = recOf (n); if (x) x.copied = true; });
+            usb.result = 'Copied ' + usb.names.length + (usb.names.length === 1 ? ' recording' : ' recordings') + ' to "USB STICK". Every file was read back and matched. (The demo only pretends.)';
+            rig.changed = true;
+        }
+
+        live.check = { on: vsc.on, name: vsc.name, pos: vsc.on && vsc.len > 0 ? Math.floor ((t - vsc.since) / 1000) % vsc.len : 0, len: vsc.len, missed: 0 };
+        live.copy = { on: usb.on, done: usb.on ? Math.min (1, (t - usb.since) / usb.ms) : 0, now: usb.on ? 'Copying ' + usb.names.length + (usb.names.length === 1 ? ' recording' : ' recordings') : '', result: usb.result, failed: false };
+
         const b = st().breakMusic;
         live.breakMusic = { playing: bm.playing, up: bm.up, fade: Math.round (bm.fade * bm.fade * 1000) / 1000, pos: bm.pos, len: 3483, mix: b.mix, level: b.level, knobOnBreak: bm.knobOnBreak, knob: knobScreen(),
             line: ! bm.playing ? (b.mix ? 'Stopped. "' + b.mix + '" will carry on from ' + clock (bm.pos) + '.' : 'Nothing chosen yet.')
@@ -349,6 +367,10 @@ GR.makeDemoRig = (data) =>
 
     // The recorder: a stand-in that keeps time and lists the files the rig would write. It writes nothing.
     const rec = { on: false, since: 0, sec: 0, files: 0, folder: '' };
+    // The stand-ins for a virtual soundcheck and a copy to USB: they only count time.
+    let vsc = { on: false, name: '', since: 0, len: 0 }, usb = { on: false, since: 0, names: [], result: '', ms: 6000 };
+    const recOf = (name) => (st().recordings.list || []).find ((x) => x.name === name);
+    const stamp = () => { const d = new Date(), p = (n) => String (n).padStart (2, '0'); return d.getFullYear() + '-' + p (d.getMonth() + 1) + '-' + p (d.getDate()) + ' ' + p (d.getHours()) + '-' + p (d.getMinutes()) + '-' + p (d.getSeconds()); };
     const recFiles = () =>
     {
         const m = st().mixer;
@@ -357,6 +379,7 @@ GR.makeDemoRig = (data) =>
         if (m.on && m.rec.fx)   m.fx.forEach ((e, f) => { if (e.on) files.push ('Effect ' + (f + 1) + ' ' + e.name); });
         if (m.on && m.rec.main) files.push ('Main mix (stereo)');
         if (m.on && m.rec.mix)  files.push ('Recording mix (stereo)');
+        if (m.rec.check)        m.channels.forEach ((ch) => { if (ch.on && ch.rec !== 'raw' && ! ch.linked) files.push (ch.name + ' (raw for soundcheck)'); });
         m.rec.files = files;
     };
 
@@ -558,10 +581,59 @@ GR.makeDemoRig = (data) =>
             case 'rec.stop':
                 if (! rec.on) return fail ('It is not recording.');
                 rec.sec = Math.round ((now() - rec.since) / 1000); rec.on = false;
+                st().recordings.list.unshift ({ name: stamp(), files: rec.files, min: Math.round (rec.sec / 6) / 10, gb: Math.round (rec.sec * rec.files * 0.000144 * 100) / 100, kept: false, copied: false, check: m.rec.check || m.channels.some ((ch) => ch.on && ch.rec === 'raw') ? 5 : 0 });
                 return ok ('Saved ' + rec.files + ' files. (The demo only pretends: nothing was written.)');
+            case 'check.start':
+            {
+                const x = recOf (c.name);
+                if (! x) return fail ('There is no recording called "' + c.name + '".');
+                if (! (x.check > 0)) return fail ('This recording has no raw files, so it cannot be played back as a soundcheck.');
+                vsc = { on: true, name: x.name, since: now(), len: Math.max (1, Math.round (x.min * 60)) };
+                return ok ('Playing ' + x.name + ' through the rig. (The demo only pretends: nothing is heard.)');
+            }
+            case 'check.stop':
+                if (! vsc.on) return fail ('No soundcheck is playing.');
+                vsc.on = false;
+                return ok ('Stopped. The sockets hear what is plugged in again.');
+            case 'recs.keep':
+            {
+                const x = recOf (c.name);
+                if (! x) return fail ('There is no recording called "' + c.name + '".');
+                x.kept = c.on !== false;
+                return ok();
+            }
+            case 'recs.delete':
+            {
+                const x = recOf (c.name);
+                if (! x) return fail ('There is no recording called "' + c.name + '".');
+                if (x.kept) return fail ('This recording is kept. Switch Keep off first if it really should go.');
+                if (vsc.on && vsc.name === x.name) return fail ('It is playing as a soundcheck. Stop the soundcheck first.');
+                st().recordings.list = st().recordings.list.filter ((y) => y !== x);
+                return ok ('Deleted ' + x.name + '. (The demo only pretends.)');
+            }
+            case 'recs.clear':
+            {
+                const all = st().recordings.list, stay = all.filter ((x) => x.kept || (c.copied !== false && ! x.copied) || (vsc.on && vsc.name === x.name));
+                st().recordings.list = stay;
+                return ok ('Cleared ' + (all.length - stay.length) + (all.length - stay.length === 1 ? ' recording.' : ' recordings.') + ' ' + stay.filter ((x) => x.kept).length + ' kept.');
+            }
+            case 'recs.copy':
+            {
+                if (usb.on) return fail ('A copy is already running.');
+                if (rec.on) return fail ('Stop the recording first: a USB drive at work can make the sound click.');
+                if (vsc.on) return fail ('Stop the soundcheck first: a USB drive at work can make the sound click.');
+                if (c.drive !== 'USB STICK') return fail ('There is no drive called "' + c.drive + '".');
+                const names = (c.names && c.names.length ? c.names : st().recordings.list.filter ((x) => ! x.copied).map ((x) => x.name)).filter ((n) => recOf (n));
+                if (! names.length) return fail ('Every recording has already been copied.');
+                usb = { on: true, since: now(), names, result: '', ms: 6000 };
+                return ok ('Copying. Leave the drive in until it says it has finished.');
+            }
+            case 'recs.cancel':
+                usb.on = false; usb.result = 'The copy stopped: The copy was stopped.';
+                return ok();
             case 'rec.set':
                 if (c.key === 'level') m.rec.level = level (c.value);
-                else if (['main', 'mix', 'fx'].includes (c.key)) { m.rec[c.key] = !! c.value; recFiles(); }
+                else if (['main', 'mix', 'fx', 'check'].includes (c.key)) { m.rec[c.key] = !! c.value; recFiles(); }
                 else return fail ('The recorder has no "' + c.key + '".');
                 m.actChanged = true;
                 return ok();

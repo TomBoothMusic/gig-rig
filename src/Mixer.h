@@ -66,6 +66,8 @@ constexpr int numRecordPoints = 5;
 
 /** The recorder's slots: one for each channel, then the main mix, the recording mix and the mixer's effects. */
 constexpr int recSlotMain = numMixChannels, recSlotMix = numMixChannels + 1, recSlotFx = numMixChannels + 2;
+/** Then one for each channel's socket, raw: the copy a virtual soundcheck plays back (docs/recording.md). */
+constexpr int recSlotRaw = recSlotFx + numMixFx;
 
 struct MixChannelSetup
 {
@@ -119,6 +121,7 @@ struct MixRecordSetup
     bool mainMix = true;                // "Main mix": a stereo file of the main output, as the PA gets it
     bool mix = true;                    // "Recording mix": a stereo file of the recording mix
     bool fxTracks = false;              // each of the mixer's reverbs and delays (its wet sound alone) as a file of its own
+    bool checkCopy = true;              // every socket in use also raw, so the recording can be played back as a virtual soundcheck
     float levelDb = 0.0f;               // the recording mix's level
     fx::ChainModel chain;               // mixeq, buscomp, limiter
 };
@@ -249,7 +252,7 @@ public:
     juce::String startRecording (const juce::File& parentFolder);
     void stopRecording();
     /** The files a recording started now would hold, in order (what the Recording tab lists). */
-    struct RecordTrack { int slot = 0; juce::String name; int channels = 1; };
+    struct RecordTrack { int slot = 0; juce::String name; int channels = 1; int socket = -1; };     // socket: set for a raw file, which a virtual soundcheck can play back into it
     std::vector<RecordTrack> recordTracks() const;
     /** Room left on the recordings drive, and how long that lasts with the tracks chosen now. Message thread. */
     struct RecordRoom { double freeGb = 0.0, gbPerHour = 0.0, hours = 0.0; };

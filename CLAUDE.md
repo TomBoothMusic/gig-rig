@@ -44,7 +44,7 @@ xvfb-run -a build/GigRig_artefacts/Release/GigRig --self-test result.txt
 ```
 
 The whole self-test takes a few minutes. While working on one part,
-`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `songs`) in front of the
+`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `recordings`, `songs`) in front of the
 last line runs only that part's checks. CI always runs all of them.
 
 Real audio and MIDI are proven only on Tom's hardware.
@@ -106,7 +106,20 @@ recording sends** (a check); every file of a recording must be the same length. 
 off `Mixer::recordWithoutMixing` still records the sockets. Screen: `src/RecordingPanel.*`
 (the Recording tab) and the remote page's Record screen (`rec.*` orders). Record points, the
 `reclevel`/`recpan` keys and the `[recording]` sections are saved in act files on Tom's disk:
-never rename, only add. Not built: virtual soundcheck, copy to USB, clearing recordings.
+never rename, only add.
+
+Since 28 Nov 2026 (second round, Tom's ask): **virtual soundcheck** (`src/Soundcheck.*`) plays a
+recording's raw files back into the sockets they came from, first thing in
+`AudioEngine::processBlock`, so effects, looper and mixer work on it as on Tom playing; **not
+playing, it must change no sample** (a check). Only raw files can be played, which is why a
+recording keeps a raw copy of every socket (`MixRecordSetup::checkCopy`, on by default) and its
+`About this recording.txt` has `soundcheck: <file> = socket <n>` lines. `src/RecordingLibrary.*`
+lists, keeps, deletes, clears and copies recordings to USB (each file read back and compared);
+it never touches a kept recording or one in use, and refuses to copy while recording or
+soundchecking (a USB drive at work can make the sound click). Screen: `src/RecordingsPanel.*`
+(the Recordings tab) and the Record screen's Recordings pages (`check.*`, `recs.*` orders).
+Checks: `src/RecordingsSelfTest.cpp`. The `soundcheck:` lines and the marker files `Keep.txt` and
+`Copied to USB.txt` are on Tom's disk: never rename them.
 
 ## The remote screen (the phone and tablet control app)
 

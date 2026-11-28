@@ -56,6 +56,7 @@ Two things to know:
 | **Main mix** | `Main mix.wav`, stereo | Exactly what the PA was sent: the venue's EQ, limiter and level included. If the main output is set to mono, both sides are the same. |
 | **Recording mix** | `Recording mix.wav`, stereo | The second mix, below. |
 | **Reverbs and delays** | `Effect 1 Vocal plate.wav` and so on | Each mixer effect that is on, alone. |
+| **A raw copy of every socket** (on to begin with) | `Vocal (raw for soundcheck).wav` and so on | Each socket in use, plain, before any effect. This is what a virtual soundcheck plays back. A channel already recorded raw needs no second file. |
 
 Break music is never in any of them.
 
@@ -95,12 +96,57 @@ The **RECORDING** part (inside the mixer's part) says whether it is recording, h
 whether any samples were lost, the files Record would write now, the room left on the drive,
 and each channel's record point and its place in the recording mix.
 
+## Virtual soundcheck
+
+Built 28 Nov 2026. A virtual soundcheck plays a recording's **raw** files back into the input
+sockets they were recorded from. The rig cannot tell the difference between that and Tom
+playing, so the effects, the looper and the mixer all work on it, and every change made is
+heard as it would be live.
+
+1. Open the **Recordings** tab (on the phone: **Record**, then **Recordings**).
+2. Click a recording. Its line says how many sockets it can play, or "no raw files".
+3. Click **Play as a soundcheck**. Click it again to stop.
+
+What to know:
+
+- Only raw files can be played, because anything recorded later in the chain already has
+  effects in it. That is what the **raw copy** tick box on the Recording tab is for.
+- While it plays, those sockets do **not** hear what is plugged into them. Every other socket
+  stays live, so Tom can play along on something that was not recorded.
+- **Round and round** (ticked to begin with) starts the recording again when it ends.
+- Loops can be recorded from it, songs can be changed, the mixer can be worked on, and Record
+  can be pressed, which mixes an old take again with today's settings.
+- The files are 48 kHz and are brought back up to the rig's rate as they play.
+- A drive too slow to keep up gives a moment of silence, counted in the report, never a wait.
+- With nothing playing it changes no sample (a check).
+
+## The Recordings tab
+
+Every recording on the rig's drive, newest first, with its length, size and whether it is kept,
+copied to USB and playable as a soundcheck.
+
+| Button | What it does |
+| --- | --- |
+| **Play as a soundcheck** | See above. |
+| **Keep** | A kept recording is never removed by the Clear buttons, and Delete refuses it. Tom's plan (20 Nov 2026) is one soundcheck recording per act kept for good. |
+| **Delete this recording** | Asks first. Gone for good. |
+| **Copy this one to the drive** / **Copy all that are not copied yet** | Copies into a folder called `GigRig recordings` on the USB drive chosen, then reads every file back and compares it. Only then is the recording marked "copied to USB". |
+| **Clear the copied ones** | Deletes every recording that is copied and checked, except kept ones. |
+| **Clear all but the kept ones** | Deletes every recording that is not kept, copied or not. |
+
+Copying is refused while recording or while a soundcheck plays, and it asks first, because a
+USB drive at work made the sound click on the laptop (20 Nov 2026). **Only copy when nobody is
+listening.** A recording that is being recorded or played cannot be deleted or cleared.
+
+Two small files in a recording's folder are the memory of this: `Keep.txt` and
+`Copied to USB.txt`. Deleting either by hand undoes it.
+
 ## Not built yet
 
-- Virtual soundcheck (playing a recording back into the mixer).
-- Copying recordings to a USB drive and clearing them from inside the app.
-- Listening to the recording mix on headphones before recording it.
-- The recorder holds 16 files at most (eight channels, four effects, two mixes).
+- Listening to the recording mix on headphones before recording it (Tom, 28 Nov 2026: not needed).
+- Pausing the sound outright during a USB copy (the earlier plan); this build refuses and warns instead.
+- Choosing where in a recording a soundcheck starts.
+- The recorder holds 24 files at most.
 
 ## For developers
 
@@ -109,10 +155,16 @@ and each channel's record point and its place in the recording mix.
 | `src/MixRecorder.*` | The files. `write` (audio thread) only queues; a background thread writes. |
 | `src/Mixer.*` | The tap points (`RecordPoint`), `MixRecordSetup`, the recording mix bus (`RecOut`, only worked on while `rec.wants (recSlotMix)`), `recordTracks`, `recordRoom`, `recordWithoutMixing` (mixer off), `recordingReportText`. |
 | `src/RecordingPanel.*` | The Recording tab. |
+| `src/Soundcheck.*` | Virtual soundcheck. A reader thread fills a queue; `feed` (audio thread, first thing in `AudioEngine::processBlock`) swaps the sockets' inputs for it. |
+| `src/RecordingLibrary.*` | The recordings on the drive: list, keep, delete, clear, copy to USB (its own thread). |
+| `src/RecordingsPanel.*` | The Recordings tab. On the phone: the Record screen's Recordings pages, orders `check.*` and `recs.*`. |
+| `src/RecordingsSelfTest.cpp` | Their checks ("soundcheck:", "recordings:"); `GIGRIG_SELFTEST_ONLY=recordings` runs them alone. |
 | `remote/screens.js` (`GR.screens.record`) | The Record screen. Orders `rec.start`, `rec.stop`, `rec.set`, and `mix.ch`, `mix.fx`, `mix.param` for the rest. |
 | `src/MixerSelfTest.cpp`, `src/RemoteSelfTest.cpp` | The checks ("recording:", "recording mix:", "recorder:"). |
 
 Saved words, never to be renamed: record points `none`, `raw`, `effects`, `looper`,
 `processed`; channel keys `record`, `reclevel`, `recpan`; effect key `reclevel`; the sections
-`[recording]` (`mainmix`, `mix`, `effects`, `level`) and `[recording processing]`. The file
-name words `raw`, `after effects`, `after looper` are in recordings Tom already has.
+`[recording]` (`mainmix`, `mix`, `effects`, `soundcheck`, `level`) and `[recording processing]`. The file
+name words `raw`, `after effects`, `after looper` are in recordings Tom already has. So are the
+`soundcheck: <file> = socket <n>` lines of `About this recording.txt`, and the marker files
+`Keep.txt` and `Copied to USB.txt`.
