@@ -16,7 +16,7 @@ Parts C to G apply to both: interface settings, the acceptance tests, updates,
 Claude on the machine, and troubleshooting.
 
 **Doing the mini PC in one sitting?** Tom's tick-as-you-go page for that day, the
-"Mini PC set-up day" page in the Claude project, has Parts B, C and D of this guide in the
+"Mini PC set-up day" page in the Claude project (https://claude.ai/artifact/QK1T9rBayzL7Q3ZL7Fsf78), has Parts B, C and D of this guide in the
 order they are done, with nothing else. This file is the reference behind it: when one
 changes, change the other.
 
