@@ -41,6 +41,7 @@ GR.makeDemoRig = (data) =>
         if (tu.monitors === undefined) tu.monitors = true;
         tuner.byHand = {};
         tunerChannels();
+        recFiles();     // the list of files a recording would write, worked out for the demo's own mixer
         rig.changed = true;
     };
 
