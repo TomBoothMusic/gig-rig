@@ -149,6 +149,13 @@ namespace
         return w;
     }
 
+    /** A WAV file's reader, or null if the file is not there (the plain call would crash on a missing file). */
+    juce::AudioFormatReader* openWav (juce::WavAudioFormat& wav, const juce::File& file)
+    {
+        auto stream = file.createInputStream();
+        return stream != nullptr ? wav.createReaderFor (stream.release(), true) : nullptr;
+    }
+
     juce::String db (double gain)   { return juce::String (20.0 * std::log10 (std::max (gain, 1.0e-12)), 1) + " dB"; }
 
     /** Every channel, effect and processing block off, every level at 0 dB: a straight wire waiting to be patched. */
@@ -834,7 +841,7 @@ void runMixerSelfTest (const Check& check)
         float worst = vocal.size() == 48000 ? 0.0f : 1000.0f;
         for (size_t i = 0; i < vocal.size() && worst < 1000.0f; ++i)
             worst = std::max (worst, std::abs (vocal[i] - tone (vocalHz, 0.1, startAt + (juce::int64) i, b.rate)));
-        check (error.isEmpty() && files.size() == 3 && channels == 1 && bits == 24 && std::abs (fileRate - 48000.0) < 0.5 && worst < 1.0e-6f && rec.lostSamples() == 0,
+        check (error.isEmpty() && files.size() == 4 && files.contains ("04 Recording mix.wav") && channels == 1 && bits == 24 && std::abs (fileRate - 48000.0) < 0.5 && worst < 1.0e-6f && rec.lostSamples() == 0,
                "recorder: at 48 kHz a channel's file is 24-bit and holds exactly what was played from the first sample to the last (" + files.joinIntoString (", ") + "; worst difference " + juce::String (worst, 8) + ")");
 
         const auto raw = read ("02 Acoustic (raw).wav", channels, fileRate, bits);
@@ -872,6 +879,213 @@ void runMixerSelfTest (const Check& check)
         check (error.isEmpty() && std::abs (fileRate - 48000.0) < 0.5 && std::abs ((int) data.size() - 48000) <= block && std::abs (level - 0.1) < 0.001 && rec.lostSamples() == 0
                && rec.statusText().contains ("48.0 kHz"),
                "recorder: with the app at 96 kHz the files are written at 48 kHz (one second is " + juce::String ((int) data.size()) + " samples, the note at " + db (level) + " as played)");
+    }
+
+    // ---- the Recording tab (28 Nov 2026): tap points, the recording mix, effects as files, and that recording changes no sample ----
+    {
+        struct Take { std::vector<float> left, right; int channels = 0; };
+        const auto readTake = [] (MixRecorder& rec, const juce::String& ending)
+        {
+            Take take;
+            juce::WavAudioFormat wav;
+
+            for (const auto& name : rec.fileNames())
+                if (name.endsWith (ending + ".wav"))
+                    if (auto reader = std::unique_ptr<juce::AudioFormatReader> (openWav (wav, rec.folder().getChildFile (name))))
+                    {
+                        take.channels = (int) reader->numChannels;
+                        juce::AudioBuffer<float> buffer (take.channels, (int) reader->lengthInSamples);
+                        reader->read (&buffer, 0, buffer.getNumSamples(), 0, true, true);
+                        take.left.assign (buffer.getReadPointer (0), buffer.getReadPointer (0) + buffer.getNumSamples());
+                        const int r = take.channels > 1 ? 1 : 0;
+                        take.right.assign (buffer.getReadPointer (r), buffer.getReadPointer (r) + buffer.getNumSamples());
+                    }
+
+            return take;
+        };
+
+        const auto recordSetup = []
+        {
+            auto s = bareSetup();
+            for (auto& slot : s.rec.chain.slots) slot.on = false;
+            s.channel[0].on = true;                                 // vocal: 6 dB down and hard left in the recording mix
+            s.channel[0].record = RecordPoint::afterLooper;
+            s.channel[0].recDb = -6.0f;
+            s.channel[0].recPan = -1.0f;
+            s.channel[1].on = true;                                 // acoustic: hard right
+            s.channel[1].record = RecordPoint::raw;
+            s.channel[1].recPan = 1.0f;
+            s.channel[3].on = true;                                 // electric: not in the recording mix at all
+            s.channel[3].record = RecordPoint::afterEffects;
+            s.channel[3].recDb = mixOffDb;
+            s.channel[5].on = true;                                 // a second channel on the vocal's socket, with a low cut, heard nowhere
+            s.channel[5].socket = vocalSocket;
+            s.channel[5].faderDb = mixOffDb;
+            s.channel[5].record = RecordPoint::afterProcessing;
+            s.channel[5].strip.slots[stripEq].on = true;
+            s.channel[5].strip.slots[stripEq].setParam ("lowcut", 400.0f);
+            return s;
+        };
+
+        // Two rigs fed the same sound, one recording and one not: every return must match to the sample.
+        Bench quiet (48000.0), b (48000.0);
+        for (auto* bench : { &quiet, &b })
+        {
+            bench->engine.mixer().setAll (recordSetup());
+            bench->engine.mixer().setOn (true);
+            bench->source = band (bench->rate);
+            bench->run (0.2);
+        }
+
+        auto& mixer = b.engine.mixer();
+        const auto planned = mixer.recordTracks();
+        const auto room = mixer.recordRoom (temp);
+        const auto error = mixer.startRecording (temp.getChildFile ("recordings tab"));
+        quiet.run (0.5);
+        b.run (0.5);
+
+        // Half way through, the electric's channel is switched off: its file must go on (as silence), not fall short.
+        for (auto* bench : { &quiet, &b })
+        {
+            auto ch = bench->engine.mixer().setup().channel[3];
+            ch.on = false;
+            bench->engine.mixer().setChannel (3, ch);
+            bench->run (0.5);
+        }
+
+        mixer.stopRecording();
+        auto& rec = mixer.recorder();
+
+        bool same = true;
+        float loudest = 0.0f;
+        for (int r = 0; r < numReturns; ++r)
+        {
+            same = same && quiet.heard[(size_t) r] == b.heard[(size_t) r];
+            loudest = std::max (loudest, peak (b.heard[(size_t) r]));
+        }
+        check (error.isEmpty() && same && loudest > 0.05f && rec.lostSamples() == 0,
+               "recording: a rig that is recording sends every return exactly what a rig that is not recording sends (the recorder only copies)");
+
+        const auto vocal = readTake (rec, "Vocal (after looper)"), processed = readTake (rec, "(after channel processing)"), electric = readTake (rec, "Electric (after effects)");
+        const auto mainMix = readTake (rec, "Main mix"), recMix = readTake (rec, "Recording mix");
+        const double plain = strength (vocal.left, vocalHz, 48000.0), cut = strength (processed.left, vocalHz, 48000.0);
+        check (planned.size() == 6 && rec.fileNames().size() == 6 && std::abs (plain - 0.1) < 0.001 && cut < 0.09 && cut > 0.02,
+               "recording: 'after the looper' holds a channel before its own EQ (" + db (plain) + ") and 'after channel processing' holds it after (" + db (cut) + " with a low cut on)");
+
+        const auto half = [] (const std::vector<float>& x, bool second) { const auto mid = x.begin() + (std::ptrdiff_t) (x.size() / 2); return second ? std::vector<float> (mid + 4800, x.end()) : std::vector<float> (x.begin(), mid - 4800); };
+        check (vocal.left.size() == 48000 && electric.left.size() == vocal.left.size() && mainMix.left.size() == vocal.left.size() && recMix.left.size() == vocal.left.size()
+               && std::abs (strength (half (electric.left, false), electricHz, 48000.0) - 0.1) < 0.001 && peak (half (electric.left, true)) < 1.0e-4f,
+               "recording: every file of a recording is the same length, and a channel switched off half way goes on as silence (" + juce::String ((int) electric.left.size()) + " samples)");
+
+        const double vocalL = strength ({ recMix.left.begin() + 4800, recMix.left.end() }, vocalHz, 48000.0), vocalR = strength (recMix.right, vocalHz, 48000.0);
+        const double acousticL = strength (recMix.left, acousticHz, 48000.0), acousticR = strength ({ recMix.right.begin() + 4800, recMix.right.end() }, acousticHz, 48000.0);     // its first 10 ms fade in
+        const double electricIn = strength (half (recMix.left, false), electricHz, 48000.0) + strength (half (recMix.right, false), electricHz, 48000.0);
+        const double mainVocal = strength (mainMix.left, vocalHz, 48000.0), mainElectric = strength (half (mainMix.left, false), electricHz, 48000.0);
+        check (recMix.channels == 2 && std::abs (20.0 * std::log10 (vocalL / 0.1) + 6.0) < 0.05 && vocalR < 3.0e-4 && acousticL < 3.0e-4 && std::abs (acousticR - 0.1) < 0.001 && electricIn < 3.0e-4
+               && std::abs (mainVocal - 0.1) < 0.001 && std::abs (mainElectric - 0.1) < 0.001,
+               "recording mix: its own balance (vocal " + db (vocalL) + " hard left, acoustic " + db (acousticR) + " hard right, electric left out) while the main mix keeps the live one (vocal " + db (mainVocal) + ", electric " + db (mainElectric) + ")");
+
+        check (room.gbPerHour > 4.1 && room.gbPerHour < 4.2 && room.freeGb > 0.0,
+               "recording: the room left on the drive is worked out from the files chosen (four single and two stereo files at 48 kHz take " + juce::String (room.gbPerHour, 2) + " GB an hour)");
+
+        // The recording mix's own EQ and level reach its file and nothing else.
+        auto s = mixer.setup();
+        auto recSet = s.rec;
+        recSet.levelDb = -6.0f;
+        recSet.mainMix = false;
+        mixer.setRecord (recSet);
+        const auto second = mixer.startRecording (temp.getChildFile ("recordings tab 2"));
+        b.run (0.5);
+        mixer.stopRecording();
+        const auto quieter = readTake (rec, "Recording mix");
+        const double q = strength ({ quieter.left.begin() + 4800, quieter.left.end() }, vocalHz, 48000.0);
+        check (second.isEmpty() && ! rec.fileNames().joinIntoString (",").contains ("Main mix") && std::abs (20.0 * std::log10 (q / vocalL) + 6.0) < 0.05,
+               "recording mix: its level moves its own file (" + db (q) + ", was " + db (vocalL) + "), and the main mix file is left out when it is unticked");
+
+        // An act carries the recording mix; an act saved before it existed leaves it alone.
+        mixer.setPresetRoot (temp.getChildFile ("recording acts"));
+        const bool saved = mixer.saveAct ("With recording").isEmpty();
+        const auto oldAct = mixer.actText().upToFirstOccurrenceOf ("[recording]", false, false).replace ("reclevel=", "#reclevel=").replace ("recpan=", "#recpan=");
+        Mixer::presetFolder (Mixer::Preset::act, temp.getChildFile ("recording acts")).getChildFile ("Old act.txt").replaceWithText (oldAct);
+        auto changed = mixer.setup().channel[0];
+        changed.recDb = 3.0f;
+        changed.recPan = 0.5f;
+        mixer.setChannel (0, changed);
+        recSet.levelDb = 2.0f;
+        recSet.fxTracks = true;
+        mixer.setRecord (recSet);
+        const bool oldLoaded = mixer.loadAct ("Old act").isEmpty();
+        const bool keptByOld = std::abs (mixer.setup().channel[0].recDb - 3.0f) < 0.01f && std::abs (mixer.setup().rec.levelDb - 2.0f) < 0.01f && mixer.setup().rec.fxTracks;
+        const bool loaded = mixer.loadAct ("With recording").isEmpty();
+        check (saved && oldLoaded && keptByOld && loaded && std::abs (mixer.setup().channel[0].recDb + 6.0f) < 0.01f && std::abs (mixer.setup().channel[0].recPan + 1.0f) < 0.01f
+               && std::abs (mixer.setup().rec.levelDb + 6.0f) < 0.01f && ! mixer.setup().rec.fxTracks && mixer.setup().channel[5].record == RecordPoint::afterProcessing,
+               "recording: an act carries each channel's record point and its place in the recording mix, and an act saved before the Recording tab leaves them as they are");
+    }
+    {
+        // The mixer's reverbs and delays as files of their own: the wet sound alone.
+        Bench b (48000.0);
+        auto s = bareSetup();
+        s.channel[0].on = true;
+        s.channel[0].fxDb[0] = 0.0f;
+        s.fx[0].on = true;
+        s.rec.fxTracks = true;
+        b.engine.mixer().setAll (s);
+        b.engine.mixer().setOn (true);
+        b.source = band (b.rate);
+        b.run (0.5);
+        const auto error = b.engine.mixer().startRecording (temp.getChildFile ("recordings fx"));
+        b.run (1.0);
+        b.engine.mixer().stopRecording();
+        auto& rec = b.engine.mixer().recorder();
+        const auto files = rec.fileNames();
+        juce::WavAudioFormat wav;
+        std::vector<float> wet;
+        if (auto reader = std::unique_ptr<juce::AudioFormatReader> (openWav (wav, rec.folder().getChildFile ("02 Effect 1 Vocal plate.wav"))))
+        {
+            juce::AudioBuffer<float> buffer (1, (int) reader->lengthInSamples);
+            reader->read (&buffer, 0, buffer.getNumSamples(), 0, true, true);
+            wet.assign (buffer.getReadPointer (0), buffer.getReadPointer (0) + buffer.getNumSamples());
+        }
+        check (error.isEmpty() && files.size() == 4 && wet.size() == 48000 && peak (wet) > 0.005f && peak (wet) < 0.5f && rec.folder().getChildFile ("About this recording.txt").existsAsFile(),
+               "recording: a mixer reverb can be written as a file of its own (" + files.joinIntoString (", ") + "; the plate alone peaks at " + db (peak (wet)) + "), and the folder gets a note saying what each file is");
+    }
+    {
+        // Mixer off: the sockets can still be recorded, and nothing the returns carry changes.
+        Bench quiet (48000.0), b (48000.0);
+        for (auto* bench : { &quiet, &b })
+        {
+            bench->source = band (bench->rate);
+            bench->engine.setPlayThrough (PlayThrough::straight);
+            bench->run (0.2);
+        }
+
+        const auto startAt = b.t;
+        const auto error = b.engine.mixer().startRecording (temp.getChildFile ("recordings mixer off"));
+        quiet.run (1.0);
+        b.run (1.0);
+        b.engine.mixer().stopRecording();
+        auto& rec = b.engine.mixer().recorder();
+
+        bool same = true;
+        for (int r = 0; r < numReturns; ++r)
+            same = same && quiet.heard[(size_t) r] == b.heard[(size_t) r];
+
+        juce::WavAudioFormat wav;
+        std::vector<float> vocal;
+        const auto files = rec.fileNames();
+        if (auto reader = std::unique_ptr<juce::AudioFormatReader> (openWav (wav, rec.folder().getChildFile ("01 Vocal (after effects).wav"))))
+        {
+            juce::AudioBuffer<float> buffer (1, (int) reader->lengthInSamples);
+            reader->read (&buffer, 0, buffer.getNumSamples(), 0, true, true);
+            vocal.assign (buffer.getReadPointer (0), buffer.getReadPointer (0) + buffer.getNumSamples());
+        }
+
+        float worst = vocal.size() == 48000 ? 0.0f : 1000.0f;
+        for (size_t i = 0; i < vocal.size() && worst < 1000.0f; ++i)
+            worst = std::max (worst, std::abs (vocal[i] - tone (vocalHz, 0.1, startAt + (juce::int64) i, b.rate)));
+
+        check (error.isEmpty() && ! b.engine.mixer().isOn() && same && worst < 1.0e-6f && ! files.joinIntoString (",").contains ("mix.wav") && files.size() == 5,
+               "recording with the mixer off: each channel's socket is still recorded from the first sample (" + files.joinIntoString (", ") + "), there are no mixes, and every return carries exactly what it did");
     }
 
     // ---- the feedback guard ----

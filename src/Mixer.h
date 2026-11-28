@@ -58,8 +58,14 @@ constexpr int outEq = 0, outNotches = 1, outComp = 2, outBus = 3, outTape = 4, o
 /** Where a monitor takes its sends from in each channel. */
 enum class TapPoint { beforeProcessing, afterEq, afterCompressors };
 
-/** What a channel records when Record is pressed. */
-enum class RecordPoint { none, raw, afterEffects, afterLooper };
+/** What a channel records when Record is pressed (the Recording tab, docs/recording.md).
+    afterLooper is the channel's live sound before its own gate, EQ and compressors, with its loops;
+    afterProcessing is the same point after them (the sound its fader gets). */
+enum class RecordPoint { none, raw, afterEffects, afterLooper, afterProcessing };
+constexpr int numRecordPoints = 5;
+
+/** The recorder's slots: one for each channel, then the main mix, the recording mix and the mixer's effects. */
+constexpr int recSlotMain = numMixChannels, recSlotMix = numMixChannels + 1, recSlotFx = numMixChannels + 2;
 
 struct MixChannelSetup
 {
@@ -76,6 +82,9 @@ struct MixChannelSetup
     int directReturn = -1;              // sound-crew direct out: this channel alone (live and looped, before its EQ) on a return; -1 = none
     bool link = false;                  // stereo: the next channel is this one's right side and follows every setting (this one pans left, that one right)
     fx::ChainModel strip;               // gate, enhancer, warmth, mixeq | mixcomp, the 1176-style compressor (comp), the LA-2A style one (la2a)
+    // The recording mix (Tom, 28 Nov 2026): a second balance of the same channels, only ever written to a file.
+    float recDb = 0.0f;                 // this much louder or quieter than in the main mix (it follows the fader and the mute); mixOffDb = not in it
+    float recPan = 0.0f;                // its own pan, -1 left .. 1 right
 };
 
 struct MixFxSetup
@@ -87,6 +96,7 @@ struct MixFxSetup
     float returnDb = 0.0f;              // into the main mix
     std::array<float, numMixMonitors> monDb { mixOffDb, mixOffDb };
     fx::ChainModel eq;                  // one mixeq, on what goes INTO the effect (Tom, 27 Nov 2026)
+    float recDb = 0.0f;                 // in the recording mix: this much louder or quieter than its return into the main mix
 };
 
 struct MixOutputSetup
@@ -102,8 +112,22 @@ struct MixOutputSetup
     fx::ChainModel chain;               // mixeq, notches, mixcomp, buscomp, tape, limiter, linedelay
 };
 
+/** What the Recording tab sets apart from each channel's own record point: which mixes are
+    written, and the recording mix's own level, EQ and limiter. */
+struct MixRecordSetup
+{
+    bool mainMix = true;                // "Main mix": a stereo file of the main output, as the PA gets it
+    bool mix = true;                    // "Recording mix": a stereo file of the recording mix
+    bool fxTracks = false;              // each of the mixer's reverbs and delays (its wet sound alone) as a file of its own
+    float levelDb = 0.0f;               // the recording mix's level
+    fx::ChainModel chain;               // mixeq, buscomp, limiter
+};
+
+constexpr int recEq = 0, recBus = 1, recLimiter = 2, numRecBlocks = 3;
+
 struct MixerSetup
 {
+    MixRecordSetup rec;
     std::array<MixChannelSetup, numMixChannels> channel;
     std::array<MixFxSetup, numMixFx> fx;
     std::array<MixOutputSetup, numMixOutputs> output;
@@ -114,6 +138,9 @@ struct MixerSetup
 MixerSetup defaultMixerSetup();
 fx::ChainModel defaultStripModel();
 fx::ChainModel defaultOutputModel();
+fx::ChainModel defaultRecordModel();
+/** "after the looper" and so on: a record point as a file name and the screens show it. */
+juce::String recordPointName (RecordPoint);
 /** The effects a mixer effect slot may hold (ids from the effects list). */
 const std::vector<std::string>& mixerFxChoices();
 juce::String mixOutputName (int output);
@@ -136,6 +163,8 @@ public:
     void setFx (int f, const MixFxSetup&);
     void setOutput (int o, const MixOutputSetup&);
     void setAll (const MixerSetup&);
+    /** The Recording tab's own settings. They are saved with the act. */
+    void setRecord (const MixRecordSetup&);
 
     // ---- a song's own sends ----
     // A song may set how much of a channel goes to a reverb or a delay (its file's "send" lines).
@@ -215,6 +244,19 @@ public:
     /** Starts a new folder of WAV files. Returns an error, or an empty string. */
     juce::String startRecording (const juce::File& parentFolder);
     void stopRecording();
+    /** The files a recording started now would hold, in order (what the Recording tab lists). */
+    struct RecordTrack { int slot = 0; juce::String name; int channels = 1; };
+    std::vector<RecordTrack> recordTracks() const;
+    /** Room left on the recordings drive, and how long that lasts with the tracks chosen now. Message thread. */
+    struct RecordRoom { double freeGb = 0.0, gbPerHour = 0.0, hours = 0.0; };
+    RecordRoom recordRoom (const juce::File& parentFolder) const;
+    /** A recording stops by itself when the drive has less than this left. */
+    static constexpr double recordStopGb = 1.0;
+    /** Why the last recording stopped by itself, or empty. */
+    juce::String recordNote() const                     { return recNote; }
+    float takeRecordPeak (int side) noexcept            { return recOut.peak[(size_t) side].exchange (0.0f); }
+    /** The Recording tab's part of the report. */
+    juce::String recordingReportText() const;
     MixRecorder& recorder() noexcept                    { return rec; }
 
     // ---- meters and figures ----
@@ -271,6 +313,12 @@ public:
     const float* const* stripChannels (const float* const* feed, int numIns, int numSamples) noexcept;
 
     void process (const float* const* raw, const float* const* feed, int numIns, int numSamples) noexcept;
+
+    /** Call in a block the mixer is not mixing (it is off): a recording carries on with what it
+        can still hear, each channel's socket plain or after its effects, and silence in the mixes,
+        so every file stays the same length. Not recording, it reads one flag and returns. It
+        changes no sample anywhere. */
+    void recordWithoutMixing (const float* const* raw, const float* const* feed, int numIns, int numSamples) noexcept;
 
     /** Adds the mixer's outputs to the returns. outputFor(r) gives return r's buffer or null. */
     template <typename OutputFor>
@@ -350,9 +398,10 @@ private:
         std::array<std::atomic<float>, numMixMonitors> mon {};
         std::array<std::atomic<float>, numMixFx> fx {};
         std::atomic<float> peak { 0.0f };
+        std::atomic<float> recGain { 1.0f }, recPan { 0.0f };
 
         // audio thread
-        Glide trimG, mainL, mainR, directG;
+        Glide trimG, mainL, mainR, directG, recL, recR;
         std::array<Glide, numMixMonitors> monL, monR;
         std::array<Glide, numMixFx> fxG;
         bool wasOn = false;
@@ -369,7 +418,9 @@ private:
         std::array<std::atomic<float>, numMixMonitors> mon {};
         std::atomic<float> peak { 0.0f };
 
-        Glide retG;
+        std::atomic<float> recGain { 1.0f };
+
+        Glide retG, recG;
         std::array<Glide, numMixMonitors> monG;
         std::vector<float> in, wet;
         bool live = false;
@@ -389,6 +440,17 @@ private:
         std::array<std::vector<float>, 2> bus, buf, other;
     };
 
+    /** The recording mix: a stereo bus that is only worked on while it is being recorded. */
+    struct RecOut
+    {
+        std::array<fx::Chain, 2> chain;
+        std::atomic<float> level { 1.0f };
+        std::array<std::atomic<float>, 2> peak {};
+        Glide levelG;
+        std::array<std::vector<float>, 2> bus;
+    };
+
+    void pushRecord (bool first = false);
     void pushChannel (int c, bool first = false);
     void pushFx (int f, bool first = false);
     void pushOutput (int o, bool first = false);
@@ -449,6 +511,12 @@ private:
     float tuneGain = 1.0f;              // 1 = heard, 0 = silent for the tuner
 
     MixRecorder rec;
+    RecOut recOut;
+    std::vector<float> recScratch;
+    bool recMixWas = false;
+    juce::String recNote;
+    juce::File recParent;
+    int recTicks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mixer)
 };

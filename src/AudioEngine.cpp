@@ -947,6 +947,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         }
         else
         {
+            mixCore.recordWithoutMixing (inputs, afterEffects, numIns, numSamples);     // not recording, this reads one flag and returns
             fxRack.addOutputs (output, numSamples);
 
             // Nothing plays a bare socket while the mixer is off, so the kick goes to its returns as before.

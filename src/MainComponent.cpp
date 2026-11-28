@@ -128,6 +128,7 @@ MainComponent::MainComponent()
         effectsPanel.refresh();
         songsPanel.refresh();
         mixerPanel.refresh();
+        recordingPanel.refresh();
     };
 
     // The expression pedal: each move goes where the on-screen Pedal sliders already go (the blend, or the wah or whammy under the toe switch).
@@ -144,6 +145,9 @@ MainComponent::MainComponent()
     tabs.addTab ("Break music", style::background, &breakPanel, false);
     engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + breakPanel.reportText(); };
     songBook.onLoaded = [this] { engine.breakMusic().startedPlaying (BreakMusic::Started::song); };
+
+    // Recording: its tab goes last, so the tab numbers before it stay as they were. Its part of the report is inside the mixer's.
+    tabs.addTab ("Recording", style::background, &recordingPanel, false);
 
     // The tuner: in the header, so it is there whichever tab is showing.
     if (Tuner::memoryOnDisk.load() && Tuner::stateFile().existsAsFile())

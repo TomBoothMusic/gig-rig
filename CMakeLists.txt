@@ -132,6 +132,7 @@ target_sources(GigRig PRIVATE
     src/MixerPanel.cpp
     src/MixerSelfTest.cpp
     src/MixRecorder.cpp
+    src/RecordingPanel.cpp
     src/Pedal.cpp
     src/RemoteApi.cpp
     src/RemotePanel.cpp
