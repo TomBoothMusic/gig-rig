@@ -114,7 +114,7 @@ run `linux/rollback.sh`.
 Allow about two and a half hours for parts A to F. Each part stands alone, so stop anywhere.
 **After each part click Copy report and paste it into the chat with a line or two on what you
 heard.** Guides: [docs/break-music.md](docs/break-music.md), [docs/tuner.md](docs/tuner.md),
-[docs/remote.md](docs/remote.md), [docs/mixer.md](docs/mixer.md), [docs/linux-setup.md](docs/linux-setup.md).
+[docs/remote.md](docs/remote.md), [docs/mixer.md](docs/mixer.md), [docs/recording.md](docs/recording.md), [docs/linux-setup.md](docs/linux-setup.md).
 
 ### Part A: nothing old has changed (10 minutes)
 

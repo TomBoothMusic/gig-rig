@@ -116,7 +116,7 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
         addAndMakeVisible (b);
     }
 
-    recordButton.setTooltip ("Records every channel at its own record point, and the main mix, as WAV files in a new folder");
+    recordButton.setTooltip ("The same Record button as on the Recording tab, where what is recorded is chosen");
     recordButton.onClick = [this]
     {
         if (mixer.recorder().isRecording())
@@ -124,8 +124,6 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
             mixer.stopRecording();
             note = "Recording stopped: " + juce::String (mixer.recorder().fileNames().size()) + " files in " + mixer.recorder().folder().getFullPathName();
         }
-        else if (! mixer.isOn())
-            note = "Switch the mixer on first: the recorder takes its sound from the mixer's channels.";
         else if (const auto error = mixer.startRecording (Mixer::recordingFolder()); error.isNotEmpty())
             note = error;
         else
@@ -653,8 +651,8 @@ void MixerPanel::rebuildDetail()
         auto* pan = addSlider (0, 100, "Pan", -1.0, 1.0, 0.01, {}, c.pan, 0.0, [change] (float v) { change ([v] (MixChannelSetup& n) { n.pan = v; }); });
         pan->textFromValueFunction = [] (double v) { return std::abs (v) < 0.005 ? juce::String ("centre") : juce::String (juce::roundToInt (std::abs (v) * 100.0)) + (v < 0.0 ? "% left" : "% right"); };
         pan->updateText();
-        addCombo (0, 150, "When recording, record", { { 1, "Nothing" }, { 2, "The plain socket" }, { 3, "After its effects" }, { 4, "After the looper" } }, (int) c.record + 1,
-                  [change] (int id) { change ([id] (MixChannelSetup& n) { n.record = (RecordPoint) juce::jlimit (0, 3, id - 1); }); });
+        addCombo (0, 150, "When recording, record", { { 1, "Nothing" }, { 2, "The plain socket" }, { 3, "After its effects" }, { 4, "After the looper" }, { 5, "After the looper, with EQ and compressors" } }, (int) c.record + 1,
+                  [change] (int id) { change ([id] (MixChannelSetup& n) { n.record = (RecordPoint) juce::jlimit (0, numRecordPoints - 1, id - 1); }); });
         addCombo (0, 150, "Direct out for a sound crew", returns, c.directReturn >= 0 ? c.directReturn + 1 : noneId,
                   [change] (int id) { change ([id] (MixChannelSetup& n) { n.directReturn = id == noneId ? -1 : id - 1; }); });
 

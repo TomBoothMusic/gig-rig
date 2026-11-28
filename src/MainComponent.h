@@ -12,6 +12,7 @@
 #include "LooperPanel.h"
 #include "MixerPanel.h"
 #include "PedalPanel.h"
+#include "RecordingPanel.h"
 #include "RemotePanel.h"
 #include "SongBook.h"
 #include "SongsPanel.h"
@@ -58,6 +59,7 @@ private:
     RemoteServer remoteServer { remoteApi };                // off until the Remote screen tab switches it on
     RemotePanel remotePanel { remoteServer };
     BreakMusicPanel breakPanel { engine };
+    RecordingPanel recordingPanel { engine };       // after the mixer panel, which reads the mixer's memory
     TunerStrip tunerStrip { engine };                       // the tuner, in the header beside Copy report
     StrobeTuner strobeTuner { engine };                     // the tuner filling the whole window while it is on
     juce::TooltipWindow tooltips { this };

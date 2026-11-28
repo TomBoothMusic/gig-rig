@@ -219,6 +219,37 @@ void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& c
         cmd ("{\"op\":\"mix.on\",\"on\":false}");
         check (nowOn && ! mixer.isOn(), "remote: the page switches the mixer on and off, and the meters come only while it is on");
 
+        // ---- the Record screen (28 Nov 2026) ----
+        {
+            Mixer::recordingFolderOverride = root.getChildFile ("Recordings");
+            cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"rec\",\"value\":\"processed\"}");
+            cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"recLevel\",\"value\":-4}");
+            cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"recPan\",\"value\":-0.5}");
+            cmd ("{\"op\":\"mix.fx\",\"f\":0,\"key\":\"recLevel\",\"value\":-3}");
+            cmd ("{\"op\":\"rec.set\",\"key\":\"level\",\"value\":-2}");
+            cmd ("{\"op\":\"rec.set\",\"key\":\"main\",\"value\":false}");
+            const auto eqSet = cmd ("{\"op\":\"mix.param\",\"where\":\"rec\",\"i\":0,\"slot\":0,\"id\":\"lowcut\",\"value\":80}");
+            const auto& set = mixer.setup();
+            const auto recState = api.state()["mixer"]["rec"];
+            check (set.channel[0].record == RecordPoint::afterProcessing && std::abs (set.channel[0].recDb + 4.0f) < 0.01f && std::abs (set.channel[0].recPan + 0.5f) < 0.01f
+                     && std::abs (set.fx[0].recDb + 3.0f) < 0.01f && std::abs (set.rec.levelDb + 2.0f) < 0.01f && ! set.rec.mainMix && fine (eqSet)
+                     && std::abs (set.rec.chain.slots[recEq].param ("lowcut", 0.0f) - 80.0f) < 0.01f && recState["points"].size() == numRecordPoints && recState["files"].size() > 0
+                     && ! fine (cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"rec\",\"value\":\"everything\"}")) && ! fine (cmd ("{\"op\":\"rec.set\",\"key\":\"volume\",\"value\":1}")),
+                   "remote: a channel's record point, its level and pan in the recording mix, the mixes to write and the recording mix's EQ are set from the page, and a wrong word is refused");
+
+            const bool refused = ! fine (cmd ("{\"op\":\"rec.stop\"}"));
+            const auto started = cmd ("{\"op\":\"rec.start\"}");
+            const bool running = (bool) api.live()["rec"]["on"] && (int) api.live()["rec"]["files"] > 0 && ! fine (cmd ("{\"op\":\"rec.start\"}"));
+            const auto stopped = cmd ("{\"op\":\"rec.stop\"}");
+            const auto liveText = juce::JSON::toString (api.live()["rec"]);
+            check (refused && fine (started) && running && fine (stopped) && ! (bool) api.live()["rec"]["on"] && mixer.recorder().folder().isAChildOf (root)
+                     && ! liveText.contains (root.getFullPathName()) && ! juce::JSON::toString (api.state()).contains (root.getFullPathName()),
+                   "remote: the page starts and stops a recording, a second start or a stop with nothing running is refused, and no path from the disk is sent to the page");
+            cmd ("{\"op\":\"mix.ch\",\"c\":0,\"key\":\"rec\",\"value\":\"looper\"}");
+            cmd ("{\"op\":\"rec.set\",\"key\":\"main\",\"value\":true}");
+            Mixer::recordingFolderOverride = juce::File();
+        }
+
         check (! fine (cmd ("{\"op\":\"fx.param\",\"chain\":50,\"slot\":0,\"id\":\"drive\",\"value\":3}")) && ! fine (cmd ("{\"op\":\"self.destruct\"}")) && ! fine (cmd ("[1,2,3]"))
                  && cmd ("{\"op\":\"self.destruct\"}")["error"].toString().contains ("self.destruct"),
                "remote: a chain that is not there, an order this build does not know, and nonsense are all refused with a reason");

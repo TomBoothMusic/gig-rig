@@ -40,7 +40,7 @@ recording loops in time at a gig.
 On a phone or tablet the **right-hand edge of every screen is a strip to scroll by** (it is
 the colour of the background). No slider or fader reaches into it, so a thumb there always scrolls and never moves a level.
 
-The seven buttons along the bottom (down the left side when a phone is on its side):
+The eight buttons along the bottom (down the left side when a phone is on its side):
 
 | Screen | What it does |
 | --- | --- |
@@ -49,6 +49,7 @@ The seven buttons along the bottom (down the left side when a phone is on its si
 | **Build** | The looper arrangement builder. See the next part. |
 | **Effects** | A pedalboard for each of the four chains. Every effect is a small drawing of a pedal, a rack unit or an amp, joined by a line that runs from IN to OUT in the order the sound meets them, snaking back along the next row. A lit lamp means the effect is on. Tap a drawing and the screen becomes that effect's own page: its on switch, its settings, **Move earlier**, **Move later** and **Remove** (its settings travel with it), and two arrows to step to the effect before or after it. **‹ Pedalboard** goes back. **Add an effect** lists every effect the rig has, by kind, puts the one you tap on the end of the chain and opens its page. **Presets** opens a sheet to load a preset onto the chain, **Save as a preset**, and **Update its presets** (saves the chain's changes back into the preset or presets it was made from, exactly as the same button on the Effects tab does). |
 | **Mixer** | Faders only, in three banks chosen by the tabs along the top: **Inputs**, **Effects** (the four reverbs and delays) and **Outputs**. Every fader is the same width in every bank and nothing scrolls sideways. An upright phone shows five faders to a bank, so there the inputs take two tabs (**In 1 to 5** and **In 6 to 8**) and the faders run most of the height of the screen. Each strip is tinted with its sound's colour: red for the vocal, yellow for the acoustic, blue for the electric, orange for the bass (a channel takes the colour of the effects chain on its input socket), and the same colours mark the chains on the Effects screen. On Inputs the row of buttons above the faders chooses what they send to: the main mix, a monitor, or one of the four effects. Drag a fader from anywhere on it (it never jumps to your finger). Tap a fader to pick it, then the four buttons under the faders move it by 1 dB or 0.1 dB (on a keyboard, the up and down arrows; hold Shift for 0.1). They stand in for the board's Adjust knob. **Open** on a fader leaves the faders for that channel's own page: its signal chain runs down the left as small pictures, top to bottom in the order the sound meets them (Input, each block of processing, Sends), and the one you tap fills the rest of the screen. A green dot on a picture means that block is on. The two arrows step to the next channel and stay on the same block. **‹ Faders** goes back. **Set-ups** loads an act, a venue or a monitor set-up, and saves each one: **Save over** the one that is loaded, or **Save as a new one** under a name you type. If the mixer is off the screen says so and offers to switch it on. |
+| **Record** | One big **Record** button with the time, a meter and how many hours fit on the drive. Under it, two big buttons that each open a page: **Channels** (tap a channel, then tap where it is recorded) and **Recording mix** (its balance, pans, EQ, bus compressor, limiter and level, laid out like a mixer channel's page). Then the mixes to write and the list of files Record will make. What is recorded is locked while it records; the recording mix is not. `docs/recording.md` explains every choice. |
 | **Tools** | **Tuner**: on and off, a small note and needle, what goes silent while tuning (the guitars, the whole main mix or nothing), which channels are guitars, which input it listens to and what A is (`docs/tuner.md`). While the tuner is on, the **full-screen strobe** lies over every screen (Done switches the tuner off, Options comes here). **Break music**: choose a mix, Play, From the start, Stop, Bring the music up, Fade it down, its level, the fade times and what counts as starting to play (`docs/break-music.md`). **The venue knob (ENC 5)**: Turn left, Turn right, Push and Hold, with the line the board's screen would show. |
 | **Rig** | Whether audio is running, the warnings, and **Copy report**: the same text as the Copy report button in the app. |
 
@@ -206,7 +207,7 @@ orders as before, and nothing about the sound.
 ## Not built yet
 
 - A password or a "look but do not touch" mode.
-- The recordings and virtual soundcheck screens of the mock-up.
+- Virtual soundcheck, and copying or clearing recordings (the Record screen itself was built on 28 Nov 2026).
 - The page as the rig's own built-in touchscreen (it is the same page in a browser on the rig).
 - Tap tempo (a tap over Wi-Fi arrives late by a different amount each time, so it belongs on a foot switch).
 - Choosing which effect goes where in one go (drag and drop); for now an effect moves one place at a time.
@@ -266,13 +267,15 @@ The orders (`RemoteApi::command`; the demo answers the same ones in `remote/demo
 | `fx.save` | `chain`, `name`: the whole chain as one preset |
 | `fx.update` | `chain`: the chain's changes back into the presets it was made from |
 | `mix.on` | `on` |
-| `mix.ch` | `c`, `key` (`fader`, `mute`, `pan`, `trim`, `on`, `mon0`, `mon1`, `fx0` to `fx3`), `value` |
+| `mix.ch` | `c`, `key` (`fader`, `mute`, `pan`, `trim`, `on`, `mon0`, `mon1`, `fx0` to `fx3`, `recLevel`, `recPan`, and `rec` whose value is `none`, `raw`, `effects`, `looper` or `processed`), `value` |
 | `mix.out` | `o`, `key` (`level`, `mute`), `value` |
-| `mix.fx` | `f`, `key` (`ret`, `on`, `mon0`, `mon1`, `lowCut`, `highCut`), `value` |
-| `mix.param` | `where` (`ch`, `out`, `fx`, `fxeq`), `i`, `slot`, `id` (`on` switches the block), `value` |
+| `mix.fx` | `f`, `key` (`ret`, `on`, `mon0`, `mon1`, `lowCut`, `highCut`, `recLevel`), `value` |
+| `mix.param` | `where` (`ch`, `out`, `fx`, `fxeq`, `rec` for the recording mix's own chain), `i`, `slot`, `id` (`on` switches the block), `value` |
 | `mix.preset` | `kind` (`act`, `venue`, `monitors`), `name` |
 | `mix.save` | `kind` (`act`, `venue`, `monitors`), `name` |
 | `mix.keepFx` | `f` |
+| `rec.start`, `rec.stop` | Start a recording, and stop it. Refused when it is already so |
+| `rec.set` | `key` (`main`, `mix`, `fx`: which mixes are written; `level`: the recording mix's level in dB), `value` |
 | `break.play` | `name` (a mix from the state's `breakMusic.mixes`; left out = the last one), `fromStart` |
 | `break.stop`, `break.up`, `break.down` | |
 | `break.level` | `value` (dB) |

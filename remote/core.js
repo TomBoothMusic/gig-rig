@@ -468,6 +468,7 @@ const tabs = [
     { id: 'build',   label: 'Build' },
     { id: 'effects', label: 'Effects' },
     { id: 'mixer',   label: 'Mixer' },
+    { id: 'record',  label: 'Record' },
     { id: 'tools',   label: 'Tools' },
     { id: 'rig',     label: 'Rig' },
 ];

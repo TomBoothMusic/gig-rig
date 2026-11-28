@@ -23,7 +23,7 @@ namespace gigrig
 class MixRecorder
 {
 public:
-    static constexpr int maxTracks = 12;
+    static constexpr int maxTracks = 16;
 
     struct Track
     {

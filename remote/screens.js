@@ -932,6 +932,141 @@ GR.screens.tools = (root) =>
     };
 };
 
+// ---------------------------------------------------------------- Record: one big button, and a page for each thing to set
+
+const recClock = (sec) => Math.floor (sec / 3600) + ':' + String (Math.floor (sec / 60) % 60).padStart (2, '0') + ':' + String (Math.floor (sec % 60)).padStart (2, '0');
+const recLow = -30;      // the bottom of a recording mix level: not in the mix at all
+const recLevelParam = (label) => ({ id: 'recLevel', label, unit: 'dB', min: recLow, max: 12, def: 0, kind: 'knob' });
+const recPointOf = (m, id) => m.rec.points.find ((p) => p.id === id) || m.rec.points[0];
+const recOff = (v) => v <= recLow + 0.05 ? GR.state.mixer.offDb : v;
+
+/** The recording mix as a chain page: its balance, its pans, then its own EQ, compressor and limiter, then its level. */
+function recMixItems()
+{
+    const m = GR.state.mixer, r = m.rec;
+    const chans = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => x.ch.on && ! x.ch.linked);
+    const setCh = (c, key, value) => GR.sendValue ('rec' + c + key, { op: 'mix.ch', c, key, value });
+
+    return [
+        { ico: 'level', label: 'Balance', title: 'Louder or quieter than in the main mix', build: () => [
+            h ('p', { class: 'hint', text: 'At 0 dB a channel is as loud here as it is in the main mix, and it still follows its fader and mute. All the way down leaves it out of the recording mix.' }),
+            chans.map ((x) => tint (GR.param (recLevelParam (x.ch.name), Math.max (recLow, x.ch.recLevel), (v) => { x.ch.recLevel = recOff (v); setCh (x.c, 'recLevel', recOff (v)); }), channelColour (x.ch))),
+            m.fx.map ((e, f) => e.on ? GR.param (recLevelParam (e.name), Math.max (recLow, e.recLevel), (v) => { e.recLevel = recOff (v); GR.sendValue ('recfx' + f, { op: 'mix.fx', f, key: 'recLevel', value: recOff (v) }); }) : null) ] },
+        { ico: 'sends', label: 'Pan', title: 'Left to right, in the recording only', build: () => [
+            h ('p', { class: 'hint', text: 'Where each channel sits in the recording mix. The room still hears the main mix as it is.' }),
+            chans.map ((x) => x.ch.link ? h ('p', { class: 'hint', text: x.ch.name + ': a stereo pair, hard left and right.' })
+                : tint (GR.param ({ id: 'recPan', label: x.ch.name + ' (-1 left, 1 right)', unit: '', min: -1, max: 1, def: 0, kind: 'knob' }, x.ch.recPan, (v) => { x.ch.recPan = v; setCh (x.c, 'recPan', v); }), channelColour (x.ch))) ] },
+    ].concat (r.chain.map ((b, i) => blockItem ('rec.' + i, b, {
+        setOn: (on) => GR.send ({ op: 'mix.param', where: 'rec', i: 0, slot: i, id: 'on', value: on }, true),
+        setParam: (id, value) => GR.sendValue ('recp' + i + id, { op: 'mix.param', where: 'rec', i: 0, slot: i, id, value }),
+    })), [
+        { ico: 'level', label: 'Level', title: 'The whole recording mix', build: () => [
+            GR.level ('Level into the file', r.level, (v) => { r.level = v; GR.sendValue ('reclevel', { op: 'rec.set', key: 'level', value: v }); }),
+            h ('p', { class: 'hint', text: 'The recording mix is always stereo, and it is only ever written to a file: nothing here changes what the room or the in-ears hear.' }) ] },
+    ]);
+}
+
+GR.screens.record = (root) =>
+{
+    const m = GR.state.mixer, r = m.rec, live0 = (GR.live || {}).rec || {};
+    const page = GR.ui.recPage;
+    const go = (to) => { GR.ui.recPage = to; GR.render(); };
+    const listed = m.channels.map ((ch, c) => ({ ch, c })).filter ((x) => x.ch.on && ! x.ch.linked);
+
+    // ---- one channel: where it is recorded ----
+    if (page && page.kind === 'ch' && m.channels[page.i] && ! live0.on)
+    {
+        const ch = m.channels[page.i], at = listed.findIndex ((x) => x.c === page.i);
+        tint (root, channelColour (ch));
+        root.append (
+            pageHead (() => go ({ kind: 'channels' }), 'Channels', ch.name, 'Where this channel is recorded',
+                stepButtons (at, listed.length, (to) => go ({ kind: 'ch', i: listed[to].c }), 'channel')),
+            h ('div', { class: 'choices' }, r.points.map ((p) =>
+                h ('button', { class: 'choice' + (p.id === ch.rec ? ' on' : ''), 'aria-pressed': p.id === ch.rec ? 'true' : 'false',
+                               onclick: () => { ch.rec = p.id; GR.send ({ op: 'mix.ch', c: page.i, key: 'rec', value: p.id }, true).then (() => GR.render()); GR.render(); } },
+                    h ('b', { text: p.label }), h ('small', { text: p.more })))),
+            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so the two "after the looper" choices are recorded after the effects instead: there are no loops to add.' }) : null);
+        return;
+    }
+
+    // ---- the list of channels ----
+    if (page && page.kind === 'channels' && ! live0.on)
+    {
+        root.append (
+            pageHead (() => go (null), 'Record', 'Channels', 'Tap one to choose where it is recorded'),
+            h ('div', { class: 'choices' }, listed.map ((x) =>
+                tint (h ('button', { class: 'choice go', onclick: () => go ({ kind: 'ch', i: x.c }) },
+                    h ('b', { text: x.ch.name }), h ('small', { text: recPointOf (m, x.ch.rec).label })), channelColour (x.ch)))));
+        return;
+    }
+
+    // ---- the recording mix ----
+    if (page && page.kind === 'mix')
+    {
+        const items = recMixItems();
+        const picked = GR.clamp (GR.ui.recRail || 0, 0, items.length - 1);
+        root.append (
+            pageHead (() => go (null), 'Record', 'Recording mix', 'A second balance of the same channels, for the file only'),
+            chainPage (items, picked, (n) => { GR.ui.recRail = n; GR.render(); }));
+        return;
+    }
+
+    GR.ui.recPage = null;
+
+    // ---- the front page: the button, and what it will write ----
+    const clock = h ('div', { class: 'rec-clock', text: recClock (live0.sec || 0) });
+    const line = h ('p', { class: 'hint' });
+    const room = h ('p', { class: 'hint' });
+    const meters = [h ('i'), h ('i')];
+    const button = h ('button', { class: 'rec-button' + (live0.on ? ' on' : ''), 'aria-pressed': live0.on ? 'true' : 'false',
+        onclick: () => live0.on
+            ? GR.ask ('Stop recording? The files are saved as they are.', 'Stop recording', () => GR.send ({ op: 'rec.stop' }).then (() => GR.render()))
+            : GR.send ({ op: 'rec.start' }).then (() => GR.render()) },
+        h ('span', { class: 'rec-dot' }), h ('b', { text: live0.on ? 'Stop' : 'Record' }));
+    const set = (key, value) => { r[key] = value; GR.send ({ op: 'rec.set', key, value }, true).then (() => GR.render()); GR.render(); };
+    const tick = (label, key, more) => h ('label', { class: 'inline between rec-tick' }, h ('span', {}, h ('b', { text: label }), h ('small', { text: more })),
+        GR.toggle (!! r[key], (on) => set (key, on), label));
+
+    root.append (
+        h ('section', { class: 'card rec-card' + (live0.on ? ' now' : '') },
+            h ('div', { class: 'rec-top' }, button, h ('div', { class: 'rec-read' }, clock, h ('div', { class: 'rec-meters', 'aria-hidden': 'true' }, meters.map ((i) => h ('div', { class: 'meter flat' }, i))), line, room))),
+        live0.on ? h ('p', { class: 'hint', text: 'What is recorded cannot be changed while it is recording. The recording mix can: its balance, pans, EQ and level are heard in the file from the moment they move.' }) : null,
+        h ('div', { class: 'choices' },
+            h ('button', { class: 'choice go', disabled: !! live0.on, onclick: () => go ({ kind: 'channels' }) }, h ('b', { text: 'Channels' }),
+                h ('small', { text: listed.filter ((x) => x.ch.rec !== 'none').length + ' of ' + listed.length + ' get a file of their own. Choose where each is recorded.' })),
+            h ('button', { class: 'choice go', onclick: () => go ({ kind: 'mix' }) }, h ('b', { text: 'Recording mix' }),
+                h ('small', { text: 'Its own balance, pans, EQ and limiter. The room never hears it.' }))),
+        h ('section', { class: 'card' },
+            h ('h2', { text: 'Mixes to write' }),
+            ! m.on ? h ('p', { class: 'hint', text: 'The mixer is off, so only the channels can be recorded, at their sockets. Loops and these mixes need the mixer on.' }) : null,
+            h ('fieldset', { class: 'plain', disabled: !! live0.on },
+                tick ('Recording mix', 'mix', 'A stereo file with the balance set under Recording mix.'),
+                tick ('Main mix', 'main', 'A stereo file of exactly what the PA was sent.'),
+                tick ('Reverbs and delays', 'fx', 'Each mixer effect alone, as a file of its own.'))),
+        h ('section', { class: 'card' },
+            h ('h2', { text: live0.on ? 'Being written now' : 'Pressing Record writes ' + r.files.length + (r.files.length === 1 ? ' file' : ' files') }),
+            r.files.length ? h ('ol', { class: 'rec-files' }, r.files.map ((f) => h ('li', { text: f }))) : h ('p', { class: 'hint', text: 'Nothing is chosen yet. Give a channel a record point, or tick a mix.' }),
+            h ('p', { class: 'hint', text: 'Every file starts at the same moment, in a new folder named by the date and time, inside Documents, GigRig, Recordings on the rig.' })));
+
+    let wasOn = !! live0.on;
+
+    GR.onLive = (l) =>
+    {
+        const x = l.rec || {};
+        if (!! x.on !== wasOn) { wasOn = !! x.on; GR.render(); return; }
+        clock.textContent = recClock (x.sec || 0);
+        clock.className = 'rec-clock' + (x.on ? ' on' : '');
+        line.textContent = x.note ? x.note
+            : x.on ? (x.lost > 0 ? 'Recording, but the drive is not keeping up: ' + x.lost + ' samples are missing from the files. The sound in the room is not affected.' : 'Recording ' + x.files + ' files. Nothing lost.')
+            : x.files > 0 ? 'Last recording: ' + x.files + ' files in the folder ' + x.folder + '.' : 'Not recording.';
+        line.className = 'hint' + (x.note || x.lost > 0 ? ' bad' : '');
+        room.textContent = Number (x.free || 0).toFixed (0) + ' GB free: about ' + Number (x.hours || 0).toFixed (1) + ' hours of these files.';
+        (x.pk || []).forEach ((p, i) => { if (meters[i]) meters[i].style.width = Math.round (GR.meterPos (p) * 100) + '%'; });
+    };
+
+    GR.onLive ({ rec: live0 });
+};
+
 // ---------------------------------------------------------------- Rig
 
 GR.screens.rig = (root) =>

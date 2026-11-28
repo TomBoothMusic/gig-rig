@@ -97,7 +97,7 @@ namespace
     }
 
     const char* const outputKeys[numMixOutputs] { "main", "monitor 1", "monitor 2" };
-    const char* const recordWords[] { "none", "raw", "effects", "looper" };
+    const char* const recordWords[] { "none", "raw", "effects", "looper", "processed" };
     const char* const tapWords[] { "pre", "eq", "all" };
 
     juce::String num (float v)              { return juce::String (v, 2); }
@@ -125,6 +125,8 @@ namespace
         t << "record=" << recordWords[(int) s.record] << "\n";
         t << "direct=" << (s.directReturn + 1) << "\n";
         t << "link=" << (s.link ? 1 : 0) << "\n";
+        t << "reclevel=" << num (s.recDb) << "\n";
+        t << "recpan=" << num (s.recPan) << "\n";
         t << "[channel " << (c + 1) << " processing]\n" << juce::String (s.strip.toText());
     }
 
@@ -138,6 +140,7 @@ namespace
         t << "return=" << num (s.returnDb) << "\n";
         for (int m = 0; m < numMixMonitors; ++m)
             t << "monitor" << (m + 1) << "=" << num (s.monDb[(size_t) m]) << "\n";
+        t << "reclevel=" << num (s.recDb) << "\n";
         t << "[fx " << (f + 1) << " effect]\n" << juce::String (s.effect.toText());
         t << "[fx " << (f + 1) << " eq]\n" << juce::String (s.eq.toText());
     }
@@ -160,6 +163,17 @@ namespace
             t << "pair=" << (s.pair ? 1 : 0) << "\n";
         }
         t << "[output " << outputKeys[o] << " processing]\n" << juce::String (s.chain.toText());
+    }
+
+    /** The Recording tab's own settings: which mixes are written, and the recording mix's level, EQ and limiter. */
+    void writeRecord (juce::String& t, const MixRecordSetup& s)
+    {
+        t << "[recording]\n";
+        t << "mainmix=" << (s.mainMix ? 1 : 0) << "\n";
+        t << "mix=" << (s.mix ? 1 : 0) << "\n";
+        t << "effects=" << (s.fxTracks ? 1 : 0) << "\n";
+        t << "level=" << num (s.levelDb) << "\n";
+        t << "[recording processing]\n" << juce::String (s.chain.toText());
     }
 
     struct Section
@@ -196,7 +210,7 @@ namespace
         return sections;
     }
 
-    enum Parts { channelParts = 1, fxParts = 2, mainPart = 4, monitorParts = 8, socketParts = 16 };
+    enum Parts { channelParts = 1, fxParts = 2, mainPart = 4, monitorParts = 8, socketParts = 16, recordParts = 32 };
 
     /** Reads the sections a file has into 's' (what a file leaves out stays as it was). Returns the parts it found. */
     int readInto (MixerSetup& s, const juce::String& text, int wanted)
@@ -241,9 +255,26 @@ namespace
                 if (has ("link"))    ch.link = b ("link") && c + 1 < numMixChannels;
                 if (has ("direct"))  ch.directReturn = juce::jlimit (-1, 7, sec.values["direct"].getIntValue() - 1);
                 if (has ("record"))
-                    for (int r = 0; r < 4; ++r)
+                    for (int r = 0; r < numRecordPoints; ++r)
                         if (sec.values["record"] == recordWords[r])
                             ch.record = (RecordPoint) r;
+                if (has ("reclevel")) ch.recDb = juce::jlimit (mixOffDb, 12.0f, f ("reclevel"));
+                if (has ("recpan"))   ch.recPan = juce::jlimit (-1.0f, 1.0f, f ("recpan"));
+            }
+            else if (words[0] == "recording" && (wanted & recordParts) != 0)
+            {
+                found |= recordParts;
+
+                if (words.size() > 1 && words[1] == "processing")
+                {
+                    s.rec.chain = conform (fx::ChainModel::fromText (sec.body.toStdString()), defaultRecordModel());
+                    continue;
+                }
+
+                if (has ("mainmix")) s.rec.mainMix = b ("mainmix");
+                if (has ("mix"))     s.rec.mix = b ("mix");
+                if (has ("effects")) s.rec.fxTracks = b ("effects");
+                if (has ("level"))   s.rec.levelDb = juce::jlimit (mixOffDb, 10.0f, f ("level"));
             }
             else if (words[0] == "fx" && (wanted & fxParts) != 0)
             {
@@ -271,6 +302,7 @@ namespace
                 if (has ("lowcut"))  fxs.lowCutHz = juce::jlimit (20.0f, 1000.0f, f ("lowcut"));
                 if (has ("highcut")) fxs.highCutHz = juce::jlimit (1000.0f, 20000.0f, f ("highcut"));
                 if (has ("return"))  fxs.returnDb = juce::jlimit (mixOffDb, 10.0f, f ("return"));
+                if (has ("reclevel")) fxs.recDb = juce::jlimit (mixOffDb, 12.0f, f ("reclevel"));
                 for (int m = 0; m < numMixMonitors; ++m)
                     if (const auto key = "monitor" + juce::String (m + 1); sec.values.containsKey (key))
                         fxs.monDb[(size_t) m] = juce::jlimit (mixOffDb, 10.0f, sec.values[key].getFloatValue());
@@ -363,6 +395,29 @@ fx::ChainModel defaultOutputModel()
     return m;
 }
 
+fx::ChainModel defaultRecordModel()
+{
+    // The recording mix: an EQ curve of its own, the bus compressor for those who want it, and
+    // a limiter so nothing in the file goes over full level.
+    fx::ChainModel m;
+    m.slots.push_back (slot ("mixeq", true));
+    m.slots.push_back (slot ("buscomp", false));
+    m.slots.push_back (slot ("limiter", true));
+    return m;
+}
+
+const char* recordWord (RecordPoint p)
+{
+    return recordWords[juce::jlimit (0, numRecordPoints - 1, (int) p)];
+}
+
+juce::String recordPointName (RecordPoint p)
+{
+    // "raw", "after effects" and "after looper" are in the names of files Tom already has: leave them.
+    static const char* const names[] { "nothing", "raw", "after effects", "after looper", "after channel processing" };
+    return names[juce::jlimit (0, numRecordPoints - 1, (int) p)];
+}
+
 const std::vector<std::string>& mixerFxChoices()
 {
     static const std::vector<std::string> list { "plate", "room", "spring", "digitaldelay", "tapedelay", "analogdelay" };
@@ -430,6 +485,7 @@ MixerSetup defaultMixerSetup()
         out.pair = o == 0;
     }
 
+    s.rec.chain = defaultRecordModel();
     return s;
 }
 
@@ -438,6 +494,7 @@ Mixer::Mixer()
 {
     root = presetRoot();
     now = defaultMixerSetup();
+    pushRecord (true);
 
     for (int c = 0; c < numMixChannels; ++c)   pushChannel (c, true);
     for (int f = 0; f < numMixFx; ++f)         pushFx (f, true);
@@ -463,6 +520,8 @@ void Mixer::pushChannel (int c, bool first)
     a.trim.store (juce::Decibels::decibelsToGain (s.trimDb));
     a.fader.store (gainOf (s.faderDb));
     a.pan.store (s.pan);
+    a.recGain.store (gainOf (s.recDb));
+    a.recPan.store (s.recPan);
     a.mute.store (s.mute);
     for (int m = 0; m < numMixMonitors; ++m)   a.mon[(size_t) m].store (gainOf (s.monDb[(size_t) m]));
     for (int f = 0; f < numMixFx; ++f)         a.fx[(size_t) f].store (gainOf (sendDb (c, f)));
@@ -493,6 +552,7 @@ void Mixer::pushFx (int f, bool first)
     else        a.pre.setModelGently (s.eq);
 
     a.ret.store (gainOf (s.returnDb));
+    a.recGain.store (gainOf (s.recDb));
     for (int m = 0; m < numMixMonitors; ++m)   a.mon[(size_t) m].store (gainOf (s.monDb[(size_t) m]));
     a.filter.setParam ("lowcut", s.lowCutHz);
     a.filter.setParam ("highcut", s.highCutHz);
@@ -532,6 +592,27 @@ void Mixer::pushOutput (int o, bool first)
             side.setModel (s.chain);
 }
 
+void Mixer::pushRecord (bool first)
+{
+    auto& s = now.rec;
+    s.chain = conform (s.chain, defaultRecordModel());
+    recOut.level.store (gainOf (s.levelDb));
+
+    for (auto& side : recOut.chain)
+    {
+        if (first)  side.setModel (s.chain);
+        else        side.setModelGently (s.chain);
+    }
+}
+
+void Mixer::setRecord (const MixRecordSetup& s)
+{
+    now.rec = s;
+    pushRecord();
+    actDirty = true;
+    markChanged();
+}
+
 void Mixer::followLinks()
 {
     // A linked pair is one stereo channel: the right side takes every setting from the left
@@ -550,11 +631,13 @@ void Mixer::followLinks()
         const auto name = right.name;
         const int socket = right.socket;
         left.pan = -1.0f;
+        left.recPan = -1.0f;
         right = left;
         right.name = name;
         right.socket = socket;
         right.link = false;
         right.pan = 1.0f;
+        right.recPan = 1.0f;
     }
 
     now.channel[(size_t) numMixChannels - 1].link = false;
@@ -584,12 +667,12 @@ void Mixer::setChannel (int c, const MixChannelSetup& s)
     {
         // Unlinking leaves both sides in the middle again, not hard left and right.
         if (now.channel[(size_t) c].link && ! s.link && c + 1 < numMixChannels)
-            now.channel[(size_t) c + 1].pan = 0.0f;
+            now.channel[(size_t) c + 1].pan = now.channel[(size_t) c + 1].recPan = 0.0f;
 
         now.channel[(size_t) c] = s;
 
         if (wasPaired && ! s.link)
-            now.channel[(size_t) c].pan = 0.0f;
+            now.channel[(size_t) c].pan = now.channel[(size_t) c].recPan = 0.0f;
     }
 
     followLinks();
@@ -745,6 +828,7 @@ void Mixer::setAll (const MixerSetup& s)
     for (int c = 0; c < numMixChannels; ++c)   pushChannel (c);
     for (int f = 0; f < numMixFx; ++f)         pushFx (f);
     for (int o = 0; o < numMixOutputs; ++o)    pushOutput (o);
+    pushRecord();
     markChanged();
 }
 
@@ -762,6 +846,9 @@ juce::File Mixer::presetFolder (Preset kind, const juce::File& rootFolder)
 
 juce::File Mixer::recordingFolder()
 {
+    if (recordingFolderOverride != juce::File())
+        return recordingFolderOverride;
+
     return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("GigRig").getChildFile ("Recordings");
 }
 
@@ -784,6 +871,7 @@ juce::String Mixer::actText() const
                     "# Loading it leaves the venue and the monitors alone.\n");
     for (int c = 0; c < numMixChannels; ++c)
         writeChannel (t, c, now.channel[(size_t) c]);
+    writeRecord (t, now.rec);       // the recording mix is a balance of these channels, so it travels with them
     return t;
 }
 
@@ -857,12 +945,14 @@ juce::String Mixer::loadAct (const juce::String& name)
         return error;
 
     auto next = now;
-    if ((readInto (next, text, channelParts) & channelParts) == 0)
+    if ((readInto (next, text, channelParts | recordParts) & channelParts) == 0)
         return "'" + name + "' holds no channels.";
 
     now.channel = next.channel;
+    now.rec = next.rec;             // an act saved before the Recording tab has none, and leaves it as it is
     for (int c = 0; c < numMixChannels; ++c)
         pushChannel (c);
+    pushRecord();
 
     act = cleanName (name);
     actDirty = false;
@@ -1052,27 +1142,148 @@ juce::String Mixer::venueScreen (double nowMs) const
 }
 
 //==============================================================================
-juce::String Mixer::startRecording (const juce::File& parentFolder)
+std::vector<Mixer::RecordTrack> Mixer::recordTracks() const
 {
-    std::vector<MixRecorder::Track> tracks;
-    static const char* const pointNames[] { "", "raw", "after effects", "after looper" };
+    std::vector<RecordTrack> tracks;
+    const bool mixing = wanted.load();
 
     for (int c = 0; c < numMixChannels; ++c)
     {
         const auto& ch = now.channel[(size_t) c];
-        if (ch.on && ch.record != RecordPoint::none && ch.socket >= 0)
-            tracks.push_back ({ c, ch.name + " (" + pointNames[(int) ch.record] + ")", 1 });
+
+        if (! ch.on || ch.record == RecordPoint::none || ch.socket < 0)
+            continue;
+
+        // With the mixer off there is no looper point to tap: the channel's socket after its effects is the nearest thing.
+        const bool fallsBack = ! mixing && (ch.record == RecordPoint::afterLooper || ch.record == RecordPoint::afterProcessing);
+        tracks.push_back ({ c, ch.name + " (" + recordPointName (fallsBack ? RecordPoint::afterEffects : ch.record) + ")", 1 });
     }
 
-    tracks.push_back ({ numMixChannels, "Main mix", 2 });
+    if (mixing)
+    {
+        if (now.rec.fxTracks)
+            for (int f = 0; f < numMixFx; ++f)
+                if (now.fx[(size_t) f].on)
+                    tracks.push_back ({ recSlotFx + f, "Effect " + juce::String (f + 1) + " " + now.fx[(size_t) f].name, 1 });
 
-    const auto folder = parentFolder.getChildFile (juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S"));
-    return rec.start (folder, tracks, rate, capacity);
+        if (now.rec.mainMix)    tracks.push_back ({ recSlotMain, "Main mix", 2 });
+        if (now.rec.mix)        tracks.push_back ({ recSlotMix, "Recording mix", 2 });
+    }
+
+    return tracks;
+}
+
+Mixer::RecordRoom Mixer::recordRoom (const juce::File& parentFolder) const
+{
+    RecordRoom r;
+    auto folder = parentFolder;
+
+    while (! folder.isDirectory() && folder.getParentDirectory() != folder)
+        folder = folder.getParentDirectory();
+
+    r.freeGb = (double) folder.getBytesFreeOnVolume() / 1.0e9;
+    const double fileRate = rate >= 88000.0 ? rate * 0.5 : rate;
+
+    for (const auto& t : recordTracks())
+        r.gbPerHour += (double) t.channels * fileRate * 3.0 * 3600.0 / 1.0e9;      // 24-bit: three bytes a sample
+
+    r.hours = r.gbPerHour > 0.0 ? juce::jmax (0.0, r.freeGb - recordStopGb) / r.gbPerHour : 0.0;
+    return r;
+}
+
+juce::String Mixer::startRecording (const juce::File& parentFolder)
+{
+    std::vector<MixRecorder::Track> tracks;
+    const auto list = recordTracks();
+
+    for (const auto& t : list)
+        tracks.push_back ({ t.slot, t.name, t.channels });
+
+    if (tracks.empty())
+        return "Nothing is set to be recorded. On the Recording tab, give at least one channel a record point.";
+
+    if (const auto room = recordRoom (parentFolder); room.freeGb < recordStopGb + 0.5)
+        return "The recordings drive has only " + juce::String (room.freeGb, 1) + " GB left. Clear some old recordings first.";
+
+    const auto stamp = juce::Time::getCurrentTime();
+    const auto folder = parentFolder.getChildFile (stamp.formatted ("%Y-%m-%d %H-%M-%S"));
+    const auto error = rec.start (folder, tracks, rate, capacity);
+
+    if (error.isEmpty())
+    {
+        recNote.clear();
+        recParent = parentFolder;
+        recTicks = 0;
+
+        // A note in the folder, so the files explain themselves a year from now.
+        juce::String about;
+        about << "Recorded by GigRig on " << stamp.formatted ("%d %b %Y at %H:%M") << ".\n"
+              << "Every file starts at the same moment and is " << juce::String (rec.fileRate() / 1000.0, 1) << " kHz, 24-bit.\n"
+              << "The mixer was " << (wanted.load() ? "on" : "OFF, so channels are recorded at their sockets and there are no mixes") << ".\n\n";
+
+        for (const auto& name : rec.fileNames())
+            about << name << "\n";
+
+        about << "\nWhat the words in the names mean:\n"
+                 "  raw: the plain input socket, before any effect.\n"
+                 "  after effects: after the guitar or vocal effects chain, before the looper.\n"
+                 "  after looper: the live sound and its loops together, before the channel's own gate, EQ and compressors (loops carry the processing they were recorded with).\n"
+                 "  after channel processing: the live sound and its loops together, after the channel's gate, EQ and compressors, before its fader.\n"
+                 "  Effect: one of the mixer's reverbs or delays alone (only its wet sound), at the level it has in the main mix.\n"
+                 "  Main mix: what the PA was sent.\n"
+                 "  Recording mix: the separate balance set on the Recording tab.\n";
+        folder.getChildFile ("About this recording.txt").replaceWithText (about);
+    }
+
+    return error;
 }
 
 void Mixer::stopRecording()
 {
     rec.stop();
+}
+
+juce::String Mixer::recordingReportText() const
+{
+    juce::String t;
+    t << "RECORDING\n";
+    t << rec.statusText() << "\n";
+
+    if (recNote.isNotEmpty())
+        t << "RECORDING WARNING: " << recNote << "\n";
+
+    juce::StringArray names;
+    for (const auto& track : recordTracks())
+        names.add (track.name + (track.channels == 2 ? " [stereo]" : ""));
+
+    t << "Pressing Record now would write " << names.size() << " files: " << (names.isEmpty() ? juce::String ("none") : names.joinIntoString ("; ")) << ".\n";
+
+    if (! wanted.load())
+        t << "The mixer is off, so only the channels' sockets can be recorded (plain, or after their effects): no loops, no main mix and no recording mix.\n";
+
+    const auto room = recordRoom (recordingFolder());
+    t << "Recordings drive: " << juce::String (room.freeGb, 1) << " GB free; these files take " << juce::String (room.gbPerHour, 2) << " GB an hour, so about "
+      << juce::String (room.hours, 1) << " hours fit. A recording stops by itself with " << juce::String (recordStopGb, 0) << " GB left.\n";
+
+    t << "Recording mix: " << (now.rec.mix ? "written" : "not written") << ", level " << dbText (now.rec.levelDb)
+      << ", EQ " << (now.rec.chain.slots[recEq].on ? "on" : "off") << ", bus compressor " << (now.rec.chain.slots[recBus].on ? "on" : "off")
+      << ", limiter " << (now.rec.chain.slots[recLimiter].on ? "on at " + juce::String (now.rec.chain.slots[recLimiter].param ("ceiling", -1.0f), 1) + " dB" : juce::String ("off"))
+      << ". Main mix file: " << (now.rec.mainMix ? "written" : "not written") << ". Reverbs and delays as files of their own: " << (now.rec.fxTracks ? "yes" : "no") << ".\n";
+
+    for (int c = 0; c < numMixChannels; ++c)
+    {
+        const auto& ch = now.channel[(size_t) c];
+        if (ch.on)
+            t << "  " << ch.name << ": records " << recordPointName (ch.record) << "; in the recording mix "
+              << (ch.recDb <= mixOffDb + 0.01f ? juce::String ("not at all") : (ch.recDb > 0.0f ? "+" : "") + juce::String (ch.recDb, 1) + " dB against the main mix")
+              << ", pan " << (std::abs (ch.recPan) < 0.01f ? juce::String ("centre") : juce::String (ch.recPan, 2)) << "\n";
+    }
+
+    for (int f = 0; f < numMixFx; ++f)
+        if (now.fx[(size_t) f].on && std::abs (now.fx[(size_t) f].recDb) > 0.01f)
+            t << "  " << now.fx[(size_t) f].name << ": in the recording mix " << (now.fx[(size_t) f].recDb <= mixOffDb + 0.01f ? juce::String ("not at all") : juce::String (now.fx[(size_t) f].recDb, 1) + " dB against the main mix") << "\n";
+
+    return t;
 }
 
 //==============================================================================
@@ -1110,6 +1321,20 @@ void Mixer::tick()
 {
     for (auto& c : chans)   { c.strip.collectGarbage(); c.strip2.collectGarbage(); }
     for (auto& f : fxs)     f.chain.collectGarbage();
+    for (auto& side : recOut.chain) side.collectGarbage();
+
+    // A recording never fills the drive: every few seconds the room left is looked at, away from the sound.
+    if (rec.isRecording() && ++recTicks >= 50)
+    {
+        recTicks = 0;
+
+        if (const auto room = recordRoom (recParent); room.freeGb < recordStopGb)
+        {
+            rec.stop();
+            recNote = "The recording stopped by itself after " + juce::String (rec.seconds() / 60.0, 1) + " minutes: the drive had less than " + juce::String (recordStopGb, 0) + " GB left.";
+        }
+    }
+
     for (auto& o : outs)
         for (auto& set : o.chain)
             for (auto& side : set)
@@ -1147,6 +1372,7 @@ juce::String Mixer::stateText() const
     for (int c = 0; c < numMixChannels; ++c)   writeChannel (t, c, now.channel[(size_t) c]);
     for (int f = 0; f < numMixFx; ++f)         writeFx (t, f, now.fx[(size_t) f]);
     for (int o = 0; o < numMixOutputs; ++o)    writeOutput (t, o, now.output[(size_t) o], true);
+    writeRecord (t, now.rec);
 
     t << "[song sends]\n";
     for (const auto& s : songSends())
@@ -1161,7 +1387,7 @@ juce::String Mixer::stateText() const
 void Mixer::loadStateText (const juce::String& text)
 {
     auto next = now;
-    readInto (next, text, channelParts | fxParts | mainPart | monitorParts | socketParts);
+    readInto (next, text, channelParts | fxParts | mainPart | monitorParts | socketParts | recordParts);
     setAll (next);
 
     std::vector<SongSend> sends;
@@ -1347,7 +1573,7 @@ juce::String Mixer::reportText() const
           << ", warmth " << (ch.strip.slots[stripWarmth].on ? "on" : "off")
           << ", compressor " << (ch.strip.slots[stripComp].on ? "on" : "off") << ", 1176 style " << (ch.strip.slots[stripInsert].on ? "on" : "off")
           << ", LA-2A style " << (ch.strip.slots[stripOpto].on ? "on" : "off") << (ch.link ? ", STEREO with the next channel" : "")
-          << ", records " << recordWords[(int) ch.record];
+          << ", records " << recordPointName (ch.record);
         if (ch.directReturn >= 0)
             t << ", direct out on return " << (ch.directReturn + 1);
         t << "\n";
@@ -1391,7 +1617,7 @@ juce::String Mixer::reportText() const
 
     const auto l = load();
     t << "The mixer's share of the processor: " << juce::String (l.average * 100.0, 1) << "% of each block on average, " << juce::String (l.busiest * 100.0, 1) << "% at its busiest in the last 10 seconds.\n";
-    t << rec.statusText() << "\n";
+    t << recordingReportText();
 
     for (const auto& w : warnings())
         t << "MIXER WARNING: " << w << "\n";
@@ -1416,13 +1642,23 @@ void Mixer::prepare (double sampleRate, int maxBlock)
     silence.assign ((size_t) capacity, 0.0f);
     directData.assign ((size_t) 8 * (size_t) capacity, 0.0f);
     directUsed.fill (false);
+    recScratch.assign ((size_t) capacity, 0.0f);
+    recMixWas = false;
+
+    for (int side = 0; side < 2; ++side)
+    {
+        recOut.chain[(size_t) side].prepare (rate, capacity);
+        recOut.bus[(size_t) side].assign ((size_t) capacity, 0.0f);
+    }
+
+    recOut.levelG = {};
 
     for (auto& c : chans)
     {
         c.strip.prepare (rate, capacity);
         c.strip2.prepare (rate, capacity);
         c.wasOn = false;
-        c.trimG = c.mainL = c.mainR = c.directG = {};
+        c.trimG = c.mainL = c.mainR = c.directG = c.recL = c.recR = {};
         c.monL = {}; c.monR = {}; c.fxG = {};
     }
 
@@ -1433,7 +1669,7 @@ void Mixer::prepare (double sampleRate, int maxBlock)
         f.filter.prepare (rate, capacity);
         f.in.assign ((size_t) capacity, 0.0f);
         f.wet.assign ((size_t) capacity, 0.0f);
-        f.retG = {}; f.monG = {};
+        f.retG = {}; f.recG = {}; f.monG = {};
         f.live = false;
     }
 
@@ -1553,6 +1789,24 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
     for (auto& f : fxs)
         juce::FloatVectorOperations::clear (f.in.data(), n);
 
+    // The recording mix is only worked on while it is being recorded, so it costs nothing otherwise.
+    // Its gains start from silence each time, which fades the first few milliseconds in.
+    const bool recMixing = rec.wants (recSlotMix);
+
+    if (recMixing)
+    {
+        juce::FloatVectorOperations::clear (recOut.bus[0].data(), n);
+        juce::FloatVectorOperations::clear (recOut.bus[1].data(), n);
+    }
+
+    if (recMixing != recMixWas)
+    {
+        for (auto& c : chans)   c.recL = c.recR = {};
+        for (auto& f : fxs)     f.recG = {};
+        recOut.levelG = {};
+        recMixWas = recMixing;
+    }
+
     const bool tripped = guard.load (std::memory_order_relaxed);
     const float masterNow = wanted.load (std::memory_order_relaxed) && ! tripped ? 1.0f : 0.0f;
     directUsed.fill (false);
@@ -1563,9 +1817,14 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         auto& ch = chans[(size_t) c];
         const bool on = ch.on.load (std::memory_order_relaxed);
 
-        // A channel switched off fades out before it stops being worked on.
-        if (! on && ! ch.wasOn)
+        // A channel switched off fades out before it stops being worked on. (Its file, if it has
+        // one, still gets this block, as silence, so every file of a recording stays the same length.)
+        if ((! on && ! ch.wasOn) || ! stripped[(size_t) c])
+        {
+            if (rec.wants (c))
+                rec.write (c, silence.data(), nullptr, n);
             continue;
+        }
 
         const int socket = ch.socket.load (std::memory_order_relaxed);
         const bool plugged = socket >= 0 && socket < numIns && socket < numMixSockets;
@@ -1575,8 +1834,6 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         // The channel's own sound: live, after its own processing (done in stripChannels, before the
         // looper heard it), and every loop recorded from it. A loop was recorded after the channel's
         // processing, so it rejoins after it: at every point a monitor or the sound crew can tap.
-        if (! stripped[(size_t) c])
-            continue;
 
         float* tapPre = chanPre.data() + (size_t) c * (size_t) capacity;
         float* tapMid = chanMid.data() + (size_t) c * (size_t) capacity;
@@ -1611,7 +1868,8 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         {
             const auto point = (RecordPoint) ch.record.load (std::memory_order_relaxed);
             const float* tap = point == RecordPoint::raw ? (plugged && raw[socket] != nullptr ? raw[socket] : silence.data())
-                             : point == RecordPoint::afterEffects ? live : tapPre;
+                             : point == RecordPoint::afterEffects ? live
+                             : point == RecordPoint::afterProcessing ? work : tapPre;
             rec.write (c, tap, nullptr, n);
         }
 
@@ -1648,6 +1906,18 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         addGliding (outs[0].bus[1].data(), forMain, start, step, n);
         sounding = sounding || ch.mainR.now != 0.0f;
 
+        // The recording mix: the same channel as the main mix hears it (so it follows the fader and
+        // the mute), a little louder or quieter, and panned its own way.
+        if (recMixing)
+        {
+            const float recPan = ch.recPan.load (std::memory_order_relaxed);
+            const float recLevel = fader * ch.recGain.load (std::memory_order_relaxed);
+            ch.recL.advance (recLevel * juce::jmin (1.0f, 1.0f - recPan), fastStep, n, start, step);
+            addGliding (recOut.bus[0].data(), forMain, start, step, n);
+            ch.recR.advance (recLevel * juce::jmin (1.0f, 1.0f + recPan), fastStep, n, start, step);
+            addGliding (recOut.bus[1].data(), forMain, start, step, n);
+        }
+
         for (int m = 0; m < numMixMonitors; ++m)
         {
             auto& out = outs[(size_t) (m + 1)];
@@ -1677,15 +1947,26 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         raise (strayPeak, p);
         juce::FloatVectorOperations::add (outs[0].bus[0].data(), stray.data(), n);
         juce::FloatVectorOperations::add (outs[0].bus[1].data(), stray.data(), n);
+
+        if (recMixing)
+        {
+            juce::FloatVectorOperations::add (recOut.bus[0].data(), stray.data(), n);
+            juce::FloatVectorOperations::add (recOut.bus[1].data(), stray.data(), n);
+        }
     }
 
     // ---- the mixer's reverbs and delays: after the looper, so never in a loop ----
-    for (auto& f : fxs)
+    for (int k = 0; k < numMixFx; ++k)
     {
+        auto& f = fxs[(size_t) k];
         const bool on = f.on.load (std::memory_order_relaxed);
 
         if (! on && ! f.live)
+        {
+            if (rec.wants (recSlotFx + k))
+                rec.write (recSlotFx + k, silence.data(), nullptr, n);
             continue;
+        }
 
         f.pre.process (f.in.data(), n);      // the EQ on what goes into the effect
         juce::FloatVectorOperations::copy (f.wet.data(), f.in.data(), n);
@@ -1700,6 +1981,22 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         addGliding (outs[0].bus[0].data(), wet, start, step, n);
         addGliding (outs[0].bus[1].data(), wet, start, step, n);
         bool sounding = f.retG.now != 0.0f;
+
+        // Recorded as a file of its own: the wet sound alone, at the level it has in the main mix.
+        if (rec.wants (recSlotFx + k))
+        {
+            for (int i = 0; i < n; ++i)
+                recScratch[(size_t) i] = wet[i] * (start + step * (float) i);
+
+            rec.write (recSlotFx + k, recScratch.data(), nullptr, n);
+        }
+
+        if (recMixing)
+        {
+            f.recG.advance (on ? f.ret.load (std::memory_order_relaxed) * f.recGain.load (std::memory_order_relaxed) : 0.0f, fastStep, n, start, step);
+            addGliding (recOut.bus[0].data(), wet, start, step, n);
+            addGliding (recOut.bus[1].data(), wet, start, step, n);
+        }
 
         for (int m = 0; m < numMixMonitors; ++m)
         {
@@ -1810,8 +2107,28 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         }
     }
 
-    if (rec.wants (numMixChannels))
-        rec.write (numMixChannels, outs[0].buf[0].data(), outs[0].buf[1].data(), n);
+    if (rec.wants (recSlotMain))
+        rec.write (recSlotMain, outs[0].buf[0].data(), outs[0].buf[1].data(), n);
+
+    // ---- the recording mix: its own EQ, bus compressor and limiter, its own level, always stereo ----
+    if (recMixing)
+    {
+        float start, step;
+        recOut.levelG.advance (recOut.level.load (std::memory_order_relaxed), fastStep, n, start, step);
+
+        for (int s = 0; s < 2; ++s)
+        {
+            float* bus = recOut.bus[(size_t) s].data();
+            recOut.chain[(size_t) s].process (bus, n);
+
+            for (int i = 0; i < n; ++i)
+                bus[i] *= (start + step * (float) i) * (masterStart + masterInc * (float) i);
+
+            raise (recOut.peak[(size_t) s], peakOf (bus, n));
+        }
+
+        rec.write (recSlotMix, recOut.bus[0].data(), recOut.bus[1].data(), n);
+    }
 
     // ---- the tuner: the main mix goes silent while it is on (after the recording, before the break music) ----
     if (tuningNow || tuneGain < 1.0f)
@@ -1867,6 +2184,30 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
         loadPeakHold = 0.0f;
         loadHoldLeft = (int) (10.0 * rate);
     }
+}
+
+void Mixer::recordWithoutMixing (const float* const* raw, const float* const* feed, int numIns, int n) noexcept
+{
+    if (! rec.isRecording() || n <= 0 || n > capacity)
+        return;
+
+    for (int c = 0; c < numMixChannels; ++c)
+    {
+        if (! rec.wants (c))
+            continue;
+
+        auto& ch = chans[(size_t) c];
+        const int socket = ch.socket.load (std::memory_order_relaxed);
+        const bool plugged = ch.on.load (std::memory_order_relaxed) && socket >= 0 && socket < numIns;
+        const auto* from = (RecordPoint) ch.record.load (std::memory_order_relaxed) == RecordPoint::raw ? raw : feed;
+        rec.write (c, plugged && from[socket] != nullptr ? from[socket] : silence.data(), nullptr, n);
+    }
+
+    for (int slot = numMixChannels; slot < MixRecorder::maxTracks; ++slot)
+        if (rec.wants (slot))
+            rec.write (slot, silence.data(), silence.data(), n);
+
+    rec.endBlock (n);
 }
 
 } // namespace gigrig
