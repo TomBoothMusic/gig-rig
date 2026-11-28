@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "AudioEngine.h"
+#include "EqCurveView.h"
 #include "Style.h"
 
 #include <map>
@@ -118,6 +119,20 @@ private:
     juce::OwnedArray<juce::Component> gridControls;
     int gridColumns = 3;
     juce::Rectangle<int> detailArea;
+
+    // The EQ as a curve (29 Nov 2026): when the block shown is the mixer EQ, the grid of sliders
+    // gives way to the curve, with the picked point's Freq, Gain and Q beside it.
+    void buildEqCurve (const fx::SlotModel& slot, int blockIndex);
+    void syncEqSide();
+    std::unique_ptr<EqCurveView> eqView;
+    juce::ComboBox* eqPointBox = nullptr;
+    juce::Slider* eqFreq = nullptr;
+    juce::Slider* eqGain = nullptr;
+    juce::Slider* eqQ = nullptr;
+    juce::TextButton* eqFlat = nullptr;
+    int eqRta = 2;                  // 0 off, 1 pre (before the EQ), 2 post: remembered while the app is open
+    int eqFlatArmed = 0;            // ticks left in which a second press of Flat does it
+    int eqMoves = 0;                // settings changed on the curve since the app started, for the report
     juce::ComboBox* outputPresetBox = nullptr;
 
     std::map<std::string, std::unique_ptr<fx::Effect>> examples;     // one of each block, to ask what its settings are

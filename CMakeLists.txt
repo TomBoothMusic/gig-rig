@@ -132,6 +132,7 @@ target_sources(GigRig PRIVATE
     src/MidiMonitor.cpp
     src/Mixer.cpp
     src/MixerPanel.cpp
+    src/EqCurveView.cpp
     src/MixerSelfTest.cpp
     src/MixRecorder.cpp
     src/RecordingPanel.cpp

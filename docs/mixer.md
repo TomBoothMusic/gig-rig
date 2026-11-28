@@ -75,7 +75,31 @@ how much and how wide), a high shelf and a high cut.
 
 On the phone and tablet screen the EQ is a curve with a point to drag for each of those eight
 parts, and a live picture of the sound behind it (an "RTA"): Mixer, **Open** on a fader, **EQ**.
-The steps are in [remote.md](remote.md), "The EQ curve". On this tab it is still sliders.
+The steps are in [remote.md](remote.md), "The EQ curve".
+
+**On this tab too, since 29 Nov 2026** (Tom's ask, so a mix can be dialled in on the laptop before
+the board exists). Press a channel's or an output's name, then its **EQ** button under the
+strips. Where the EQ's sliders used to be there is now the curve:
+
+- **Drag a point** with the mouse: sideways is Freq, up and down is Gain. The eight points are
+  the phone's: **HP** and **LP** (the cuts, on their own row near the bottom), **L** and **H**
+  (the shelves) and **1** to **4** (the bells). You do not have to land exactly on a point.
+- **Double-click a point** to put it back: a band to no boost or cut, a cut to off.
+- **The mouse wheel** over the graph sets the picked bell's Q. On a touch screen or a trackpad,
+  two fingers spread or squeezed do the same (not yet tried on a real touch screen).
+- **Beside the graph** are the picked point's own **Freq**, **Gain** and **Q** as sliders for
+  exact numbers (type a number into one, or double-click it to reset), **Point** to pick a point
+  without touching the graph, **RTA** (Off, Pre, Post) and **Flat**, which flattens the whole EQ
+  on its second press.
+- **RTA** is the live picture: the blue shape behind the curve, low notes on the left. **Post**
+  (how it starts) is the sound after the EQ, **Pre** is before it. The mixer must be on.
+
+It writes the same settings the sliders wrote, so presets, songs and the sound are as before. A
+mixer effect's send EQ is still sliders. The rig draws one live picture at a time: if the phone
+and the laptop both ask for one, of different channels, they take turns and both flicker, so
+switch one of them to Off. For a developer: `src/EqCurveView.*` draws and reports, `MixerPanel`
+writes; the curve's sums are `src/effects/mixer/EqCurveMath.h`, shared with the check that holds
+the real EQ to them (and written again in JavaScript in `remote/eq-curve.js`).
 
 Two things changed in the mixer itself for it, and neither changes the sound:
 
@@ -374,6 +398,8 @@ file the words are `switch CTL4 = chain 2 / toe switch`.
 |---|---|
 | `src/Mixer.h/.cpp` | The mixer core, presets, the venue knob's rules, the report. No screen. |
 | `src/MixRecorder.h/.cpp` | Writes the WAV files off the audio thread. |
+| `src/EqCurveView.h/.cpp` | The EQ curve on the Mixer tab: draws the curve and its points, reports each change; no sound in it. |
+| `src/effects/mixer/EqCurveMath.h` | The curve's sums, used by the Mixer tab and by the check that holds the real EQ to them. |
 | `src/Spectrum.h/.cpp` | The live picture behind the EQ curve: the ring the audio thread copies into (`SpectrumTap`) and the sums that turn it into levels per sixth of an octave (`spectrumBands`). Plain C++. |
 | `src/effects/mixer/MixerBlocks.*` | The mixer's own blocks: `mixeq`, `mixcomp`, `notches`, `limiter`, `linedelay`, `wetfilter`. They follow the Effect interface, so the standard effect checks run on them, but they are listed apart (`mixerEffectTypes()`) so the Effects tab does not offer them. |
 | `src/effects/volume/` | The volume pedal effect. |

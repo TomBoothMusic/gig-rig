@@ -1,8 +1,12 @@
 #include "AudioEngine.h"
+#include "EqCurveView.h"
+#include "MixerPanel.h"
+#include "effects/Registry.h"
 
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <map>
 
 // Checks for the mixer stage (26 Nov 2026), run by the automatic builds (GigRig --self-test).
 // The mixer's own blocks (EQ, compressor, notches, limiter, delay) are checked in
@@ -1404,6 +1408,111 @@ void runMixerSelfTest (const Check& check)
         mixer.lookAt (Mixer::Look::channel, 99, false);
         check (still && stopped && mixer.lookingAt() == Mixer::Look::nothing && mixer.reportText().contains ("EQ curve's live picture"),
                "live picture: it stops by itself five seconds after the last screen asked, a channel that is not there is not looked at, and the report has its line");
+
+        // The Mixer tab itself opens on channel 1's EQ, which is the curve: it is built and drawn here with
+        // no screen, so a mistake in putting it together fails the build and not Tom's sitting.
+        // (GIGRIG_MIXER_SHOT=<file.png> in front of the self-test keeps the picture, for a developer to look at.)
+        {
+            MixerPanel panel (looked.engine);
+            panel.setSize (1280, 760);
+            const auto image = panel.createComponentSnapshot (panel.getLocalBounds(), true, 1.0f);
+            int curves = 0;
+
+            for (auto* child : panel.getChildren())
+                if (dynamic_cast<EqCurveView*> (child) != nullptr && child->getWidth() > 400 && child->getHeight() > 100)
+                    ++curves;
+
+            if (const auto shot = juce::SystemStats::getEnvironmentVariable ("GIGRIG_MIXER_SHOT", {}); shot.isNotEmpty())
+            {
+                juce::File file (shot);
+                file.deleteFile();
+                if (auto out = file.createOutputStream())
+                    juce::PNGImageFormat().writeImageToStream (image, *out);
+            }
+
+            check (curves == 1 && image.isValid() && panel.reportText().contains ("EQ curve on the Mixer tab"),
+                   "EQ curve on the Mixer tab: the tab opens on channel 1's EQ as a curve with room to work in, and the report has its line");
+        }
+    }
+
+    // ---- the EQ curve on the laptop's Mixer tab (EqCurveView): what a drag sets, with no screen ----
+    {
+        EqCurveView view;
+        view.setSize (900, 190);
+        std::unique_ptr<fx::Effect> eq (fx::makeEffect ("mixeq"));
+
+        for (const auto& info : eq->params())
+        {
+            view.setRange (info.id, info.min, info.max);
+            view.setValue (info.id, info.def);
+        }
+
+        std::map<std::string, float> sent;
+        int picks = 0;
+        view.onChange = [&] (const std::string& id, float v) { sent[id] = v; };
+        view.onPicked = [&] { ++picks; };
+
+        const juce::Rectangle<float> graph (10.0f, 20.0f, 880.0f, 150.0f);
+        const auto at = [&] (double hz, double db) { return juce::Point<float> ((float) EqCurveView::xOfHz (hz, graph), (float) EqCurveView::yOfDb (db, graph)); };
+
+        // There and back again across the graph.
+        double worstHz = 0.0, worstDb = 0.0;
+        for (const double hz : { 20.0, 63.0, 440.0, 1000.0, 7500.0, 20000.0 })
+            worstHz = std::max (worstHz, std::abs (EqCurveView::hzOfX (EqCurveView::xOfHz (hz, graph), graph) / hz - 1.0));
+        for (const double db : { -18.0, -6.5, 0.0, 3.0, 18.0 })
+            worstDb = std::max (worstDb, std::abs (EqCurveView::dbOfY (EqCurveView::yOfDb (db, graph), graph) - db));
+
+        // Each point is found where it is drawn, and a drag sets its frequency and gain to where it is dropped.
+        const bool finds = view.nearestPoint (at (800.0, 0.0), graph) == 3 && view.nearestPoint (at (20.0, -12.0), graph) == 0
+                           && view.nearestPoint (at (20000.0, -12.0), graph) == 7 && view.nearestPoint (at (1500.0, 15.0), graph) == -1;
+        view.dragPointTo (3, at (1000.0, 6.0), graph);
+        const bool bell = std::abs (sent["b2f"] - 1000.0f) < 0.5f && std::abs (sent["b2g"] - 6.0f) < 0.051f && sent.count ("b2q") == 0;
+
+        // A cut moves sideways only, and nothing can be dragged past the end of its travel.
+        sent.clear();
+        view.dragPointTo (0, at (100.0, 9.0), graph);
+        const bool cut = std::abs (sent["lowcut"] - 100.0f) < 0.5f && sent.size() == 1;
+
+        // The curve it draws is the curve of the settings it sent: +6 dB at 1 kHz, the low cut biting at 30 Hz.
+        const auto cv = view.curveValues();
+        const double atBell = fx::eqCurveDb (cv, 1000.0, 96000.0), atCut = fx::eqCurveDb (cv, 30.0, 96000.0);
+
+        view.dragPointTo (1, at (20000.0, 40.0), graph);
+        const bool held = std::abs (view.value ("lsf") - 2000.0f) < 0.5f && std::abs (view.value ("lsg") - 15.0f) < 0.01f;
+
+        // The wheel and two fingers set the picked bell's Q; two clicks put a point back; a shelf has no Q to set.
+        view.pick (3);
+        view.scaleWidth (2.0);
+        const bool narrower = std::abs (view.value ("b2q") - 2.0f) < 0.011f;
+        view.scaleWidth (0.001);
+        const bool floorQ = std::abs (view.value ("b2q") - 0.3f) < 0.011f;
+        view.resetPoint (3);
+        view.resetPoint (0);
+        const bool back = view.value ("b2g") == 0.0f && std::abs (view.value ("b2f") - 1000.0f) < 0.5f && view.value ("lowcut") == 20.0f;
+        sent.clear();
+        view.pick (1);
+        view.scaleWidth (2.0);
+
+        check (worstHz < 1.0e-6 && worstDb < 1.0e-6 && finds && bell && cut && held && std::abs (atBell - 6.0) < 0.6 && atCut < -3.0
+                   && narrower && floorQ && back && sent.empty() && picks > 0 && view.changesMade() > 0,
+               "EQ curve on the Mixer tab: a point is found where it is drawn, a drag sets its Freq and Gain to where it is dropped (B2 to 1 kHz, +6 dB: the curve reads +"
+                   + juce::String (atBell, 1) + " dB there), a cut moves sideways only, nothing goes past the end of its travel, the wheel sets Q and two clicks put a point back");
+
+        // The live picture is only drawn: handing one in, and taking it away, changes no setting.
+        const int before = view.changesMade();
+        view.setPicture (std::vector<float> ((size_t) spectrumBandCount, -30.0f));
+        view.setPicture ({});
+        juce::Image image (juce::Image::ARGB, 900, 190, true);
+        {
+            juce::Graphics g (image);
+            view.paint (g);
+        }
+        bool drawn = false;
+        for (int x = 0; x < image.getWidth() && ! drawn; x += 7)
+            for (int y = 0; y < image.getHeight() && ! drawn; y += 5)
+                drawn = image.getPixelAt (x, y).getAlpha() > 0;
+
+        check (before == view.changesMade() && drawn, "EQ curve on the Mixer tab: the live picture changes no setting, and the graph draws without a screen");
     }
 
     temp.deleteRecursively();

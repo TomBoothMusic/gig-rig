@@ -31,6 +31,9 @@ user (the blank-slate starter) can be built from this page.
 | **Glide** | How long the wah or whammy takes to travel heel to toe. Was "Sweep time" and "Bend time". |
 | **Pre**, **Post** | Before or after something. On the EQ's RTA row: the sound before or after the EQ. |
 | **RTA** | The live picture of the sound behind the EQ curve. |
+| **Point** | On the Mixer tab's EQ curve: which of the eight points the Freq, Gain and Q sliders beside the graph belong to. |
+| **HP**, **LP**, **L**, **H**, **1** to **4** | The marks on the EQ curve's points: HPF, LPF, low shelf, high shelf and bands B1 to B4. |
+| **Flat** | Puts the whole EQ back to no boost or cut. On the Mixer tab it acts on the second press. |
 | **FX** | Effects. On the mixer: its four reverbs and delays. |
 | **Mon** | A monitor output. |
 | **PC** | The program change number Songbook Pro sends to load a song. 0 means none. |
