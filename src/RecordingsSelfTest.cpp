@@ -251,7 +251,7 @@ static void runLoopReplaySelfTest (const Check& check, const juce::File& root)
         bool haveSong = true;
         replay.loadSong = [&] (const juce::String& name) { loaded.add (name); if (haveSong) looper.setSong (loopSong (name.toRawUTF8())); return haveSong; };
         looper.setSong (loopSong ("Soundcheck song"));
-        b.source = [] (int s, juce::int64 t) { return s == 5 ? 0.25f * (float) std::sin (twoPi * 220.0 * (double) t / 48000.0) * (float) (1 + (t / 6000) % 4) : 0.0f; };
+        b.source = [] (int s, juce::int64 t) { return s == 5 ? 0.05f * (float) std::sin (twoPi * 220.0 * (double) t / 48000.0) * (float) (1 + (t / 6000) % 4) : 0.0f; };
 
         // Presses with nothing recording are noted nowhere.
         b.run (20);

@@ -1043,7 +1043,7 @@ GR.screens.record = (root) =>
         {
             const c = l.check || {}, p = l.copy || {};
             if (!! c.on !== wasCheck || !! p.on !== wasCopy) { wasCheck = !! c.on; wasCopy = !! p.on; GR.render(); return; }
-            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '') + (c.loops ? ' ' + c.loops : '')
+            line.textContent = c.on ? 'Soundcheck: ' + c.name + ', ' + recClock (c.pos || 0) + ' of ' + recClock (c.len || 0) + (c.missed > 0 ? '. The drive did not keep up ' + c.missed + ' times.' : '') + (c.loops ? '. ' + c.loops : '')
                 : p.on ? p.now + ' (' + Math.round ((p.done || 0) * 100) + '%). Leave the drive in.'
                 : p.result ? p.result : Number (recs.free || 0).toFixed (0) + ' GB free on the rig.';
             line.className = 'hint' + ((p.failed && ! p.on && ! c.on) || c.missed > 0 ? ' bad' : '');
