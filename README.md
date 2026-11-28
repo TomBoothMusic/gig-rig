@@ -1146,6 +1146,19 @@ arrangement builder), **Effects**, **Mixer** and **Rig**.
 On the phone tap **Rig**, then **Copy report**, and paste it into the chat. Add anything that
 felt slow, small, confusing or wrong, and which phone or tablet it was on.
 
+## The footswitch screens (28 Nov 2026)
+
+Each footswitch on the finished board gets its own small colour screen. The new **Switch
+screens** tab (the last tab) shows what every one of them would show right now, drawn exactly as
+the board's controller draws it: blue for an empty loop track, flashing red while it records,
+green playing, yellow overdubbing; effect switches purple when on, with a small pedal picture.
+It needs no parts: load a song, press switches, and watch the tab follow. The three "off looks"
+you are choosing between are a drop-down on the same tab.
+
+When the Teensy and three screens are on the bench, the same tab sends those pictures to the
+real screens. That is **off until you tick the box**, and off it opens nothing and sends
+nothing. The full guide is [docs/switch-screens.md](docs/switch-screens.md).
+
 ## The Device check tab
 
 1. Plug the CQ12T into the laptop by USB and switch it on. Do the same with the RC-600.
@@ -1204,6 +1217,9 @@ GigRig --report report.txt      # write the device report, no window
 | `src/Tuner.*`, `src/StrobeTuner.*`, `src/TunerStrip.*`, `src/TunerSelfTest.cpp` | The tuner and its full-screen strobe ([docs/tuner.md](docs/tuner.md)) |
 | `src/ExpressionPedal.*`, `src/ExpressionSelfTest.cpp` | A real expression pedal over MIDI ([docs/mixer.md](docs/mixer.md)) |
 | `src/RemoteApi.*`, `src/RemoteServer.*`, `src/RemotePanel.*`, `src/LooperLayout.*`, `src/RemoteSelfTest.cpp`, `remote/` | The remote screen for a phone or tablet ([docs/remote.md](docs/remote.md)) |
+| `src/SwitchScreens.*`, `src/SwitchScreensPanel.*`, `src/SwitchScreensSelfTest.cpp`, `firmware/shared/SwitchTile.*` | The footswitch screens: what each shows, the tab, the drawing shared with the controller's program, and the checks ([docs/switch-screens.md](docs/switch-screens.md)) |
+| `firmware/bench-test/` | The controller's bench test program for the Teensy: the footswitch screens and the piezo pad ([docs/bench-test.md](docs/bench-test.md)) |
+| `tools/make_tile_art.py`, `tools/tile_sheet.cpp` | Make the letters and lane pictures for the footswitch screens, and draw every sample tile into one picture |
 | `src/ReconnectWatch.h` | Notices a lost audio device and opens it again |
 | `src/DeviceReport.*` | Scans audio and MIDI devices and judges whether the CQ and RC-600 are present |
 | `src/MidiMonitor.*` | Listens to every MIDI input and describes what arrives |

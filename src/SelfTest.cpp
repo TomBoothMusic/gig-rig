@@ -17,6 +17,7 @@ void runRecordingsSelfTest (const std::function<void (bool, const juce::String&)
 void runRemoteSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runBreakMusicSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runExpressionSelfTest (const std::function<void (bool, const juce::String&)>& check);
+void runSwitchScreensSelfTest (const std::function<void (bool, const juce::String&)>& check);
 void runTunerSelfTest (const std::function<void (bool, const juce::String&)>& check);
 
 namespace
@@ -68,7 +69,7 @@ juce::String runSelfTest (bool& passed)
     };
 
     // For working on one part without waiting for the rest (never used by the automatic builds):
-    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, recordings, songs, kick.
+    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, recordings, songs, screens, kick.
     if (const auto only = juce::SystemStats::getEnvironmentVariable ("GIGRIG_SELFTEST_ONLY", {}); only.isNotEmpty())
     {
         if (only == "break")        runBreakMusicSelfTest (check);
@@ -78,6 +79,7 @@ juce::String runSelfTest (bool& passed)
         else if (only == "mixer")   runMixerSelfTest (check);
         else if (only == "recordings") runRecordingsSelfTest (check);
         else if (only == "songs")   runSongSelfTest (check);
+        else if (only == "screens") runSwitchScreensSelfTest (check);
         else if (only == "kick")    runKickPadSelfTest (check);
 
         passed = failures == 0;
@@ -570,6 +572,7 @@ juce::String runSelfTest (bool& passed)
     runBreakMusicSelfTest (check);
     runExpressionSelfTest (check);
     runTunerSelfTest (check);
+    runSwitchScreensSelfTest (check);
 
     passed = failures == 0;
     log.add ({});

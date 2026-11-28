@@ -195,7 +195,7 @@ orders as before, and nothing about the sound.
   down the left and one block at a time on the right.
 - **Effects.** The chain is a pedalboard picture, and each effect has its own page. It looks
   different from a mixer channel on purpose, so nobody mistakes one for the other.
-- **One colour for one sound.** `chainColours` in `remote/screens.js` holds Tom's chain colours, the same ones planned for the foot switch screens. `tint` sets `--chain` on a strip, a page or the pedalboard and the last rules of `remote/app.css` paint it. The stomp's green and the duo partner's purple are stand-ins until Tom chooses.
+- **One colour for one sound.** `chainColours` in `remote/screens.js` holds Tom's chain colours, the same ones planned for the foot switch screens. `tint` sets `--chain` on a strip, a page or the pedalboard and the last rules of `remote/app.css` paint it. The stomp is purple and the duo partner green (Tom's choice, 28 Nov 2026).
 - **The drawings are stand-ins.** A pedal's drawing is a shape and a colour chosen in
   `pedalLook` in `remote/screens.js`, not a likeness. The finished look of each piece of gear
   comes last (see "The gear look sample" below).

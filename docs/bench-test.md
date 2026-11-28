@@ -39,9 +39,15 @@ The screens are 1.54 inch, 240 x 240, ST7789, the eight-pin kind with a CS pin.
 | BL (or BLK) | 3.3V | all screens |
 | CS | screen 1: pin 10, screen 2: pin 7, screen 3: pin 6 | one each |
 
-Add one screen at a time. Each shows its own label (REC 1, FX A 2, SONG 3) and changes page
-every six seconds: white on black, black on yellow, then a ladder of text sizes for judging
-what is readable in the sun.
+Add one screen at a time. With no computer talking to it (the app closed, or the Teensy on a USB
+battery), the program turns through 15 sample pages, six seconds each, three tiles to a page:
+loop tracks in every state, the stop switches, the effect switches in each of the three off
+looks, all start/stop, undo, bank, and three sizes of words for judging what is readable in the
+sun. These are the real footswitch pictures; `docs/switch-screens.md` says what each one means.
+
+With the Teensy plugged into the computer, the app's **Switch screens** tab can take the three
+screens over and show what three footswitches are doing live (tick **Send to the board's
+screens**), or hold one sample page still (**The screens show**, **One sample page, held**).
 
 ## The piezo pad on the Teensy
 
@@ -61,7 +67,7 @@ which is what the SPD::ONE Kick sends, with the height of the spike beside it. T
 itself **Gig Rig Controller**, and the app (the build this program came with, or newer) knows it
 by that name: on the **Device check** tab click **Scan again**, and the **Kick pad** tab's
 **Board's pad** row says **Controller connected**. Stomp, and the kick plays. There is nothing to
-learn or choose. Screen 1 shows each hit's strength and spike height.
+learn or choose. Screen 1 shows each hit's strength and spike height across its bottom for a couple of seconds.
 
 The two levels (the spike that counts, and the spike that is the hardest hit) are the **Counts
 from** and **Hardest at** sliders on the **Board's pad** row. The Teensy keeps them in its own
