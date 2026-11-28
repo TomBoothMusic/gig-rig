@@ -1,8 +1,10 @@
 #include "KickPad.h"
 #include "DeviceReport.h"
 #include "MidiMonitor.h"
+#include "PadMessages.h"
 
 #include <cmath>
+#include <utility>
 
 namespace gigrig
 {
@@ -53,6 +55,17 @@ bool looksLikeSpdOne (const juce::String& deviceName)
 {
     const auto lower = deviceName.toLowerCase();
     return lower.contains ("spd-1") || lower.contains ("spd1") || lower.contains ("spd::one") || lower.contains ("spd-one");
+}
+
+bool looksLikeController (const juce::String& deviceName)
+{
+    const auto lower = deviceName.toLowerCase();
+    return lower.contains ("gig rig controller") || lower.contains ("teensy");
+}
+
+bool isBoardPadMessage (const juce::String& deviceName, const juce::MidiMessage& m)
+{
+    return m.getChannel() == padmsg::channel && (m.isController() || m.isNoteOnOrOff()) && looksLikeController (deviceName);
 }
 
 float kickGainForStrength (int strength, float touch) noexcept
@@ -479,12 +492,139 @@ int KickPad::padNote() const
     return note;
 }
 
+//==============================================================================
+// The board's own pad, by way of the controller.
+
+void KickPad::setBoardThreshold (int height) noexcept
+{
+    if (const auto v = padmsg::padThreshold (height); boardThreshold.exchange (v) != v)
+        boardLevelsToSend.store (true);
+}
+
+void KickPad::setBoardFull (int height) noexcept
+{
+    // Kept as asked for; getBoardFull gives what is used, which a low "Counts from" can push up.
+    if (const auto v = juce::jlimit (padmsg::fullMin, padmsg::heightMax, height); boardFull.exchange (v) != v)
+        boardLevelsToSend.store (true);
+}
+
+int KickPad::getBoardFull() const noexcept
+{
+    return padmsg::padFull (boardFull.load(), boardThreshold.load());
+}
+
+void KickPad::controllerOutputOpened (const juce::String& outputName)
+{
+    const juce::ScopedLock sl (lock);
+    controllerOut = outputName;
+
+    if (outputName.isNotEmpty())
+        boardLevelsToSend.store (true);
+}
+
+std::vector<juce::MidiMessage> KickPad::takeControllerMessages()
+{
+    {
+        const juce::ScopedLock sl (lock);
+
+        if (controllerOut.isEmpty())
+            return {};      // nowhere to send them: they wait for the output to open
+    }
+
+    if (! boardLevelsToSend.exchange (false))
+        return {};
+
+    const auto threshold = getBoardThreshold(), full = getBoardFull();
+    const auto cc = [] (int number, int value) { return juce::MidiMessage::controllerEvent (padmsg::channel, number, value); };
+
+    return { cc (padmsg::ccThresholdHigh, padmsg::padHigh (threshold)), cc (padmsg::ccThresholdLow, padmsg::padLow (threshold)),
+             cc (padmsg::ccFullHigh, padmsg::padHigh (full)),           cc (padmsg::ccFullLow, padmsg::padLow (full)),
+             cc (padmsg::ccAsk, 1) };
+}
+
+juce::String KickPad::controllerHeard() const
+{
+    const juce::ScopedLock sl (lock);
+    return controllerIn;
+}
+
+int KickPad::boardHitCount() const
+{
+    const juce::ScopedLock sl (lock);
+    return boardHits;
+}
+
+void KickPad::controllerMessage (const juce::String& deviceName, const juce::MidiMessage& m)
+{
+    // Called with the lock held.
+    controllerIn = deviceName;
+
+    if (m.getChannel() != padmsg::channel)
+        return;     // the finished board's controller will say much more than this; none of it is the pad's
+
+    if (m.isController())
+    {
+        const auto value = m.getControllerValue();
+
+        // A height comes as two CCs, the upper part first; it is whole when the lower part lands.
+        const auto pair = [&] (int ccHigh, int ccLow, int& part, auto&& whole)
+        {
+            if (m.getControllerNumber() == ccHigh)
+            {
+                part = value;
+            }
+            else if (m.getControllerNumber() == ccLow && part >= 0)
+            {
+                whole (padmsg::padJoin (part, value));
+                part = -1;
+            }
+        };
+
+        pair (padmsg::ccPeakHigh, padmsg::ccPeakLow, partPeak,                         [this] (int h) { nextPeak = h; });
+        pair (padmsg::ccIgnoredHigh, padmsg::ccIgnoredLow, partIgnored,                [this] (int h) { boardIgnored = juce::jmax (boardIgnored, h); });
+        pair (padmsg::ccThresholdHigh, padmsg::ccThresholdLow, partHeldThreshold,      [this] (int h) { heldThreshold = h; });
+        pair (padmsg::ccFullHigh, padmsg::ccFullLow, partHeldFull,                     [this] (int h) { heldFull = h; });
+
+        if (m.getControllerNumber() == padmsg::ccProgram)
+            controllerProgram = value;
+
+        return;
+    }
+
+    if (! m.isNoteOn())
+        return;
+
+    const auto height = std::exchange (nextPeak, -1);
+
+    if (m.getNoteNumber() != padmsg::note)
+    {
+        ++otherNotes;
+        return;
+    }
+
+    learning.store (false);     // the board's pad needs no teaching: a Learn left waiting would only take the next device's note
+
+    if (! boardOn.load())
+    {
+        ++boardNotPlayed;
+        return;
+    }
+
+    queueHit (m.getVelocity(), false, deviceName, m.getNoteNumber(), m.getChannel(), height);
+}
+
 void KickPad::handleMidi (const juce::String& deviceName, const juce::MidiMessage& m)
 {
     if (m.isMidiClock() || m.isActiveSense())
         return;
 
     const juce::ScopedLock sl (lock);
+
+    if (looksLikeController (deviceName))
+    {
+        controllerMessage (deviceName, m);
+        return;
+    }
 
     if (! m.isNoteOn())
     {
@@ -539,8 +679,10 @@ void KickPad::screenHit (int strength)
     queueHit (strength, true, {}, -1, 0);
 }
 
-void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int noteNumber, int channelNumber)
+void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int noteNumber, int channelNumber, int boardHeight)
 {
+    const bool fromBoard = boardHeight != notFromBoard;
+
     // Called with the lock held, so two threads never write to the queue at once.
     strength = juce::jlimit (1, 127, strength);
 
@@ -572,6 +714,20 @@ void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int 
     hit.timeMs = nowMs;
     hit.strength = strength;
     hit.fromScreen = fromScreen;
+    hit.fromBoard = fromBoard;
+    hit.height = fromBoard ? boardHeight : -1;
+
+    if (fromBoard)
+    {
+        ++boardHits;
+
+        if (boardHeight >= 0)
+        {
+            boardSoftest = boardWithHeight == 0 ? boardHeight : juce::jmin (boardSoftest, boardHeight);
+            boardHardest = juce::jmax (boardHardest, boardHeight);
+            ++boardWithHeight;
+        }
+    }
 
     if (fromScreen)
     {
@@ -579,10 +735,13 @@ void KickPad::queueHit (int strength, bool fromScreen, const juce::String&, int 
     }
     else
     {
-        channel = channelNumber;
+        if (! fromBoard)        // these two lines of the report are about the SPD::ONE (or a learned pad)
+        {
+            channel = channelNumber;
 
-        if (const auto name = noteName (noteNumber); notesSeen.size() < 8 && ! notesSeen.contains (name))
-            notesSeen.add (name);
+            if (const auto name = noteName (noteNumber); notesSeen.size() < 8 && ! notesSeen.contains (name))
+                notesSeen.add (name);
+        }
 
         if (hits > 0)
         {
@@ -625,6 +784,7 @@ void KickPad::resetCounts()
     recent.clear();
     piezoHits = 0;
     piezoSoftestDb = piezoHardestDb = 0.0f;
+    boardHits = boardWithHeight = boardSoftest = boardHardest = boardIgnored = boardNotPlayed = 0;
     piezoIgnoredPeak.store (0.0f);
 
     // Piezo hits already counted on the audio thread but not yet brought over belong to the test before this one.
@@ -685,6 +845,42 @@ juce::String KickPad::reportText() const
         lines.add ("  Piezo pad: off (no socket chosen).");
     }
 
+    {
+        const auto asked = "counts from " + juce::String (getBoardThreshold()) + ", hardest at " + juce::String (getBoardFull());
+        lines.add ("  Board's pad (a piezo wired to the board's controller): " + juce::String (boardOn.load() ? "on" : "OFF, its hits are counted and not played")
+                     + ". The app asks for: " + asked + " (of 4095, what the controller's pin reads).");
+
+        if (controllerIn.isEmpty() && controllerOut.isEmpty())
+        {
+            lines.add ("  Controller: none seen yet. (The app looks for a MIDI device called Gig Rig Controller.)");
+        }
+        else
+        {
+            juce::String line = "  Controller: \"" + (controllerIn.isNotEmpty() ? controllerIn : controllerOut) + "\"";
+            line << (controllerIn.isNotEmpty() ? " heard" : " found, nothing heard from it yet");
+
+            if (controllerProgram > 0)
+                line << ", program " << controllerProgram;
+
+            if (heldThreshold >= 0 && heldFull >= 0)
+                line << ", holds: counts from " << heldThreshold << ", hardest at " << heldFull;
+
+            line << (controllerOut.isNotEmpty() ? ". The app can set its levels." : ". THE APP CANNOT SET ITS LEVELS YET: press Scan again on the Device check tab.");
+            lines.add (line);
+
+            if (heldThreshold >= 0 && heldFull >= 0 && (heldThreshold != getBoardThreshold() || heldFull != getBoardFull()))
+                lines.add ("  THE CONTROLLER'S LEVELS ARE NOT THE APP'S: press Scan again on the Device check tab, which sends them again.");
+
+            if (controllerProgram == 0 && boardHits > 0 && boardWithHeight == 0)
+                lines.add ("  This controller carries the first bench program: its hits play, but it cannot take levels from the app or say how tall a spike was. Load the newest GigRig-Controller-Test.hex.");
+
+            lines.add ("  Board's pad hits: " + juce::String (boardHits)
+                         + (boardWithHeight > 0 ? ". Smallest spike counted " + juce::String (boardSoftest) + ", tallest " + juce::String (boardHardest) + " (of 4095)" : juce::String())
+                         + ". Tallest knock that did not count (a tap beside the pad, a footswitch): " + (boardIgnored > 0 ? juce::String (boardIgnored) : juce::String ("none told yet"))
+                         + (boardNotPlayed > 0 ? ". Not played because the board's pad is off: " + juce::String (boardNotPlayed) : juce::String()) + ".");
+        }
+    }
+
     if (hits == 0)
     {
         lines.add ("  Hits from the pad: none yet.");
@@ -715,7 +911,8 @@ juce::String KickPad::reportText() const
         }
 
         lines.add (bands);
-        lines.add ("  Notes the pad sent: " + notesSeen.joinIntoString (", ") + ".");
+        if (! notesSeen.isEmpty())
+            lines.add ("  Notes the pad sent: " + notesSeen.joinIntoString (", ") + ".");
 
         if (closestGapMs >= 0)
             lines.add ("  Closest two hits: " + juce::String (closestGapMs) + " ms apart. Hits under " + juce::String (doubleHitMs)
@@ -744,6 +941,7 @@ juce::String KickPad::reportText() const
         {
             row << " " << juce::String (h.strength).paddedLeft (' ', 3)
                 << (h.fromPiezo ? " (piezo " + juce::String (h.peakDb, 1) + " dB)" : juce::String())
+                << (h.fromBoard ? (h.height >= 0 ? " (board " + juce::String (h.height) + ")" : juce::String (" (board)")) : juce::String())
                 << (h.fromScreen ? " (screen)" : h.gapMs >= 0 ? " +" + juce::String (h.gapMs) + "ms" : juce::String (" first")) << "  |";
 
             if (++inRow == 6)

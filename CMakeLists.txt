@@ -201,6 +201,10 @@ target_sources(GigRig PRIVATE
     src/effects/bass9/Bass9.cpp
     src/effects/bass9/Bass9Checks.cpp)
 
+# What the app and the board's controller say to each other about the kick pad: one file,
+# built into both programs (the controller's is firmware/bench-test).
+target_include_directories(GigRig PRIVATE firmware/shared)
+
 target_compile_definitions(GigRig PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0

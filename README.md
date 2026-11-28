@@ -15,7 +15,7 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 | 4 | Songs: the looper set-ups Tom uses from his RC-600 backup, each calling up its own sounds, loaded by a program number from Songbook Pro | Built |
 | 5 and 6 | The effects: four chains (electric, acoustic, bass, vocal) of drives, amp models, compressors, EQs, delays, reverbs, modulation, wah, whammy, vocal harmony and the Bass9 copy | Built |
 | Mixer | The app's own mixer: channels with gate, EQ and compressors, reverbs and delays after the looper, monitor mixes, act and venue presets, recording. Off until you switch it on | Built, first version |
-| Kick pad | A test: the SPD::ONE Kick over USB plays a kick made inside the app | Built as a test |
+| Kick pad | A test: the SPD::ONE Kick over USB, or a piezo pad read by the board's controller, plays a kick made inside the app | Built as a test (the controller's pad is not proven on hardware yet) |
 | Remote screen | The rig on a phone or tablet: looper, songs, the arrangement builder, effects, mixer, tools. Off until you switch it on | Built, two phases |
 | Break music | Music between sets played by the rig itself: fades down when you start playing, comes back only by hand | Built, first version |
 | Tuner | A full-screen purple strobe tuner; with the mixer on the guitars are silent while tuning and the microphone stays live | Built, second version (28 Nov 2026), waiting for Tom's test |
@@ -234,8 +234,8 @@ the RC-600 set to send the pedal as a controller (in the RC-600's ASSIGN setting
 
 ### Part G: the mini PC, when you set it up (not part of this sitting)
 
-1. **One line installs everything.** While the code is private, use the long line in
-   `docs/linux-setup.md`, step B3, as before. Once the repository is public it is this:
+1. **One line installs everything.** Follow the "Mini PC set-up day" page in the Claude
+   project (or `docs/linux-setup.md`, Part B). The line is:
    `wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash`
 2. **Updating is one click.** Press the Super key (the one with the Windows logo), type
    `Gig`, and click **Gig Rig: update**. It fetches the newest build, checks it, switches to
@@ -1212,6 +1212,7 @@ GigRig --report report.txt      # write the device report, no window
 | `src/AmpModels.*`, `src/Responses.*` | The built-in amp models, and response files made from a capture |
 | `src/Mixer.*`, `src/MixerPanel.*`, `src/MixRecorder.*`, `src/MixerSelfTest.cpp` | The mixer, its tab, recording and its checks ([docs/mixer.md](docs/mixer.md)) |
 | `src/KickPad.*`, `src/KickPadPanel.*`, `src/KickPadSelfTest.cpp` | The kick pad test ([docs/kick-pad.md](docs/kick-pad.md)) |
+| `firmware/shared/PadMessages.h` | What the app and the board's controller say to each other about the kick pad, and the controller's pad logic. Built into both programs ([docs/kick-pad.md](docs/kick-pad.md), "The board's own pad") |
 | `src/BreakMusic.*`, `src/BreakMusicPanel.*`, `src/BreakMusicSelfTest.cpp` | Break music and the venue knob's hold ([docs/break-music.md](docs/break-music.md)) |
 | `src/Tuner.*`, `src/StrobeTuner.*`, `src/TunerStrip.*`, `src/TunerSelfTest.cpp` | The tuner and its full-screen strobe ([docs/tuner.md](docs/tuner.md)) |
 | `src/ExpressionPedal.*`, `src/ExpressionSelfTest.cpp` | A real expression pedal over MIDI ([docs/mixer.md](docs/mixer.md)) |

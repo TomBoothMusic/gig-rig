@@ -139,6 +139,51 @@ for 40 ms while the plate rings, so one stomp is one hit. The results say how ta
 smallest and tallest counted spikes were, and how tall the tallest ignored one was. Those
 three numbers are what the two sliders should be set from.
 
+## The board's own pad (the piezo on the controller)
+
+Built 28 Nov 2026, before the parts arrived. This is how the finished board has it: the same
+piezo disc, wired to the board's controller (the Teensy) and not to a mixer socket. The
+controller measures each spike and sends the app a hit with a strength over its USB lead,
+exactly as the SPD::ONE Kick does. So a hit from the board's pad takes the same road through
+the app as the SPD::ONE's: the same kick, the same mixer channel, into loops, and noted in a
+recording so a virtual soundcheck makes it again.
+
+**It needs no setting up in the app.** The controller names itself **Gig Rig Controller**, and
+the app knows it by that name, as it knows the SPD::ONE by its name. There is no **Learn pad**
+step. The SPD::ONE and the board's pad can be plugged in together and both play.
+
+**Running the test** (wiring: `docs/bench-test.md` and the bench test page, Test D)
+
+1. Load the newest `GigRig-Controller-Test.hex` onto the Teensy (bench test page, "Get the
+   Teensy ready"). An older one still plays, but cannot be set from the app.
+2. Plug the Teensy into the computer. On the **Device check** tab click **Scan again**.
+3. On the **Kick pad** tab, the row that starts **Board's pad** should now say
+   **Controller connected** at its right-hand end. Leave **Piezo pad** on **Off**.
+4. Stomp on the pad. The kick plays, and each hit shows in **The last hits** with
+   `(board ...)` beside it: how tall its spike was, out of 4095.
+5. Stomp from the softest tap to the hardest stomp, a fast double, and a steady run.
+6. Tap the bench right beside the pad, as hard as a footswitch press. It should **not** play.
+7. Click **Copy kick pad results** and paste them into the thread.
+
+| Setting | What it does |
+| --- | --- |
+| Board's pad (tick box) | Off: the controller's hits are counted and shown, but no kick plays. |
+| Counts from | How tall a spike must be to count as a hit, out of 4095. Raise it if a knock beside the pad plays the kick. Lower it if soft taps are missed. |
+| Hardest at | A spike this tall is the hardest hit. Set it near the tallest spike your hardest stomp makes. The results list it. |
+
+The two levels are sent to the controller the moment a slider moves, and the controller keeps
+them in its own memory, so they are still there after the power has been off and on any
+computer it is plugged into. The results say what the app asked for and what the controller
+says it holds; a line in capitals appears if the two differ.
+
+The controller watches each spike for 2 ms to find its top, sends the hit, then ignores the
+pad for 40 ms while the plate rings, the same as the app does for a piezo on a socket. It also
+tells the app about knocks that were too small to count (never more than four a second), which
+is where **Tallest knock that did not count** in the results comes from.
+
+**Not proven yet:** all of this has only run inside the app's self-test, against a pretend pin.
+The first stomp on a real pad is the proof.
+
 ## What this test leaves out, on purpose
 
 - (Changed 27 Nov 2026, once Tom was happy with the sound.) The kick now joins a socket, so it
@@ -173,6 +218,14 @@ on its socket.
   A hit reaches the looper a few milliseconds earlier than the same stomp would as audio through
   the interface (no input delay); at a 64-sample buffer that is under 5 ms and is left alone.
 
+- The board's pad: what the controller and the app say to each other is one file,
+  `firmware/shared/PadMessages.h`, built into both programs. It also holds the controller's own
+  thinking (`PadWatcher`, `PadLevels`), so the app's self-test runs the very lines the Teensy
+  runs. Change the pad's behaviour there, not in `firmware/bench-test/src/main.cpp`. A
+  controller with an older program is still out there on Tom's bench: add new controller
+  numbers, never give an old one a new meaning. The app opens a MIDI output only for the
+  controller (`KickPadPanel::midiOpened`, after each Scan again), and only to send the two levels.
+  `kick-pad.txt` gained `boardPad`, `boardFrom`, `boardFull` (on Tom's disk: never rename).
 - Logic: `src/KickPad.*` (no screen). Screen: `src/KickPadPanel.*`. Checks: `src/KickPadSelfTest.cpp`.
 - MIDI reaches it from `MainComponent` (the same place the pedal gets it). Hits cross to the
   audio thread through a small queue and start on the first sample of the next block.

@@ -140,7 +140,7 @@ saved loop already has the EQ and compressors of the night in it. Instead:
   it is recorded through the new setting, exactly as at the gig.
 - **The rest of what the feet did is noted and done again too** (Tom, 28 Nov 2026: "I'd need
   all of those things as well"), in the same file:
-  - **Kicks from the kick pad** (the SPD::ONE or the on-screen buttons), each with how hard it
+  - **Kicks from the kick pad** (the SPD::ONE, the board's own pad on the controller, or the on-screen buttons), each with how hard it
     was hit, on the same block of sound it was played on. The kick is made afresh, so a change
     to the kick's sound or its channel is heard.
   - **Effect switch presses** (a switch the Effects tab or the song has taken from the looper:

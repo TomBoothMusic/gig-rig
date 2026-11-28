@@ -118,7 +118,8 @@ RUNTIME_PACKAGES=(
     libx11-dev libxext-dev libxrender-dev libxrandr-dev libxinerama-dev
     libxcursor-dev libxcomposite-dev libxi-dev
     # Tools the guide, the check script and Claude use
-    alsa-utils xvfb gh git curl ca-certificates pciutils usbutils
+    # (xauth: xvfb-run cannot start without it, and the build's self-test runs under xvfb-run)
+    alsa-utils xvfb xauth gh git curl ca-certificates pciutils usbutils
     # Realtime interrupt priorities for the sound and USB hardware
     rtirq-init
 )
@@ -361,6 +362,8 @@ fi
 
 # Never switch to a build that fails its own checks.
 selftest="$RIG_HOME/logs/self-test-$label.txt"
+echo "   Checking build $label with its built-in self-test. This takes a few minutes and"
+echo "   nothing shows while it runs. Leave it alone until the next line appears."
 if xvfb-run -a "$app" --self-test "$selftest" > /dev/null 2>&1; then
     ok "Build $label passed its self-test"
 else

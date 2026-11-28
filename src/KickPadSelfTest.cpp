@@ -1,5 +1,6 @@
 #include "AudioEngine.h"
 #include "KickPad.h"
+#include "PadMessages.h"
 
 #include <cmath>
 #include <functional>
@@ -525,6 +526,270 @@ void runKickPadSelfTest (const std::function<void (bool, const juce::String&)>& 
         check (peak (play (socket)) == 0.0f, "piezo pad: with the kick pad off a knock plays nothing");
         p.collect();
         check (p.hitCount() == 1, "piezo pad: but it is still counted");
+    }
+
+    // ---- the board's own pad: the piezo wired to the board's controller (28 Nov 2026) --------
+    // There is no Teensy on a build machine, so the controller's own thinking (when a reading is
+    // a stomp, how tall, how strong, what it sends, what it takes from the app) lives in
+    // firmware/shared/PadMessages.h and runs here: the pretend controller below is those very
+    // lines, given a pretend pin to read.
+    {
+        using namespace padmsg;
+        const auto cc = [] (int number, int value) { return juce::MidiMessage::controllerEvent (channel, number, value); };
+        const juce::String name = "Gig Rig Controller";
+
+        struct PretendController
+        {
+            PadLevels levels;
+            PadWatcher watcher;
+            uint32_t clock = 0xffff0000u;       // a little before the controller's clock wraps to nought, so the wrap is checked too
+            KickPad* app = nullptr;
+            juce::String name;
+            int hits = 0, knocks = 0, lastStrength = 0, lastHeight = 0, lastKnock = 0;
+            uint32_t lastHitAt = 0;
+
+            void toApp (const PadMessage* messages, int count) const
+            {
+                for (int i = 0; i < count && app != nullptr; ++i)
+                    app->handleMidi (name, messages[i].isNote ? juce::MidiMessage::noteOn (channel, messages[i].number, (juce::uint8) messages[i].value)
+                                                               : juce::MidiMessage::controllerEvent (channel, messages[i].number, messages[i].value));
+            }
+
+            /** Reads the pin as often as the controller's timer does, for this long. pin is given the time since the start, in millionths. */
+            void run (double ms, const std::function<int (double)>& pin)
+            {
+                const auto start = clock;
+
+                for (; (double) (uint32_t) (clock - start) < ms * 1000.0; clock += (uint32_t) readEveryMicros)
+                {
+                    const auto event = watcher.read (pin != nullptr ? pin ((double) (uint32_t) (clock - start)) : 0, clock, levels.threshold, levels.full);
+
+                    if (event.kind == PadWatcher::hit)      { ++hits; lastStrength = event.strength; lastHeight = event.height; lastHitAt = clock - start; }
+                    if (event.kind == PadWatcher::knock)    { ++knocks; lastKnock = juce::jmax (lastKnock, event.height); }
+
+                    PadMessage out[3];
+                    toApp (out, event.messages (out));
+                }
+            }
+
+            /** What a piezo under a plate gives the pin: a spike that reaches its top (this height)
+                0.6 ms in, then rings on, dying away, with the downward halves cut off by the diode. */
+            static std::function<int (double)> spike (int height)
+            {
+                return [height] (double micros)
+                {
+                    const auto swing = std::sin (twoPi * micros / 2400.0);
+                    const auto fade = std::exp (-juce::jmax (0.0, micros - 600.0) / 6000.0);
+                    return (int) std::lround ((double) height * juce::jmax (0.0, swing) * fade);
+                };
+            }
+
+            /** One stomp, and the 60 ms after it. Returns its strength, or 0 if it did not count. */
+            int stomp (int height)
+            {
+                const auto before = hits;
+                run (60.0, spike (height));
+                return hits > before ? lastStrength : 0;
+            }
+
+            /** What arrives from the app over USB. */
+            void fromApp (const std::vector<juce::MidiMessage>& messages)
+            {
+                for (const auto& m : messages)
+                {
+                    if (! m.isController() || m.getChannel() != channel)
+                        continue;
+
+                    if (levels.take (m.getControllerNumber(), m.getControllerValue()) == PadLevels::asked)
+                    {
+                        PadMessage out[5];
+                        toApp (out, levels.answer (out));
+                    }
+                }
+            }
+        };
+
+        bool splits = true, rises = true, matchesSocket = true;
+
+        for (int h = 0; h <= heightMax; ++h)
+        {
+            splits = splits && padJoin (padHigh (h), padLow (h)) == h && padHigh (h) <= 127 && padLow (h) <= 127;
+            rises = rises && (h == 0 || padStrength (h, 80, 3000) >= padStrength (h - 1, 80, 3000));
+
+            // The same curve as a piezo on a socket, with the heights as parts of full scale.
+            const auto asSocket = KickPad::piezoStrength ((float) h / 4095.0f, juce::Decibels::gainToDecibels (80.0f / 4095.0f), juce::Decibels::gainToDecibels (3000.0f / 4095.0f));
+            matchesSocket = matchesSocket && std::abs (asSocket - padStrength (h, 80, 3000)) <= 1;
+        }
+
+        check (splits, "board pad: every height from 0 to 4095 survives the trip as two CCs");
+        check (rises && padStrength (79, 80, 3000) == 0 && padStrength (80, 80, 3000) == 1 && padStrength (3000, 80, 3000) == 127 && padStrength (4095, 80, 3000) == 127,
+               "board pad: nothing under Counts from, strength 1 at it, 127 at Hardest at and above, never falling in between");
+        check (matchesSocket, "board pad: the controller's strength curve is the one the app uses for a piezo on a socket");
+        check (padThreshold (5) == thresholdMin && padThreshold (9000) == thresholdMax && padFull (100, 400) == 600 && padFull (9000, 80) == heightMax,
+               "board pad: levels asked for out of range are brought back in, and Hardest at stays above Counts from");
+
+        check (looksLikeController ("Gig Rig Controller") && looksLikeController ("Gig Rig Controller MIDI 1") && looksLikeController ("Teensy MIDI")
+                 && ! looksLikeController ("SPD-1K") && ! looksLikeController ("RC-600") && ! looksLikeController ("CQ12T MIDI") && ! looksLikeSpdOne ("Gig Rig Controller"),
+               "board pad: the controller is known by its name, and nothing else is taken for it");
+
+        // ---- the controller alone: what it makes of the pin ----
+        {
+            PretendController c;
+            c.run (300.0, nullptr);
+            c.run (300.0, [] (double micros) { return 3 + (int) (micros / 100.0) % 5; });
+            check (c.hits == 0 && c.knocks == 0, "controller: a still pad, or one with a little hum on it, sends nothing");
+
+            check (c.stomp (1500) == padStrength (1500, thresholdDefault, fullDefault) && c.hits == 1 && c.lastHeight == 1500,
+                   "controller: one stomp is one hit, however long the plate rings, and its height is the top of the spike");
+            check (c.lastHitAt >= 2000 && c.lastHitAt <= 2100, "controller: the hit is sent two thousandths of a second after the spike begins");
+
+            // A second spike 20 ms after the first is taken for the plate still ringing; one 50 ms after is another stomp.
+            const auto twoSpikes = [] (double gapMicros)
+            {
+                return [gapMicros] (double micros)
+                {
+                    return PretendController::spike (2000) (micros) + (micros >= gapMicros ? PretendController::spike (2000) (micros - gapMicros) : 0);
+                };
+            };
+
+            PretendController d, e;
+            d.run (120.0, twoSpikes (20000.0));
+            e.run (120.0, twoSpikes (50000.0));
+            check (d.hits == 1 && e.hits == 2, "controller: the pad is ignored for 40 ms after a hit, and no longer");
+
+            PretendController f;
+            f.run (60.0, PretendController::spike (60));
+            check (f.hits == 0 && f.knocks == 1 && f.lastKnock >= 55 && f.lastKnock <= 60, "controller: a knock under Counts from is not a hit, and the app is told how tall it was");
+            f.knocks = 0;
+            f.run (2000.0, [] (double micros) { return (int) (micros / 100.0) % 2 == 0 ? 50 : 0; });
+            check (f.hits == 0 && f.knocks >= 7 && f.knocks <= 9, "controller: a pad that rattles on tells the app no more than four times a second");
+
+            PretendController g;
+            g.levels.set (400, 2000);
+            check (g.stomp (300) == 0 && g.stomp (2000) == 127 && g.stomp (1000) == padStrength (1000, 400, 2000), "controller: it counts stomps by the levels it holds");
+
+            PadMessage out[5];
+            PadLevels held;
+            check (held.take (ccThresholdLow, 3) == PadLevels::nothing && held.threshold == thresholdDefault
+                     && held.take (ccThresholdHigh, padHigh (150)) == PadLevels::nothing && held.take (ccThresholdLow, padLow (150)) == PadLevels::changed && held.threshold == 150
+                     && held.take (ccThresholdHigh, padHigh (150)) == PadLevels::nothing && held.take (ccThresholdLow, padLow (150)) == PadLevels::nothing
+                     && held.take (ccAsk, 1) == PadLevels::asked && held.answer (out) == 5 && out[0].number == ccProgram && out[0].value == program,
+                   "controller: a level is taken only when both its parts have arrived, and it says when one really changed (that is when it writes its memory)");
+        }
+
+        // ---- the controller and the app together ----
+        KickPad p;
+        p.prepare (rate);
+        testSettings (p);
+        PretendController board;
+        board.app = &p;
+        board.name = name;
+        check (p.reportText().contains ("Controller: none seen yet") && p.takeControllerMessages().empty(), "board pad: with no controller the report says so and nothing is sent anywhere");
+
+        run (p, 0.1);
+        const auto strength = board.stomp (1500);
+        float left[block] = {}, right[block] = {};
+        p.process (left, right, block, false);
+        check (strength > 1 && strength < 127 && p.hitCount() == 1 && p.boardHitCount() == 1 && p.padDevice().isEmpty(), "board pad: a stomp on the board's pad is a hit, with no pad to learn");
+        check (left[0] != 0.0f || left[1] != 0.0f, "board pad: its kick starts on the first sample of the next block");
+        check (p.numStarted() == 1 && p.startedStrength (0) == strength, "board pad: the hit is handed to a recording's notes, so a soundcheck makes it again");
+        check (p.reportText().contains ("(board 1500)") && p.reportText().contains ("Smallest spike counted 1500, tallest 1500"), "board pad: the report gives each spike's height");
+
+        // The same road as the SPD::ONE: the same strength makes the same sound, sample for sample.
+        {
+            KickPad a, b;
+            a.prepare (rate);
+            b.prepare (rate);
+            testSettings (a);
+            testSettings (b);
+            PretendController other;
+            other.app = &b;
+            other.name = name;
+            a.handleMidi ("SPD-1K", juce::MidiMessage::noteOn (10, 60, (juce::uint8) strength));
+            other.stomp (1500);
+            check (run (a, 0.5) == run (b, 0.5), "board pad: a hit plays exactly what the same strength from the SPD::ONE plays");
+
+            // And the two can be plugged in together: each plays, and the SPD::ONE is still the pad found by name.
+            a.resetCounts();
+            other.app = &a;
+            other.stomp (1500);
+            check (a.hitCount() == 1 && a.boardHitCount() == 1 && a.padDevice() == "SPD-1K" && peak (run (a, 0.1)) > 0.05f, "board pad: it plays beside an SPD::ONE without taking its place");
+        }
+
+        // One stomp that reaches the app twice: the weaker one is not played, as with the SPD::ONE.
+        p.resetCounts();
+        p.handleMidi (name, juce::MidiMessage::noteOn (channel, note, (juce::uint8) 110));
+        p.handleMidi (name, juce::MidiMessage::noteOn (channel, note, (juce::uint8) 20));
+        check (p.reportText().contains ("weaker of the pair: 1"), "board pad: the bounce guard covers it too");
+
+        // What else the controller may say.
+        p.resetCounts();
+        run (p, 1.0);
+        p.handleMidi (name, juce::MidiMessage::noteOn (channel, note + 1, (juce::uint8) 100));
+        p.handleMidi (name, juce::MidiMessage::noteOn (1, note, (juce::uint8) 100));
+        p.handleMidi (name, juce::MidiMessage::controllerEvent (1, ccPeakLow, 5));
+        p.handleMidi (name, juce::MidiMessage::noteOff (channel, note));
+        check (p.hitCount() == 0 && peak (run (p, 0.1)) == 0.0f, "board pad: another note or another channel from the controller is not a kick");
+
+        board.run (60.0, PretendController::spike (61));
+        board.run (300.0, PretendController::spike (44));
+        check (p.hitCount() == 0 && p.reportText().contains ("Tallest knock that did not count (a tap beside the pad, a footswitch): 61."), "board pad: the report keeps the tallest knock that did not count");
+
+        p.learnNextNote();
+        board.stomp (900);
+        check (p.padDevice().isEmpty() && ! p.isLearning() && p.boardHitCount() == 1, "board pad: a Learn left waiting does not take the board's pad as the SPD::ONE");
+
+        run (p, 1.0);
+        p.resetCounts();
+        board.stomp (900);
+        check (p.hitCount() == 1 && peak (run (p, 0.1, true)) == 0.0f, "board pad: silent while a measurement runs");
+
+        p.setBoardPadOn (false);
+        p.resetCounts();
+        board.stomp (900);
+        check (p.hitCount() == 0 && peak (run (p, 0.1)) == 0.0f && p.reportText().contains ("Not played because the board's pad is off: 1"), "board pad: switched off, its hits are counted and not played");
+        p.setBoardPadOn (true);
+
+        p.setOn (false);
+        board.stomp (900);
+        check (p.hitCount() == 1 && peak (run (p, 0.1)) == 0.0f, "board pad: with the kick pad off a hit is counted and plays nothing");
+        p.setOn (true);
+
+        // The app tells the controller its two levels.
+        p.setBoardThreshold (150);
+        p.setBoardFull (2600);
+        check (p.takeControllerMessages().empty() && p.reportText().contains ("THE APP CANNOT SET ITS LEVELS YET"), "board pad: with no way to the controller the levels wait, and the report says to scan again");
+
+        p.controllerOutputOpened (name);
+        const auto first = p.takeControllerMessages();
+        board.fromApp (first);
+        check (first.size() == 5 && board.levels.threshold == 150 && board.levels.full == 2600, "board pad: when the controller is found it is sent both levels and asked what it holds");
+        check (p.takeControllerMessages().empty(), "board pad: and nothing more is sent until a level changes");
+        check (p.reportText().contains ("program 2, holds: counts from 150, hardest at 2600. The app can set its levels.") && ! p.reportText().contains ("NOT THE APP'S"),
+               "board pad: the report shows the program and the levels the controller says it holds");
+
+        p.setBoardThreshold (150);
+        check (p.takeControllerMessages().empty(), "board pad: setting a level to what it already is sends nothing");
+        p.setBoardThreshold (1900);     // pushes Hardest at up with it
+        check (p.getBoardFull() == 2850 && p.reportText().contains ("NOT THE APP'S"), "board pad: until the controller answers a change, the report says its levels are not the app's");
+        board.fromApp (p.takeControllerMessages());
+        check (board.levels.threshold == 1900 && board.levels.full == 2850 && ! p.reportText().contains ("NOT THE APP'S"), "board pad: a changed level reaches the controller, and Hardest at stays above Counts from on both sides");
+
+        p.resetCounts();
+        check (board.stomp (1000) == 0 && board.stomp (2850) == 127 && p.hitCount() == 1, "board pad: the controller then counts stomps by the new levels");
+
+        // The pad's own messages are never taken for an expression pedal or anything else.
+        check (isBoardPadMessage (name, cc (ccPeakHigh, 3)) && isBoardPadMessage ("Teensy MIDI", juce::MidiMessage::noteOn (channel, note, (juce::uint8) 90))
+                 && ! isBoardPadMessage ("RC-600", cc (ccPeakHigh, 3)) && ! isBoardPadMessage (name, juce::MidiMessage::controllerEvent (1, 11, 64)),
+               "board pad: its messages are known for what they are, and the controller's other messages are left alone");
+
+        // A Teensy still carrying the first bench program sends the note alone.
+        KickPad old;
+        old.prepare (rate);
+        testSettings (old);
+        old.handleMidi ("Teensy MIDI", juce::MidiMessage::noteOn (channel, note, (juce::uint8) 70));
+        check (peak (run (old, 0.1)) > 0.05f && old.reportText().contains ("(board)") && old.reportText().contains ("first bench program"),
+               "board pad: a controller with the first bench program still plays, and the report says to load the newer one");
     }
 }
 

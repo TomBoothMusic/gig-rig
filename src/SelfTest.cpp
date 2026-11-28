@@ -69,7 +69,7 @@ juce::String runSelfTest (bool& passed)
     };
 
     // For working on one part without waiting for the rest (never used by the automatic builds):
-    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, recordings, songs, screens.
+    // GIGRIG_SELFTEST_ONLY=break runs only that part's checks. Parts: break, pedal, tuner, remote, mixer, recordings, songs, screens, kick.
     if (const auto only = juce::SystemStats::getEnvironmentVariable ("GIGRIG_SELFTEST_ONLY", {}); only.isNotEmpty())
     {
         if (only == "break")        runBreakMusicSelfTest (check);
@@ -80,6 +80,7 @@ juce::String runSelfTest (bool& passed)
         else if (only == "recordings") runRecordingsSelfTest (check);
         else if (only == "songs")   runSongSelfTest (check);
         else if (only == "screens") runSwitchScreensSelfTest (check);
+        else if (only == "kick")    runKickPadSelfTest (check);
 
         passed = failures == 0;
         log.add ({});

@@ -63,14 +63,29 @@ Everything meets at one point, P (one free row of the breadboard):
 | 10 kΩ resistor | P | pin 14 (A0) |
 
 A stomp is sent to the computer as MIDI note 60 on channel 10 with a strength from 1 to 127,
-which is what the SPD::ONE Kick sends, so the app's Kick pad tab plays it unchanged: on the
-**Device check** tab click **Scan again**, then on the **Kick pad** tab set **Piezo pad** to
-**Off**, click **Learn pad** and hit the pad once. Screen 1 shows each hit's strength and spike height across its bottom for a couple of seconds.
+which is what the SPD::ONE Kick sends, with the height of the spike beside it. The Teensy names
+itself **Gig Rig Controller**, and the app (the build this program came with, or newer) knows it
+by that name: on the **Device check** tab click **Scan again**, and the **Kick pad** tab's
+**Board's pad** row says **Controller connected**. Stomp, and the kick plays. There is nothing to
+learn or choose. Screen 1 shows each hit's strength and spike height across its bottom for a couple of seconds.
 
-The two levels (the spike that counts, and the spike that is the hardest hit) are fixed numbers
-at the top of `main.cpp` in this first program. They are set from Tom's results.
+The two levels (the spike that counts, and the spike that is the hardest hit) are the **Counts
+from** and **Hardest at** sliders on the **Board's pad** row. The Teensy keeps them in its own
+memory. The full steps and what to paste back are in `docs/kick-pad.md`, "The board's own pad".
+
+Windows sometimes keeps showing a Teensy it has met before under its old name, **Teensy MIDI**.
+The app takes that name for the controller too.
+
+All the pad's thinking is in `firmware/shared/PadMessages.h`, which the app is built from as
+well, so the app's self-test checks it on every build. `main.cpp` only reads the pin and hands
+messages to USB.
+
+**The pin in the finished board.** The pad needs one of the Teensy's analog pins (this program
+uses pin 14, A0), and the design doc's pin budget has all 42 easy pins spoken for. That is to
+be settled before the final wiring; the design doc has the suggestion (Hardware, "Teensy pin budget").
 
 ## What is proven and what is not
 
-GitHub proves the program compiles. It has **not** run on a real Teensy, screen or piezo yet:
-the first bench test is that proof.
+GitHub proves the program compiles, and the app's self-test proves the pad's thinking (what
+counts as a stomp, how strong, what is sent) against a pretend pin. It has **not** run on a real
+Teensy, screen or piezo yet: the first bench test is that proof.

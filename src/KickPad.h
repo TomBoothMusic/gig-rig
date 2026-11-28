@@ -13,6 +13,16 @@ namespace gigrig
 /** True for the Roland SPD::ONE pads, which show up as "SPD-1K", "SPD-1P" and so on. */
 bool looksLikeSpdOne (const juce::String& deviceName);
 
+/** True for the board's own controller (the Teensy), which names itself "Gig Rig Controller"
+    (firmware/bench-test/src/usb_name.c). A Teensy still carrying the first bench program shows
+    up as "Teensy MIDI" and counts too. */
+bool looksLikeController (const juce::String& deviceName);
+
+/** True for anything the controller says about the board's pad (firmware/shared/PadMessages.h):
+    the kick pad takes these, and nothing else in the app should (an expression pedal being
+    learned must not pick up the pad's own controller numbers when the pad is knocked). */
+bool isBoardPadMessage (const juce::String& deviceName, const juce::MidiMessage&);
+
 /** How loud a hit of this strength (1 to 127) plays, 0..1, for a touch setting.
     Touch 1 is a straight line; higher makes soft hits softer still. */
 float kickGainForStrength (int strength, float touch) noexcept;
@@ -122,6 +132,38 @@ public:
     /** The strength (0 = not a hit, else 1 to 127) of a spike of this height, 0..1 of full scale. */
     static int piezoStrength (float peak, float thresholdDb, float fullDb) noexcept;
 
+    //==============================================================================
+    // The board's own pad (28 Nov 2026, docs/kick-pad.md): the same piezo disc, wired to the
+    // board's controller (the Teensy) and not to a socket, which is how the finished board has
+    // it. The controller measures the spike and sends a note with a strength over USB, exactly
+    // as the SPD::ONE does, so its hits take the SPD::ONE's road through the app: the same
+    // bounce guard, the same start on the next block, and the same note in a recording for a
+    // soundcheck to make again. What the two say to each other: firmware/shared/PadMessages.h.
+
+    /** Off: the controller's hits are counted and not played. */
+    void setBoardPadOn (bool shouldBeOn) noexcept   { boardOn.store (shouldBeOn); }
+    bool isBoardPadOn() const noexcept              { return boardOn.load(); }
+
+    /** The two levels the controller should use, of 4095 (what its pin reads): a spike has to
+        reach the first to count, and the second or more is the hardest hit. The controller is
+        told (takeControllerMessages) and remembers them itself. */
+    void setBoardThreshold (int height) noexcept;
+    int getBoardThreshold() const noexcept          { return boardThreshold.load(); }
+    void setBoardFull (int height) noexcept;
+    int getBoardFull() const noexcept;
+
+    /** The MIDI output that reaches the controller was opened (its name) or is not there (empty).
+        Opening it sends the two levels and asks the controller what it holds. */
+    void controllerOutputOpened (const juce::String& outputName);
+
+    /** What should be sent to the controller now, in order; nearly always nothing. The screen
+        asks ten times a second and sends it: nothing in here touches a MIDI output. */
+    std::vector<juce::MidiMessage> takeControllerMessages();
+
+    /** The controller's name once anything has been heard from it, else empty. */
+    juce::String controllerHeard() const;
+    int boardHitCount() const;
+
     /** Brings the piezo's hits, counted on the audio thread, into the report. The screen calls it. */
     void collect();
 
@@ -142,6 +184,8 @@ public:
         bool fromScreen = false;
         bool fromPiezo = false;
         float peakDb = 0.0f;    // a piezo hit: how tall its spike was
+        bool fromBoard = false; // the board's own pad, by way of the controller
+        int height = -1;        // a board pad hit: how tall its spike was, of 4095 (-1 = the controller did not say)
     };
 
     /** The most recent hits, oldest first (at most 32). */
@@ -162,7 +206,9 @@ public:
 
 private:
     struct Queued { int strength = 0; juce::int64 ticks = 0; };
-    void queueHit (int strength, bool fromScreen, const juce::String& device, int note, int channel);
+    void queueHit (int strength, bool fromScreen, const juce::String& device, int note, int channel, int boardHeight = notFromBoard);
+    void controllerMessage (const juce::String& deviceName, const juce::MidiMessage&);
+    static constexpr int notFromBoard = -2;
 
     /** One sounding kick. Two exist: the newest, and the one before it fading out underneath. */
     struct Voice
@@ -202,6 +248,8 @@ private:
     std::atomic<float> level { 0.8f }, touch { 1.1f }, click { 0.86f }, pitch { 49.0f }, length { 0.155f };
     std::atomic<int> returnPair { 2 }, socket { 9 }, piezoSocket { -1 };
     std::atomic<float> piezoThresholdDb { -36.0f }, piezoFullDb { -6.0f };
+    std::atomic<bool> boardOn { true }, boardLevelsToSend { false };
+    std::atomic<int> boardThreshold { 80 }, boardFull { 3000 };
 
     // ---- the piezo listener (audio thread) and its hits on their way to the report ----
     struct PiezoHit { int strength = 0; float peak = 0.0f; juce::int64 timeMs = 0; };
@@ -241,6 +289,10 @@ private:
     juce::String sampleLabel;
     std::vector<Hit> recent;
     int piezoHits = 0;
+    juce::String controllerIn, controllerOut;       // the controller's names as a MIDI input (once heard) and output (once opened)
+    int partPeak = -1, nextPeak = -1, partIgnored = -1, partHeldThreshold = -1, partHeldFull = -1;      // pairs of CCs half arrived
+    int heldThreshold = -1, heldFull = -1, controllerProgram = 0;       // what the controller says it holds
+    int boardHits = 0, boardWithHeight = 0, boardSoftest = 0, boardHardest = 0, boardIgnored = 0, boardNotPlayed = 0;
     float piezoSoftestDb = 0.0f, piezoHardestDb = 0.0f;
     int hits = 0, screenHits = 0, softest = 0, hardest = 0, doubles = 0, bounces = 0, lastHitStrength = 0, closestGapMs = -1;
     std::array<int, 128> strengthCounts {};
