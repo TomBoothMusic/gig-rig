@@ -206,6 +206,13 @@ if(WIN32)
     target_compile_definitions(GigRig PRIVATE JUCE_ASIO=1)
 endif()
 
+if(MSVC)
+    # Windows gives the main thread 1 MB of stack where Linux gives 8 MB. The self-test's long
+    # check functions (each check builds its own engine) outgrew 1 MB on 28 Nov 2026 and the
+    # Windows self-test stopped with a stack overflow, so Windows gets the same 8 MB.
+    target_link_options(GigRig PRIVATE /STACK:8388608)
+endif()
+
 if(UNIX AND NOT APPLE)
     option(GIGRIG_ENABLE_JACK "List JACK / PipeWire-JACK devices on Linux" ON)
     if(GIGRIG_ENABLE_JACK)
