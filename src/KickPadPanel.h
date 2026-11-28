@@ -1,5 +1,6 @@
 #pragma once
 
+#include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -37,6 +38,10 @@ public:
     static juce::File soundFolder();
     juce::String reportText() const             { engine.kick().collect(); return engine.kick().reportText(); }
 
+    /** The MIDI devices were opened again (Scan again, or the app starting): looks for the board's
+        controller among the outputs, so the two levels of the board's pad can be sent to it. */
+    void midiOpened();
+
 private:
     void timerCallback() override;
     void refreshSounds();
@@ -48,9 +53,10 @@ private:
     AudioEngine& engine;
 
     StatusRow status;
-    juce::Label help, levelLabel, touchLabel, clickLabel, pitchLabel, lengthLabel, soundLabel, returnLabel, piezoLabel, piezoFromLabel, piezoFullLabel, graphHeading, logHeading;
-    juce::ToggleButton onBox { "Kick pad on" };
-    juce::Slider levelSlider, touchSlider, clickSlider, pitchSlider, lengthSlider, piezoFromSlider, piezoFullSlider;
+    juce::Label help, levelLabel, touchLabel, clickLabel, pitchLabel, lengthLabel, soundLabel, returnLabel, piezoLabel, piezoFromLabel, piezoFullLabel, boardFromLabel, boardFullLabel, boardNote, graphHeading, logHeading;
+    juce::ToggleButton onBox { "Kick pad on" }, boardBox { "Board's pad" };
+    juce::Slider levelSlider, touchSlider, clickSlider, pitchSlider, lengthSlider, piezoFromSlider, piezoFullSlider, boardFromSlider, boardFullSlider;
+    std::unique_ptr<juce::MidiOutput> controllerOutput;     // to the board's controller, only ever open when one is plugged in
     juce::ComboBox soundBox, returnBox, piezoBox;
     juce::TextButton softButton { "Soft hit" }, mediumButton { "Medium hit" }, hardButton { "Hard hit" },
                      learnButton { "Learn pad" }, forgetButton { "Forget pad" }, folderButton { "Open kick sounds folder" },

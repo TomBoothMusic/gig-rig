@@ -56,7 +56,11 @@ MainComponent::MainComponent()
     devicePanel.midi().onMessage = [this] (const juce::String& deviceName, const juce::MidiMessage& message)
     {
         pedal.handleMidi (deviceName, message);
-        expression.handleMidi (deviceName, message);        // a real expression pedal, once one has been learned on the Pedal tab
+        // A real expression pedal, once one has been learned on the Pedal tab. What the board's
+        // controller says about its kick pad is never a pedal, so a Learn cannot pick it up.
+        if (! isBoardPadMessage (deviceName, message))
+            expression.handleMidi (deviceName, message);
+
         engine.kick().handleMidi (deviceName, message);     // the kick pad test: a note from the SPD::ONE plays the kick
 
         if (message.isProgramChange())
@@ -79,7 +83,11 @@ MainComponent::MainComponent()
         // A moment later, because this can be called from one of that tab's own buttons.
         juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->mixerPanel.refresh(); });
     };
-    devicePanel.onMidiOpened = [this] (const juce::StringArray& names) { pedal.setOpenDevices (names); };
+    devicePanel.onMidiOpened = [this] (const juce::StringArray& names)
+    {
+        pedal.setOpenDevices (names);
+        kickPanel.midiOpened();     // the board's controller, if one is plugged in, can now be sent its pad levels
+    };
 
     // The kick pad test gets its own tab and its own part of the report.
     tabs.addTab ("Kick pad", style::background, &kickPanel, false);

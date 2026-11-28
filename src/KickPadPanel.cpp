@@ -195,6 +195,25 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     piezoFullSlider.setRange (-30.0, 0.0, 1.0);
     piezoFullSlider.onValueChange = [this] { engine.kick().setPiezoFullDb ((float) piezoFullSlider.getValue()); saveSettings(); };
 
+    // The board's own pad: the piezo wired to the board's controller, which is how the finished board has it.
+    boardBox.setColour (juce::ToggleButton::textColourId, style::textMain);
+    boardBox.setTooltip ("The pad built into the board, read by the board's controller (the Teensy). Off: its hits are counted and shown, but no kick is played.");
+    boardBox.onClick = [this] { engine.kick().setBoardPadOn (boardBox.getToggleState()); saveSettings(); };
+
+    style::body (boardFromLabel, "Counts from");
+    setUpSlider (boardFromSlider, 20.0, 2000.0, kick.getBoardThreshold(), "Board's pad: how tall a spike must be to count as a hit, of 4095. Raise it if a knock beside the pad or a footswitch plays the kick; lower it if soft taps are missed. The controller is told straight away and remembers it.");
+    boardFromSlider.setRange (20.0, 2000.0, 1.0);
+    boardFromSlider.setSkewFactorFromMidPoint (200.0);
+    boardFromSlider.onValueChange = [this] { engine.kick().setBoardThreshold ((int) boardFromSlider.getValue()); saveSettings(); };
+
+    style::body (boardFullLabel, "Hardest at");
+    setUpSlider (boardFullSlider, 200.0, 4095.0, kick.getBoardFull(), "Board's pad: a spike this tall is the hardest hit, of 4095. Set it near the tallest spike your hardest stomp makes (the results list it). The controller is told straight away and remembers it.");
+    boardFullSlider.setRange (200.0, 4095.0, 1.0);
+    boardFullSlider.onValueChange = [this] { engine.kick().setBoardFull ((int) boardFullSlider.getValue()); saveSettings(); };
+
+    style::body (boardNote, "");
+    boardNote.setColour (juce::Label::textColourId, style::textDim);
+
     learnButton.setTooltip ("For a pad the app does not know by name: press this, then hit the pad once");
     learnButton.onClick = [this] { engine.kick().learnNextNote(); };
     forgetButton.setTooltip ("Forgets the pad, so the app looks for an SPD::ONE by name again");
@@ -217,7 +236,8 @@ KickPadPanel::KickPadPanel (AudioEngine& engineToUse)
     style::readOnlyEditor (logView);
 
     for (auto* c : std::initializer_list<juce::Component*> { &status, &help, &onBox, &levelLabel, &levelSlider, &touchLabel, &touchSlider, &clickLabel, &clickSlider, &pitchLabel, &pitchSlider, &lengthLabel, &lengthSlider,
-                                                             &soundLabel, &soundBox, &folderButton, &returnLabel, &returnBox, &piezoLabel, &piezoBox, &piezoFromLabel, &piezoFromSlider, &piezoFullLabel, &piezoFullSlider, &softButton, &mediumButton, &hardButton,
+                                                             &soundLabel, &soundBox, &folderButton, &returnLabel, &returnBox, &piezoLabel, &piezoBox, &piezoFromLabel, &piezoFromSlider, &piezoFullLabel, &piezoFullSlider,
+                                                             &boardBox, &boardFromLabel, &boardFromSlider, &boardFullLabel, &boardFullSlider, &boardNote, &softButton, &mediumButton, &hardButton,
                                                              &learnButton, &forgetButton, &resetButton, &copyButton, &graphHeading, &graph, &logHeading, &logView })
         addAndMakeVisible (c);
 
@@ -285,6 +305,19 @@ void KickPadPanel::resized()
     row.removeFromLeft (16);
     piezoFullLabel.setBounds (row.removeFromLeft (78));
     piezoFullSlider.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth())));
+
+    // The board's own pad, laid out under the piezo row so the two "Counts from" and "Hardest at" line up.
+    area.removeFromTop (8);
+    row = area.removeFromTop (28);
+    boardBox.setBounds (row.removeFromLeft (180));
+    row.removeFromLeft (16);
+    boardFromLabel.setBounds (row.removeFromLeft (84));
+    boardFromSlider.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth() / 2 - 90)));
+    row.removeFromLeft (16);
+    boardFullLabel.setBounds (row.removeFromLeft (78));
+    boardFullSlider.setBounds (row.removeFromLeft (juce::jmin (220, row.getWidth())));
+    row.removeFromLeft (12);
+    boardNote.setBounds (row);
 
     area.removeFromTop (8);
     row = area.removeFromTop (30);
@@ -401,6 +434,10 @@ void KickPadPanel::loadSettings()
     if (values.containsKey ("piezoFrom"))   kick.setPiezoThresholdDb (values["piezoFrom"].getFloatValue());
     if (values.containsKey ("piezoFull"))   kick.setPiezoFullDb (values["piezoFull"].getFloatValue());
 
+    if (values.containsKey ("boardPad"))    kick.setBoardPadOn (values["boardPad"].getIntValue() != 0);
+    if (values.containsKey ("boardFrom"))   kick.setBoardThreshold (values["boardFrom"].getIntValue());
+    if (values.containsKey ("boardFull"))   kick.setBoardFull (values["boardFull"].getIntValue());
+
     if (values["pad"].isNotEmpty())
         kick.setPad (values["pad"], values.containsKey ("note") ? values["note"].getIntValue() : -1);
 
@@ -415,6 +452,9 @@ void KickPadPanel::loadSettings()
     piezoBox.setSelectedId (kick.getPiezoSocket() + 2, juce::dontSendNotification);
     piezoFromSlider.setValue (kick.getPiezoThresholdDb(), juce::dontSendNotification);
     piezoFullSlider.setValue (kick.getPiezoFullDb(), juce::dontSendNotification);
+    boardBox.setToggleState (kick.isBoardPadOn(), juce::dontSendNotification);
+    boardFromSlider.setValue (kick.getBoardThreshold(), juce::dontSendNotification);
+    boardFullSlider.setValue (kick.getBoardFull(), juce::dontSendNotification);
     loading = false;
 
     if (values["sound"].isNotEmpty() && soundFolder().getChildFile (values["sound"]).existsAsFile())
@@ -441,6 +481,9 @@ void KickPadPanel::saveSettings()
     lines.add ("piezoSocket=" + juce::String (kick.getPiezoSocket()));
     lines.add ("piezoFrom=" + juce::String (kick.getPiezoThresholdDb(), 0));
     lines.add ("piezoFull=" + juce::String (kick.getPiezoFullDb(), 0));
+    lines.add ("boardPad=" + juce::String (kick.isBoardPadOn() ? 1 : 0));
+    lines.add ("boardFrom=" + juce::String (kick.getBoardThreshold()));
+    lines.add ("boardFull=" + juce::String (kick.getBoardFull()));
     lines.add ("sound=" + kick.sampleName());
 
     // A pad found by its name is found again next time; only a learned one is written down.
@@ -454,18 +497,55 @@ void KickPadPanel::saveSettings()
     settingsFile().replaceWithText (lines.joinIntoString ("\n") + "\n");
 }
 
+void KickPadPanel::midiOpened()
+{
+    controllerOutput.reset();
+
+    for (const auto& info : juce::MidiOutput::getAvailableDevices())
+        if (looksLikeController (info.name))
+        {
+            controllerOutput = juce::MidiOutput::openDevice (info.identifier);
+
+            if (controllerOutput != nullptr)
+            {
+                engine.kick().controllerOutputOpened (info.name);
+                return;
+            }
+        }
+
+    engine.kick().controllerOutputOpened ({});
+}
+
 void KickPadPanel::timerCallback()
 {
     auto& kick = engine.kick();
     kick.collect();
 
+    // The board's pad: a level that changed goes to the controller now (nearly always there is nothing to send).
+    if (controllerOutput != nullptr)
+        for (const auto& message : kick.takeControllerMessages())
+            controllerOutput->sendMessageNow (message);
+
+    // "Hardest at" can never sit under one and a half times "Counts from": the slider follows what is used.
+    if (! boardFullSlider.isMouseButtonDown() && (int) boardFullSlider.getValue() != kick.getBoardFull())
+        boardFullSlider.setValue (kick.getBoardFull(), juce::dontSendNotification);
+
     if (engine.isOpen() && engine.sampleRate() > 0.0)
         kick.setBlockInfo (engine.bufferSize() * 1000.0 / engine.sampleRate(), engine.driverLatencySamples() * 1000.0 / engine.sampleRate());
 
-    const auto pad = kick.padDevice();
+    const auto controller = kick.controllerHeard();
+    const auto boardHits = kick.boardHitCount();
+    const auto pad = kick.padDevice().isNotEmpty() || controller.isEmpty() ? kick.padDevice() : controller;     // with no SPD::ONE, the board's pad is "the pad"
     const auto hits = kick.hitCount();
+
+    if (const auto note = controllerOutput != nullptr ? juce::String (controller.isNotEmpty() ? "Controller connected" : "Controller found")
+                                                      : controller.isNotEmpty() ? juce::String ("Controller heard: press Scan again") : juce::String ("No controller seen");
+        note != boardNote.getText())
+        boardNote.setText (note, juce::dontSendNotification);
+
     const bool learning = kick.isLearning();
-    const auto key = pad + "/" + juce::String (hits) + "/" + juce::String ((int) learning) + "/" + juce::String ((int) engine.isOpen()) + "/" + juce::String ((int) kick.isOn()) + soundNote;
+    const auto key = pad + "/" + juce::String (hits) + "/" + juce::String ((int) learning) + "/" + juce::String ((int) engine.isOpen()) + "/" + juce::String ((int) kick.isOn()) + soundNote
+                       + "/" + controller + "/" + juce::String (boardHits) + "/" + juce::String ((int) (controllerOutput != nullptr));
 
     if (key != shownStatus)
     {
@@ -480,7 +560,7 @@ void KickPadPanel::timerCallback()
         if (learning)
             status.set (StatusRow::Tone::caution, "LEARNING", "Hit the pad once", "The next note from any MIDI device becomes the pad.");
         else if (pad.isEmpty())
-            status.set (StatusRow::Tone::caution, "NO PAD", "No SPD::ONE is showing as a MIDI device",
+            status.set (StatusRow::Tone::caution, "NO PAD", controllerOutput != nullptr ? "The board's controller is connected. Now stomp on its pad." : "No SPD::ONE or board controller is showing as a MIDI device",
                         "Plug in its USB cable (one that carries data, not a charge-only cable), switch it on, then press Scan again on the Device check tab. "
                         "The hit buttons still play the kick." + audioNote);
         else if (hits == 0)
