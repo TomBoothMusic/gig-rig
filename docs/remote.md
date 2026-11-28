@@ -275,7 +275,7 @@ The orders (`RemoteApi::command`; the demo answers the same ones in `remote/demo
 | `mix.keepFx` | `f` |
 | `rec.start`, `rec.stop` | Start a recording, and stop it. Refused when it is already so |
 | `rec.set` | `key` (`main`, `mix`, `fx`: which mixes are written; `check`: the raw copy for a virtual soundcheck; `level`: the recording mix's level in dB), `value` |
-| `check.start` | `name` (a recording from the state's `recordings.list`), `loop` (round and round; left out = yes), `loops` (make the recording's looper presses again, so its loops are built afresh; left out = yes): plays its raw files through the rig as a virtual soundcheck |
+| `check.start` | `name` (a recording from the state's `recordings.list`), `loop` (round and round; left out = yes), `loops` (make the recording's looper presses, kicks, effect switch presses and pedal moves again; left out = yes): plays its raw files through the rig as a virtual soundcheck |
 | `check.stop` | Stops the soundcheck. Refused when none is playing |
 | `recs.keep` | `name`, `on`: a kept recording is never cleared or deleted |
 | `recs.delete` | `name`. Refused for a kept one, and for one that is being recorded or played |

@@ -127,7 +127,11 @@ it. While recording, every looper press is noted to the sample in the recording'
 a soundcheck makes the same presses again at the same samples (`Looper::setTimedPresses`), so the
 loops are built afresh through the effects and mixer as they are now. **A press handed to the
 looper with its sample must do exactly what a foot at that sample does** (a check), and with no
-soundcheck playing the looper's own path is untouched.
+soundcheck playing the looper's own path is untouched. The same file notes kicks from the pad
+(made again on the audio thread, `KickPad::hitNow`), effect switch presses and expression pedal
+moves (made again on the message thread, a hundred times a second, `EffectsRack::takePedalNow`),
+and where the switches and pedal stood at the start; the soundcheck puts them there and puts
+them back when it stops.
 
 ## The remote screen (the phone and tablet control app)
 

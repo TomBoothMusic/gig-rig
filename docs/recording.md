@@ -125,7 +125,7 @@ What to know:
 - A drive too slow to keep up gives a moment of silence, counted in the report, never a wait.
 - With nothing playing it changes no sample (a check).
 
-## Loops in a soundcheck
+## Loops, kicks and switches in a soundcheck
 
 Built 28 Nov 2026 (Tom: "I'd love to be able to play the soundcheck back with loops but tweak
 the processing according to the venue"). The loops themselves are **not** saved for this: a
@@ -138,11 +138,24 @@ saved loop already has the EQ and compressors of the night in it. Instead:
   samples. The looper builds every loop afresh out of the raw playback, through the effects
   and the mixer as they are set now. Change the venue EQ and the next time a loop is recorded
   it is recorded through the new setting, exactly as at the gig.
+- **The rest of what the feet did is noted and done again too** (Tom, 28 Nov 2026: "I'd need
+  all of those things as well"), in the same file:
+  - **Kicks from the kick pad** (the SPD::ONE or the on-screen buttons), each with how hard it
+    was hit, on the same block of sound it was played on. The kick is made afresh, so a change
+    to the kick's sound or its channel is heard.
+  - **Effect switch presses** (a switch the Effects tab or the song has taken from the looper:
+    an effect or a chain on and off, A/B, a held whammy, wah, delay throw or harmony, tap
+    tempo, the next amp sound, the toe switch), each within a hundredth of a second.
+  - **Expression pedal moves**, looked at a hundred times a second.
+  - **Where the switches and the pedal stood when the recording began.** The soundcheck puts
+    them there before it plays (and again each time round), and puts them back where they
+    were when it stops.
 
 What to know:
 
-- It is the **With its loops** tick box next to Play (ticked to begin with). Unticked, the
-  soundcheck plays and the looper is left alone.
+- It is the **With its loops, kicks and switches** tick box next to Play (ticked to begin
+  with). Unticked, the soundcheck plays and the looper, the kick, the switches and the pedal
+  are left alone.
 - A loop that is already going round keeps the sound it was recorded with, as it does live.
   With **Round and round** the loops are cleared each time the recording comes back to its
   start and are built again, so a change is in every loop one pass later.
@@ -151,11 +164,16 @@ What to know:
   recording is made again at the same place, as a program change from Songbook Pro would be.
   If the song is no longer in the Songs list, the soundcheck plays without presses and says so.
 - A recording that began with loops already going cannot have them built again, so it plays
-  without presses and says so. Clear the looper before pressing Record for a soundcheck take.
+  without looper presses and says so (its kicks and switches are still made again). Clear the
+  looper before pressing Record for a soundcheck take.
 - The loops the soundcheck built are cleared when it stops.
 - A recording made before this build has no presses noted, and plays as before.
-- **Not made again:** the kick pad's own kicks (they are made inside the app, so they are in no
-  raw file), presses of effect switches, and moves of the expression pedal.
+- A switch is only pressed again if it still does the same job as on the night. Change what a
+  switch does in the song and the soundcheck leaves that switch alone.
+- **Not made again:** kicks from a bare piezo pad on a socket (its knock is in that socket's
+  raw file, so the soundcheck hears it and plays the kick by itself); the test take; and
+  anything changed by hand on a screen during the recording (a slider, a preset). "The next
+  amp sound" steps on from whichever amp is chosen now, so choose the amp the take began with.
 - The best soundcheck take is short: one song, started with the looper clear. Tick **Keep** on it.
 
 ## The Recordings tab
@@ -197,7 +215,7 @@ Two small files in a recording's folder are the memory of this: `Keep.txt` and
 | `src/Soundcheck.*` | Virtual soundcheck. A reader thread fills a queue; `feed` (audio thread, first thing in `AudioEngine::processBlock`) swaps the sockets' inputs for it. |
 | `src/RecordingLibrary.*` | The recordings on the drive: list, keep, delete, clear, copy to USB (its own thread). |
 | `src/RecordingsPanel.*` | The Recordings tab. On the phone: the Record screen's Recordings pages, orders `check.*` and `recs.*`. |
-| `src/LoopReplay.*` | Loops in a soundcheck. `noteBlock` (audio thread) queues what the looper acted on while recording and the message thread writes `Looper presses.txt`; `pressesFor` hands the looper a soundcheck's presses with their samples (`Looper::setTimedPresses`). |
+| `src/LoopReplay.*` | Loops, kicks and switches in a soundcheck. `noteBlock` (audio thread) queues what the looper acted on and the kicks the pad started while recording, `noteSwitch` and `poll` (a hundred times a second) note effect switch presses and pedal moves, and the message thread writes `Looper presses.txt`; `pressesFor` hands the looper a soundcheck's presses with their samples (`Looper::setTimedPresses`) and the kick pad its kicks (`KickPad::hitNow`); `poll` presses the switches (`EffectsRack::takePedalNow`) and moves the pedal. |
 | `src/RecordingsSelfTest.cpp` | Their checks ("soundcheck:", "recordings:"); `GIGRIG_SELFTEST_ONLY=recordings` runs them alone. |
 | `remote/screens.js` (`GR.screens.record`) | The Record screen. Orders `rec.start`, `rec.stop`, `rec.set`, and `mix.ch`, `mix.fx`, `mix.param` for the rest. |
 | `src/MixerSelfTest.cpp`, `src/RemoteSelfTest.cpp` | The checks ("recording:", "recording mix:", "recorder:"). |
@@ -208,4 +226,6 @@ Saved words, never to be renamed: record points `none`, `raw`, `effects`, `loope
 name words `raw`, `after effects`, `after looper` are in recordings Tom already has. So are the
 `soundcheck: <file> = socket <n>` lines of `About this recording.txt`, and the marker files
 `Keep.txt` and `Copied to USB.txt`. So is `Looper presses.txt` and its lines (`rate =`, `start: song = ..., loops = none`,
-`<sample>: switch <n> down|down double|up|hold`, `<sample>: clear all`, `<sample>: song = <name>`).
+`<sample>: switch <n> down|down double|up|hold`, `<sample>: clear all`, `<sample>: song = <name>`,
+`<sample>: kick <strength>`, `<sample>: effect switch <n> down|up`, `<sample>: pedal <position>`,
+`switch at start: <n> chain <c> action <a> = on|off`, `pedal at start = <position>`).

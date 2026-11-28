@@ -160,7 +160,8 @@ AudioEngine::AudioEngine()
     tunerCore.beforeTick = [this] { tellTunerTheGuitars(); };
 
     replay.recordingFolder = [this] { return mixCore.recorder().folder(); };
-    replay.soundcheckPlaying = [this] { return checkCore.isPlaying(); };
+    replay.recordedSamples = [this] { return mixCore.recorder().isRecording() ? mixCore.recorder().samplesNow() : (juce::int64) -1; };
+    replay.soundcheckPlayed = [this] { return checkCore.playedNow(); };
     library.root = [] { return Mixer::recordingFolder(); };
     library.busy = [this] (const juce::String& name) -> juce::String
     {
@@ -823,6 +824,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
     inputs = checkCore.feed (inputs, numIns, numSamples);
 
     // The looper presses of the recording that is playing, to be made again at their own samples.
+    // Its kicks go straight to the kick pad, which is why this is before the kick pad's turn.
     const int numReplayed = checkWasPlaying && replay.isArmed()
                               ? replay.pressesFor (checkCore.blockStart(), numSamples, replayPresses.data(), (int) replayPresses.size()) : 0;
 
@@ -1029,7 +1031,7 @@ void AudioEngine::processBlock (const float* const* inputs, int numIns,
         }
 
         // While recording, every looper press is noted with its sample, so a soundcheck can make it again.
-        replay.noteBlock (loopCore, mixCore.recorder().isRecording(), mixCore.recorder().samplesNow(), numSamples, currentSampleRate);
+        replay.noteBlock (loopCore, kickCore, mixCore.recorder().isRecording(), mixCore.recorder().samplesNow(), numSamples, currentSampleRate);
 
         if (! kickJoins)
             kickToReturns();

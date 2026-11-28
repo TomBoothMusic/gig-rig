@@ -324,7 +324,7 @@ GR.makeDemoRig = (data) =>
         }
 
         live.check = { on: vsc.on, name: vsc.name, pos: vsc.on && vsc.len > 0 ? Math.floor ((t - vsc.since) / 1000) % vsc.len : 0, len: vsc.len, missed: 0,
-                       loops: vsc.on && vsc.loops ? 'Loops: 6 looper presses will be made again, so the loops are built through the sound as it is now.' : '' };
+                       loops: vsc.on && vsc.loops ? 'Made again as it plays: 6 looper presses, 48 kicks, 2 effect switch presses, all through the sound as it is now.' : '' };
         live.copy = { on: usb.on, done: usb.on ? Math.min (1, (t - usb.since) / usb.ms) : 0, now: usb.on ? 'Copying ' + usb.names.length + (usb.names.length === 1 ? ' recording' : ' recordings') : '', result: usb.result, failed: false };
 
         const b = st().breakMusic;

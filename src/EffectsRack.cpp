@@ -239,6 +239,38 @@ bool EffectsRack::takePedal (int sw, bool isDown, bool stillHeld)
     return taken;
 }
 
+bool EffectsRack::takePedalNow (int sw, bool isDown, double tapMs)
+{
+    if (! enabled.load() || sw < 0)
+        return false;
+
+    bool taken = false;
+
+    for (int i = 0; i < numPedalAssigns; ++i)
+    {
+        const auto a = pedalAssign (i);
+
+        if (a.sw != sw)
+            continue;
+
+        taken = true;
+
+        if (a.action == 2)                      { if (isDown) tap (tapMs); }
+        else if (a.action == 3)                 bendWhammy (a.chain, isDown);
+        else if (a.action == 6)                 sweepWah (a.chain, isDown);
+        else if (a.action == 8)                 holdHarmony (a.chain, isDown);
+        else if (a.action == actionPedalToe)    moveExpressionPedal (isDown ? 100.0f : 0.0f);
+        else if (a.action == 5)                 holdThrow (a.chain, isDown);
+        else if (isDown)                        { doPedalAction (a); continue; }
+        else                                    continue;
+
+        if (onPedalAction != nullptr)
+            onPedalAction();
+    }
+
+    return taken;
+}
+
 bool EffectsRack::rockPedal (int c, const char* type, bool toeDown)
 {
     auto& ch = chain (juce::jlimit (0, numChains - 1, c));
@@ -299,6 +331,8 @@ void EffectsRack::moveExpressionPedal (float position)
 {
     position = juce::jlimit (0.0f, 100.0f, position);
     pedalMoved = true;
+    expressionAt.store (position);
+    expressionCount.fetch_add (1);
 
     if (toeOn)
     {
@@ -480,6 +514,27 @@ bool EffectsRack::holdHarmony (int c, bool held)
             }
 
     return false;
+}
+
+int EffectsRack::pedalToggleState (const PedalAssign& a) const
+{
+    if (a.sw < 0)
+        return -1;
+
+    const int c = juce::jlimit (0, numChains - 1, a.chain);
+
+    if (a.action == 9)      return toeOn ? 1 : 0;
+    if (a.action == 0)      return routing (c).listen == Listen::effects ? 1 : 0;
+    if (a.action == 1)      return routing (c).on ? 1 : 0;
+
+    if (a.action >= 10 && a.action != actionPedalToe)
+    {
+        const auto& m = chains[(size_t) c].chain.model();
+        const int k = a.action - 10;
+        return k < (int) m.slots.size() ? (m.slots[(size_t) k].on ? 1 : 0) : -1;
+    }
+
+    return -1;
 }
 
 void EffectsRack::doPedalAction (const PedalAssign& a)

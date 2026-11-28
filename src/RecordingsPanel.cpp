@@ -72,7 +72,7 @@ RecordingsPanel::RecordingsPanel (AudioEngine& e) : engine (e)
 
     loopBox.setToggleState (true, juce::dontSendNotification);
     loopsBox.setToggleState (true, juce::dontSendNotification);
-    loopsBox.setTooltip ("Ticked, every looper press of the recording is made again at the same moment, so its loops are built afresh through the effects and the mixer as they are set now");
+    loopsBox.setTooltip ("Ticked, every looper press, kick from the pad, effect switch press and expression pedal move of the recording is made again at the same moment, through the effects and the mixer as they are set now");
     loopBox.setTooltip ("Ticked, the recording starts again when it ends, so a mix can be worked on for as long as it takes");
     playButton.setTooltip ("Plays this recording's raw files through the rig as if Tom were playing. Press again to stop.");
     keepBox.setTooltip ("A kept recording is never removed by the two Clear buttons, and Delete refuses it");
@@ -94,7 +94,7 @@ RecordingsPanel::RecordingsPanel (AudioEngine& e) : engine (e)
         else if (const auto* i = chosen())
         {
             const auto error = engine.startSoundcheck (i->name, loopBox.getToggleState(), loopsBox.getToggleState());
-            say (error.isEmpty() ? "Playing " + i->name + " through the rig. " + (loopsBox.getToggleState() ? engine.loopReplay().statusLine() : juce::String ("Without its loops.")) : error, error.isNotEmpty());
+            say (error.isEmpty() ? "Playing " + i->name + " through the rig. " + (loopsBox.getToggleState() ? engine.loopReplay().statusLine() : juce::String ("Without its loops, kicks and switches.")) : error, error.isNotEmpty());
         }
 
         showChosen();

@@ -338,7 +338,7 @@ private:
     BreakMusic breakCore;
     Tuner tunerCore;
     Soundcheck checkCore;
-    LoopReplay replay { loopCore };
+    LoopReplay replay { loopCore, fxRack, kickCore };
     std::array<Looper::Timed, 64> replayPresses {};
     RecordingLibrary library;
     VenueKnob knob { mixCore, breakCore };

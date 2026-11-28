@@ -1066,7 +1066,7 @@ GR.screens.record = (root) =>
                     : h ('button', { class: 'choice', disabled: ! (x.check > 0), onclick: () => order ({ op: 'check.start', name: x.name, loop: true, loops: withLoops }) }, h ('b', { text: 'Play as a soundcheck' }),
                         h ('small', { text: x.check > 0 ? 'Its raw files play into their sockets, through today\'s effects and mixer, round and round.' : 'It has no raw files, so it cannot be played back.' })),
                 h ('button', { class: 'choice' + (withLoops ? ' on' : ''), 'aria-pressed': withLoops ? 'true' : 'false', disabled: playing || ! (x.check > 0), onclick: () => { GR.ui.recLoops = ! withLoops; GR.render(); } },
-                    h ('b', { text: withLoops ? 'With its loops' : 'Without its loops' }), h ('small', { text: 'With: every looper press of the recording is made again, so the loops are built fresh through today\'s sound.' })),
+                    h ('b', { text: withLoops ? 'With its loops, kicks and switches' : 'Without its loops, kicks and switches' }), h ('small', { text: 'With: every looper press, kick, effect switch press and pedal move of the recording is made again, through today\'s sound.' })),
                 h ('button', { class: 'choice' + (x.kept ? ' on' : ''), 'aria-pressed': x.kept ? 'true' : 'false', onclick: () => order ({ op: 'recs.keep', name: x.name, on: ! x.kept }) },
                     h ('b', { text: x.kept ? 'Kept' : 'Keep' }), h ('small', { text: 'Clearing never removes a kept recording.' })),
                 h ('button', { class: 'choice', disabled: ! recs.drives.length || !! liveCopy.on, onclick: () => copyTo ([x.name]) }, h ('b', { text: 'Copy to USB' }),

@@ -394,7 +394,7 @@ static void runLoopReplaySelfTest (const Check& check, const juce::File& root)
         for (const auto& tr : looper.snapshot().track)
             untouched = untouched && tr.state == TrackState::empty;
 
-        check (untouched, "loops in a soundcheck: with \"With its loops\" unticked the soundcheck plays and the looper is left alone");
+        check (untouched, "loops in a soundcheck: with \"With its loops, kicks and switches\" unticked the soundcheck plays and the looper is left alone");
         b.engine.soundcheck().stop();
         b.run (40);
 
@@ -438,7 +438,7 @@ static void runLoopReplaySelfTest (const Check& check, const juce::File& root)
         const auto folder2 = b.engine.mixer().recorder().folder();
         const auto tape2 = LoopReplay::read (folder2);
         bool songNoted = err2.isEmpty() && tape2.found && tape2.startSong == "First" && tape2.steps.size() == 2
-                           && tape2.steps[1].kind == Looper::Timed::Kind::song && tape2.steps[1].song == "Second" && tape2.steps[1].at == 150 * block;
+                           && tape2.steps[1].what == LoopReplay::What::song && tape2.steps[1].song == "Second" && tape2.steps[1].at == 150 * block;
 
         Mixer::recordingFolderOverride = base.getChildFile ("songs");
         looper.setSong (loopSong ("First"));
@@ -476,6 +476,134 @@ static void runLoopReplaySelfTest (const Check& check, const juce::File& root)
 
         check (songNoted && songMade && refused,
                "loops in a soundcheck: a song loaded during the recording is noted and loaded again at the same place, and a recording that began with loops already going is played without presses, since those loops cannot be built again");
+    }
+
+    // ---- the kick pad, the effect switches and the expression pedal (Tom, 28 Nov 2026: "I'd need all of those things as well") ----
+    {
+        Mixer::recordingFolderOverride = base.getChildFile ("feet");
+        auto bench = std::make_unique<Bench> (48000.0);
+        auto& b = *bench;
+        auto& looper = b.engine.looper();
+        auto& replay = b.engine.loopReplay();
+        auto& rack = b.engine.effects();
+        auto& kick = b.engine.kick();
+        replay.loadSong = [&] (const juce::String& name) { looper.setSong (loopSong (name.toRawUTF8())); return true; };
+        looper.setSong (loopSong ("Feet"));
+        kick.setOn (true);
+        rack.setEnabled (true);
+        rack.setPedalAssign (0, { 10, 0, 1 });      // CTL4 switches chain 1 on and off
+
+        if (rack.routing (0).on)
+            rack.doPedalAction (rack.pedalAssign (0));
+
+        rack.moveExpressionPedal (10.0f);
+        b.run (20);
+        replay.poll();
+
+        // What MainComponent does with a press the effects take (takePedalNow is takePedal without the wait for the message loop).
+        const auto press = [&] (bool down)
+        {
+            if (rack.takePedalNow (10, down, juce::Time::getMillisecondCounterHiRes()))
+                replay.noteSwitch (foot (10, down ? PedalEvent::Kind::down : PedalEvent::Kind::up));
+        };
+
+        const auto error = b.engine.mixer().startRecording (Mixer::recordingFolder());
+        std::vector<float> live;
+        runKeeping (b, 1, live);
+        replay.poll();              // the app looks a hundred times a second: the recording's notes begin with where the switches stand
+        runKeeping (b, 99, live);
+        kick.screenHit (100);                                       runKeeping (b, 50, live);
+        press (true);                                               runKeeping (b, 5, live);
+        press (false);                                              runKeeping (b, 45, live);
+        rack.moveExpressionPedal (30.0f);   replay.poll();          runKeeping (b, 50, live);
+        kick.screenHit (60);                                        runKeeping (b, 50, live);
+        rack.moveExpressionPedal (75.0f);   replay.poll();          runKeeping (b, 100, live);
+        b.engine.mixer().stopRecording();
+        replay.poll();
+        const auto folder = b.engine.mixer().recorder().folder();
+        const auto tape = LoopReplay::read (folder);
+
+        const auto has = [&tape] (LoopReplay::What what, int which, juce::int64 atBlock, float value)
+        {
+            int n = 0;
+
+            for (const auto& st : tape.steps)
+                if (st.what == what && n++ == which)
+                    return st.at == atBlock * block && (value < 0.0f || std::abs (st.value - value) < 0.01f);
+
+            return false;
+        };
+
+        const bool noted = error.isEmpty() && tape.found && tape.steps.size() == 6
+                             && has (LoopReplay::What::kick, 0, 100, 100.0f) && has (LoopReplay::What::kick, 1, 250, 60.0f)
+                             && has (LoopReplay::What::fxSwitch, 0, 150, -1.0f) && has (LoopReplay::What::fxSwitch, 1, 155, -1.0f)
+                             && has (LoopReplay::What::expression, 0, 200, 30.0f) && has (LoopReplay::What::expression, 1, 300, 75.0f)
+                             && tape.switches.size() == 1 && tape.switches[0].sw == 10 && tape.switches[0].chain == 0 && tape.switches[0].action == 1 && tape.switches[0].state == 0
+                             && std::abs (tape.pedalAtStart - 10.0f) < 0.01f && rack.routing (0).on;
+
+        check (noted, "kicks and switches in a soundcheck: while recording, every kick from the pad, every effect switch press and every expression pedal move is noted with its place, and so is where the switches and the pedal stood at the start ("
+                        + juce::String ((int) tape.steps.size()) + " noted)");
+
+        // Tom has the chain on and the pedal somewhere else when he starts the soundcheck.
+        rack.moveExpressionPedal (55.0f);
+        replay.poll();
+        b.run (800);        // the tail of the chain's reverb has gone, so switching it off is silent
+        const auto started = b.engine.startSoundcheck (folder.getFileName(), true, true, false);
+        const bool putBack = started.isEmpty() && replay.isArmed() && ! rack.routing (0).on && std::abs (rack.expressionNow() - 10.0f) < 0.01f;
+        std::vector<float> again;
+        bool aligned = false;
+
+        for (int i = 0; i < 40 && ! aligned; ++i)
+        {
+            b.run (1);
+            replay.poll();
+
+            if (b.engine.soundcheck().blockStart() == 0)
+            {
+                aligned = true;
+
+                for (int k = 0; k < block; ++k)
+                {
+                    float sum = 0.0f;
+                    for (int r = 0; r < 16; ++r) sum += b.outs[(size_t) r][(size_t) k] * (float) (r + 1);
+                    again.push_back (sum);
+                }
+            }
+        }
+
+        const auto go = [&] (int blocks) { for (int i = 0; i < blocks; ++i) { runKeeping (b, 1, again); replay.poll(); } };
+        go (120);       // 121 blocks played
+        bool inStep = aligned && replay.kicksMade() == 1 && ! rack.routing (0).on && replay.controlsMade() == 0;
+        go (40);        // 161
+        inStep = inStep && rack.routing (0).on && replay.controlsMade() == 2 && std::abs (rack.expressionNow() - 10.0f) < 0.01f;
+        go (60);        // 221
+        inStep = inStep && std::abs (rack.expressionNow() - 30.0f) < 0.01f && replay.kicksMade() == 1;
+        go (100);       // 321
+        inStep = inStep && std::abs (rack.expressionNow() - 75.0f) < 0.01f && replay.kicksMade() == 2 && replay.controlsMade() == 4;
+
+        double worst = 0.0, loud = 0.0;
+
+        for (size_t i = 0; i < again.size() && i < live.size(); ++i)
+        {
+            worst = juce::jmax (worst, (double) std::abs (again[i] - live[i]));
+            loud = juce::jmax (loud, (double) std::abs (live[i]));
+        }
+
+        check (putBack && inStep && loud > 0.01 && worst < 2.0e-5,
+               "kicks and switches in a soundcheck: the soundcheck starts the switches and the pedal where they were on the night, plays each kick on the block it was played on (the returns get the same kick, worst difference "
+                 + juce::String (worst, 8) + " against a sound of " + juce::String (loud, 2) + ") and presses each switch and moves the pedal at its place");
+
+        // Round again: everything starts where it started. Stopped: everything goes back to where Tom had it.
+        go (100);       // 421: 21 blocks into the second pass
+        const bool roundAgain = ! rack.routing (0).on && std::abs (rack.expressionNow() - 10.0f) < 0.01f && replay.isArmed();
+        b.engine.soundcheck().stop();
+        b.run (4);
+        replay.poll();
+        const bool asBefore = ! replay.isArmed() && rack.routing (0).on && std::abs (rack.expressionNow() - 55.0f) < 0.01f;
+
+        check (roundAgain && asBefore, "kicks and switches in a soundcheck: when the recording comes round the switches and the pedal start again where they started, and when the soundcheck stops they go back to where they were before it");
+        rack.setEnabled (false);
+        Mixer::recordingFolderOverride = root.getChildFile ("Recordings");
     }
 }
 

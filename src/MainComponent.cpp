@@ -44,7 +44,10 @@ MainComponent::MainComponent()
             engine.breakMusic().startedPlaying (BreakMusic::Started::footswitch);
 
         if (engine.effects().takePedal (event.sw, event.kind == PedalEvent::Kind::down, event.kind == PedalEvent::Kind::hold))
+        {
+            engine.loopReplay().noteSwitch (event);     // while recording, so a soundcheck can press it again
             return;
+        }
 
         engine.looper().pedal (event);
     };

@@ -86,6 +86,8 @@ public:
     /** After feed(), while playing: how much of the recording had been played before this block
         (every pass counted on), or -1 if this block played none of it. */
     juce::int64 blockStart() const noexcept     { return blockAt; }
+    /** Any thread: how much has been played so far (every pass counted on), or -1 when nothing is playing. */
+    juce::int64 playedNow() const noexcept      { return playing.load() ? played.load() : -1; }
 
 private:
     void run() override;

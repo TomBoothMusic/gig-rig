@@ -51,7 +51,7 @@ private:
                      copyOneButton { "Copy this one to the drive" }, copyAllButton { "Copy all that are not copied yet" }, cancelButton { "Stop the copy" },
                      clearCopiedButton { "Clear the copied ones" }, clearAllButton { "Clear all but the kept ones" },
                      folderButton { "Open the recordings folder" }, reportButton { "Copy recordings report" };
-    juce::ToggleButton keepBox { "Keep (clearing never removes it)" }, loopBox { "Round and round" }, loopsBox { "With its loops (the looper presses are made again)" };
+    juce::ToggleButton keepBox { "Keep (clearing never removes it)" }, loopBox { "Round and round" }, loopsBox { "With its loops, kicks and switches (what your feet did is done again)" };
     juce::ComboBox driveBox;
     double progressValue = 0.0;
     juce::ProgressBar progress { progressValue };

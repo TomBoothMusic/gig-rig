@@ -983,7 +983,7 @@ juce::String RemoteApi::doRecordings (const juce::String& op, const juce::var& c
         if (const auto error = engine.startSoundcheck (name, (bool) c.getProperty ("loop", true), (bool) c.getProperty ("loops", true)); error.isNotEmpty())
             return error;
 
-        answer = "Playing " + name + " through the rig. Its sockets hear the recording until Stop. " + ((bool) c.getProperty ("loops", true) ? engine.loopReplay().statusLine() : juce::String ("Without its loops."));
+        answer = "Playing " + name + " through the rig. Its sockets hear the recording until Stop. " + ((bool) c.getProperty ("loops", true) ? engine.loopReplay().statusLine() : juce::String ("Without its loops, kicks and switches."));
         return {};
     }
 

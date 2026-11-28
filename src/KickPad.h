@@ -47,6 +47,17 @@ public:
         no socket chosen). With quiet true knocks are ignored: a measurement is running. */
     void listen (const float* input, int numSamples, bool quiet) noexcept;
 
+    /** For the virtual soundcheck (docs/recording.md): a hit of this strength starts with the
+        next process(), exactly as one that arrived from the pad does. Before process, every block it is needed. */
+    void hitNow (int strength) noexcept
+    {
+        if (numNow < (int) hitsNow.size())
+            hitsNow[(size_t) numNow++] = juce::jlimit (1, 127, strength);
+    }
+    /** The pad and screen hits (not the piezo's, which come from a socket) the last process() started, for the recording's notes. */
+    int numStarted() const noexcept                 { return startedCount; }
+    int startedStrength (int i) const noexcept      { return startedList[(size_t) i]; }
+
     //==============================================================================
     // Any thread but the audio thread.
 
@@ -174,6 +185,8 @@ private:
     };
 
     void startVoice (int strength) noexcept;
+    std::array<int, 8> hitsNow {}, startedList {};       // audio thread
+    int numNow = 0, startedCount = 0;
     float nextSample (Voice&) noexcept;
 
     struct Sample

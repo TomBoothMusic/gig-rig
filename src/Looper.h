@@ -259,7 +259,7 @@ public:
     }
 
     //==============================================================================
-    // For the virtual soundcheck (docs/recording.md, "Loops in a soundcheck"). Audio thread only.
+    // For the virtual soundcheck (docs/recording.md, "Loops, kicks and switches in a soundcheck"). Audio thread only.
 
     /** A press (or a clear, or the name of a song that has just been loaded) with the sample of
         this block it happened on. */

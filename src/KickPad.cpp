@@ -360,6 +360,20 @@ void KickPad::process (float* left, float* right, int numSamples, bool quiet) no
         }
     }
 
+    startedCount = 0;
+
+    // A soundcheck's hits, made again.
+    for (int i = 0; i < numNow; ++i)
+        if (! quiet && on.load (std::memory_order_relaxed))
+        {
+            startVoice (hitsNow[(size_t) i]);
+
+            if (startedCount < (int) startedList.size())
+                startedList[(size_t) startedCount++] = hitsNow[(size_t) i];
+        }
+
+    numNow = 0;
+
     // Hits that arrived since the last block start at its first sample.
     if (const auto ready = fifo.getNumReady(); ready > 0)
     {
@@ -386,6 +400,9 @@ void KickPad::process (float* left, float* right, int numSamples, bool quiet) no
             }
 
             startVoice (q.strength);
+
+            if (startedCount < (int) startedList.size())
+                startedList[(size_t) startedCount++] = q.strength;
         }
 
         fifo.finishedRead (size1 + size2);
