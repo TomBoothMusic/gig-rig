@@ -129,6 +129,8 @@ void mixerBlockChecks (const Check& check)
                 fx->setParam (id, 0.0f);
             fx->setParam ("lowcut", 20.0f);
             fx->setParam ("highcut", 20000.0f);
+            fx->setParam ("b1f", 250.0f);          // back where Band 1 starts, for the check below
+            fx->setParam ("b1q", 1.0f);
         }
 
         // Two channels are filtered apart from each other.
