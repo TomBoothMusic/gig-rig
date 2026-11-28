@@ -44,7 +44,7 @@ xvfb-run -a build/GigRig_artefacts/Release/GigRig --self-test result.txt
 ```
 
 The whole self-test takes a few minutes. While working on one part,
-`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `recordings`, `songs`) in front of the
+`GIGRIG_SELFTEST_ONLY=break` (or `pedal`, `tuner`, `remote`, `mixer`, `recordings`, `songs`, `kick`) in front of the
 last line runs only that part's checks. CI always runs all of them.
 
 Real audio and MIDI are proven only on Tom's hardware.
@@ -53,7 +53,10 @@ Real audio and MIDI are proven only on Tom's hardware.
 
 - Set up by `linux/install.sh`; everything it changes is listed at the end of
   `docs/linux-setup.md`. Health check: `linux/rig-check.sh` (changes nothing).
-- Ubuntu 24.04 LTS, kernel options `preempt=full threadirqs usbcore.autosuspend=-1`,
+- Tom's one-sitting page for setting up and proving the mini PC is the "Mini PC set-up day"
+  artifact in the project, https://claude.ai/artifact/QK1T9rBayzL7Q3ZL7Fsf78 (source in the project files, `mini-pc/`). It follows
+  `docs/linux-setup.md` Parts B to D: keep the two in step. Not yet done on hardware until Tom says so.
+- Ubuntu 24.04 LTS (not 26.04: untried, and the set-up relies on the X11 desktop), kernel options `preempt=full threadirqs usbcore.autosuspend=-1`,
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
@@ -244,6 +247,14 @@ the SPD::ONE Kick over USB plays a kick made inside the app, by how hard it was 
 `Documents/GigRig/Kick sounds`: never commit one. Since 27 Nov 2026 the same tab can also listen
 to an input socket for a bare piezo pad (the cheap bench test of the pad that could replace the
 SPD::ONE): `KickPad::listen` on the audio thread, off unless a socket is chosen.
+Since 28 Nov 2026 the piezo can also be read by the board's controller, which is how the finished
+board has it ("the board's pad"): the controller sends a hit like the SPD::ONE's, so it takes the
+SPD::ONE's road (mixer, loops, soundcheck notes) with nothing to learn. What the two programs say
+to each other, **and the controller's own pad logic**, is one file built into both:
+`firmware/shared/PadMessages.h`. The self-test runs it against a pretend pin, which is the only
+test the controller's pad code gets until Tom's parts arrive, so pad logic goes there and not in
+the controller's `main.cpp`. A Teensy with an older program is on Tom's bench: only add
+controller numbers. The app's one MIDI output is to the controller (`KickPadPanel::midiOpened`).
 
 ## The controller's bench test program
 
@@ -252,5 +263,5 @@ screens, piezo discs). `firmware/bench-test/` is a PlatformIO project, separate 
 CI's "Controller test program" job builds it into `GigRig-Controller-Test.hex` on the Releases
 page and can never hold up an app release. **`docs/bench-test.md` is the guide. Keep it true**,
 and keep its pin tables in step with Tom's own step-by-step page (the "Gig Rig bench tests"
-artifact in the project). CI proves it compiles and nothing more: it has not run on hardware
+artifact in the project). CI proves it compiles (and the app's self-test checks its pad logic, `firmware/shared/`) and nothing more: it has not run on hardware
 until Tom says so. It is a test program, not the final board's controller program.

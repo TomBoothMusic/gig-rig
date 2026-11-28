@@ -15,6 +15,11 @@ There are two ways to use this guide:
 Parts C to G apply to both: interface settings, the acceptance tests, updates,
 Claude on the machine, and troubleshooting.
 
+**Doing the mini PC in one sitting?** Tom's tick-as-you-go page for that day, the
+"Mini PC set-up day" page in the Claude project (https://claude.ai/artifact/QK1T9rBayzL7Q3ZL7Fsf78), has Parts B, C and D of this guide in the
+order they are done, with nothing else. This file is the reference behind it: when one
+changes, change the other.
+
 **Contents**
 
 - [What is decided and why](#what-is-decided-and-why)
@@ -33,7 +38,7 @@ Claude on the machine, and troubleshooting.
 
 | Choice | Decision | Why |
 | --- | --- | --- |
-| Linux | **Ubuntu 24.04 LTS** desktop (the newest 24.04.x download) | The app's automatic Linux builds are made on 24.04, so they run on it unchanged. Supported with fixes until 2029. The most written-about Linux, so answers are easy to find. |
+| Linux | **Ubuntu 24.04 LTS** desktop (the newest 24.04.x download, **not 26.04**) | The app's automatic Linux builds are made on 24.04, so they run on it unchanged. Supported with fixes until 2029. The most written-about Linux, so answers are easy to find. Ubuntu's front page now offers 26.04 first: the builds have never been run on it, and the set-up relies on the X11 desktop that 24.04 has. |
 | Realtime | The normal Ubuntu kernel, started with `preempt=full threadirqs` | Gives most of a "realtime kernel" with nothing extra to install. A full realtime kernel (Ubuntu Pro, free for personal use) is a later option only if the tests ask for it. |
 | How the app reaches the interface | Directly, through ALSA, with the desktop sound system (PipeWire) switched off | The same idea as ASIO on Windows: one program owns the interface, nothing in between. |
 | Start-up | Logs in by itself and opens the app; no screen lock, no sleep, no automatic updates | A gig machine must come up the same way every time and never change by itself before a set. |
@@ -58,7 +63,7 @@ switch off, pull the stick out and Windows starts as normal.
 
 ### A1. Make the USB stick (on Windows, 15 minutes)
 
-1. Download **Ubuntu 24.04 LTS** desktop from [ubuntu.com/download/desktop](https://ubuntu.com/download/desktop). It is one large file ending in `.iso` (about 6 GB).
+1. Download **Ubuntu 24.04 LTS** desktop from [releases.ubuntu.com/24.04](https://releases.ubuntu.com/24.04/): click **64-bit PC (AMD64) desktop image**. It is one large file ending in `.iso` (about 6 GB). Ubuntu's main download page offers 26.04 first, which is **not** the one to use.
 2. Download **Rufus** from [rufus.ie](https://rufus.ie) (the "Portable" version is fine; nothing to install).
 3. Plug in the USB stick. Open Rufus.
 4. **Device:** your USB stick. Check the size so you do not pick the wrong drive.
@@ -81,17 +86,16 @@ If the blue screen has no "Use a device", restart and tap **F12** as the Lenovo 
 ### A3. Install the rig software (15 minutes)
 
 1. Click the top-right corner of the screen and connect to Wi-Fi.
-2. Open **Firefox** (the orange fox on the left). Go to github.com, sign in, and open this guide in the gig-rig repository (`docs/linux-setup.md`) so you can copy from it.
+2. Open **Firefox** (the orange fox on the left) and open this guide (github.com/TomBoothMusic/gig-rig, then `docs`, then `linux-setup.md`) so you can copy from it.
 3. Open a **Terminal**: press **Ctrl + Alt + T**.
-4. Copy this whole block, paste it into the Terminal (**Ctrl + Shift + V**) and press Enter:
+4. Copy this line, paste it into the Terminal (**Ctrl + Shift + V**) and press Enter:
 
    ```
-   sudo add-apt-repository -y universe && sudo apt-get update && sudo apt-get install -y gh git && gh auth login --hostname github.com --git-protocol https --web && gh repo clone TomBoothMusic/gig-rig ~/gig-rig-code && ~/gig-rig-code/linux/install.sh --test
+   wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash -s -- --test
    ```
 
-5. It shows a **one-time code** (like `ABCD-1234`) and says to press Enter. Press Enter, a browser tab opens, type the code in, and click **Authorize**. Go back to the Terminal.
-6. The script asks **Carry on? [Y/n]**: press Enter. It runs for a few minutes and prints a green **OK** for each step.
-7. At the end it says to **log out and back in once**. Click the top-right corner, then the power symbol, then **Log Out**. On the log-in screen click **Ubuntu** (no password).
+5. The script asks **Carry on? [Y/n]**: press Enter. It runs for several minutes and prints a green **OK** for each step. Near the end it checks the build with its self-test, which takes a few minutes with nothing showing.
+6. At the end it says to **log out and back in once**. Click the top-right corner, then the power symbol, then **Log Out**. On the log-in screen click **Ubuntu** (no password).
 
 ### A4. Test the app
 
@@ -166,23 +170,19 @@ Ubuntu may not see the drive.
 
 ### B3. Run the install script (20 minutes)
 
-1. Open **Firefox**, sign in to github.com, and open this guide in the gig-rig repository.
+1. Open **Firefox** and open this guide (github.com/TomBoothMusic/gig-rig, then `docs`, then `linux-setup.md`) so you can copy from it.
 2. Open a **Terminal** (**Ctrl + Alt + T**). Copy, paste (**Ctrl + Shift + V**) and press Enter:
-
-   ```
-   sudo add-apt-repository -y universe && sudo apt-get update && sudo apt-get install -y gh git && gh auth login --hostname github.com --git-protocol https --web && gh repo clone TomBoothMusic/gig-rig ~/gig-rig-code && ~/gig-rig-code/linux/install.sh
-   ```
-
-   (The same as Part A, without `--test` at the end.)
-
-   **Once the repository is public** the whole of steps 1 and 2 is this one line instead, with
-   no GitHub sign-in at all (steps 3 and 5 still apply; step 4 becomes just **Carry on?**):
 
    ```
    wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash
    ```
+
+   The code is public (since late November 2026), so there is no GitHub sign-in. If the code is
+   ever made private again, this line still works: it then shows a one-time code to type into a
+   browser tab first.
 3. Type your password when asked (nothing shows while you type; that is normal).
-4. Do the GitHub code step as in Part A, step A3.5, then press Enter at **Carry on?**.
+4. Press Enter at **Carry on?**. It runs for several minutes with a green **OK** per step. Near the
+   end it checks the build with its self-test: a few minutes with nothing showing.
 5. At the end it says **Restart the computer now**. Do that.
 6. The PC restarts, logs in by itself, and the **Gig Rig** app opens on its own after a few seconds.
 
@@ -196,14 +196,16 @@ the same files work on Windows and on Linux. Do this once the app has opened on 
    (It holds Effect presets, Songs, Mixer, Amp models, Responses, Kick sounds and Test takes. If
    the **Recordings** folder inside it is large, leave that one out.)
 3. Still on the laptop: click the address bar of File Explorer, type `%APPDATA%\GigRig` and press
-   Enter. Copy these three files onto the stick, into a new folder called **settings**:
-   `effects-rack.txt` (your four chains and their sockets), `mixer.txt` (the mixer as you left it)
-   and `kick-pad.txt` (the kick's sound). **Leave the other files there behind**: they hold the
-   laptop's own audio device and timing measurements, which are wrong for another computer.
+   Enter. Copy every file there onto the stick, into a new folder called **settings**, **except
+   these three**: `audio-settings.txt`, `loop-timing-2.txt` and `driver-delay.txt`. Those hold the
+   laptop's own audio device and timing measurements, which are wrong for another computer. The
+   ones that do come across are `effects-rack.txt` (your four chains and their sockets),
+   `mixer.txt` (the mixer as you left it), `kick-pad.txt`, `tuner.txt`, `break-music.txt`,
+   `expression-pedal.txt` and `remote.txt` (whichever of them exist).
 4. On the mini PC, **close the Gig Rig app** (it would otherwise write its own settings over
    yours when it closes). Plug the stick in and open **Files**.
 5. Copy the **GigRig** folder from the stick into **Documents**. If it asks, choose **Merge**.
-6. In Files, press **Ctrl + L**, type `~/.config/GigRig` and press Enter. Copy the three files
+6. In Files, press **Ctrl + L**, type `~/.config/GigRig` and press Enter. Copy the files
    from the stick's **settings** folder into it, replacing what is there.
 7. Start the app again (the **Gig Rig** icon, or restart the PC). The Effects tab should show
    your chains, the Songs tab your songs with a `*`, and the Mixer tab your act and venue names.
@@ -230,7 +232,7 @@ remembered, so after every restart the app opens the interface the same way.
 ### Allen & Heath CQ12T (now)
 
 1. On the CQ: **CONFIG**, then **USB/SD/BT**, then **USB/SD**: Sample Rate **96 kHz**, Stream Mode **Multitrack**, Source Point **Post Preamp**. The CQ sets its own rate here, so the app's Rate box shows only 96 kHz.
-2. In the app: **Audio device** the CQ (it is found by itself; on Linux it shows as "CQ12T, USB Audio (ALSA)" or similar), **Buffer 64**.
+2. In the app: **Audio device** the CQ, **Buffer 64**. On Linux one interface is listed several times; choose the line that starts **ALSA** and ends **Direct hardware device without any conversions**. The first time, the app picks a CQ line by itself and opens it at whatever buffer Linux offers, so set **Buffer 64** by hand once; it is remembered after that.
 3. There is no "safe mode" on Linux: that was a setting of the Windows driver.
 4. The routing is the same as on Windows (see the README): returns 1 to 6 land on channel 9, channel 10, ST1 and the USB stereo channel.
 
@@ -263,8 +265,11 @@ README (Stage 1, parts A and B2). Click **Copy report** after each and paste it 
 | 4 | Glitch check, 30 minutes, no playing needed | **Glitches: 0**. |
 | 5 | Glitch check again, 30 minutes, RC-600 plugged in and a few switches pressed | **Glitches: 0**. |
 | 6 | Play through it for 30 minutes (README stage 1, part B) | No clicks or gaps heard, dropout watch stays at 0. |
+| 6b | **Load check:** mixer on, your act loaded, the heaviest song you have (amp model, delays, reverbs, a full looper layout), played for 10 minutes with loops running. Then **Copy report**. | In the report's **Dropout watch**: **Late blocks of audio: 0**, and **Busiest moment** under about 50% of the time available (Claude's rule of thumb, not a measured limit: under 50% leaves room for the effects still to come; 50 to 80% works but is worth a look; over 80% is too close). The Effects tab's **Processor** line says which chain is the heavy one. |
 | 7 | Mini PC only: switch off at the wall, switch on, time it | The app is up and the CQ running with no keyboard or mouse touched. Note the time from power to sound (the design doc asks for start-up time to be checked early). Do it 5 times. |
 | 8 | Mini PC only: close the app with its window's close button | It stays closed (a deliberate quit is not treated as a crash). After the next restart it opens again by itself. |
+| 9 | Mini PC only: with the app open, in a Terminal type `pkill -KILL GigRig` (a pretend crash) | The app is back by itself within a few seconds, and the sound with it. |
+| 10 | Mini PC only: the **Gig Rig: go back a build** icon, then **Gig Rig: update** | Each says which build it switched to, and the app's report shows that build number at the top after it is opened again. (Go back needs two builds on the computer: `~/gig-rig-code/linux/update.sh build-152` fetches an older one to practise with.) |
 
 ---
 
@@ -335,6 +340,7 @@ Run `~/gig-rig-code/linux/rig-check.sh --save` first: it saves its output in
 | The app does not open after start-up | Click **Show Apps**, then **Gig Rig**, to open it by hand. Then look at today's log in `~/gigrig/logs/app-<date>.log` (or have Claude look). |
 | The app keeps closing and reopening | It crashed. The launcher gives up after 5 quick crashes in a row. Go back to the previous build (`rollback.sh`) and send the log to Claude. |
 | Screen stays black after an Ubuntu update | Restart, and in the start-up menu choose **Advanced options for Ubuntu**, then the second (older) kernel. Tell Claude. |
+| The install seems stuck after "Installing the Gig Rig app" | It is checking the build with its self-test, which takes a few minutes and shows nothing. Give it ten minutes before worrying. |
 | `install.sh` stops with **STOPPED: ...** | The line says what went wrong. Most often the internet dropped: run it again (it is safe to repeat). |
 | GitHub sign-in fails | Run `gh auth login --web` on its own and follow it, then run `install.sh` again. |
 | Forgot the password | Ubuntu's recovery mode can reset it; ask Claude for the steps for that moment. |
@@ -347,7 +353,7 @@ Run `~/gig-rig-code/linux/rig-check.sh --save` first: it saves its output in
 
 | What | Where | Mode |
 | --- | --- | --- |
-| Packages: the app's libraries (the same list CI builds with), alsa-utils, xvfb, gh, git, rtirq-init; with `--build` also cmake, ninja, build-essential | apt | both |
+| Packages: the app's libraries (the same list CI builds with), alsa-utils, xvfb, xauth, gh, git, rtirq-init; with `--build` also cmake, ninja, build-essential | apt | both |
 | Realtime rights: `@audio rtprio 95, memlock unlimited, nice -19`; user added to `audio` | `/etc/security/limits.d/95-gigrig-audio.conf` | both |
 | `vm.swappiness=10` | `/etc/sysctl.d/90-gigrig.conf` | both |
 | CPU governor `performance`, EPP `performance`, USB autosuspend off, all USB `power/control=on`, at every boot | `/usr/local/sbin/gigrig-tune`, `gigrig-tune.service`, `/etc/udev/rules.d/90-gigrig-usb-awake.rules` | both |

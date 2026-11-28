@@ -5,8 +5,8 @@
 #
 #   wget -qO- https://raw.githubusercontent.com/TomBoothMusic/gig-rig/main/linux/bootstrap.sh | bash
 #
-# (That line works while the code is public. While it is private, use the longer line in
-# docs/linux-setup.md, which signs in to GitHub first and then does the same thing.)
+# (The code is public, so that line needs no sign-in. If it is ever private again, this
+# script notices, signs in to GitHub with a one-time code, and carries on.)
 #
 # It installs git, fetches the code into ~/gig-rig-code (or brings a copy that is already
 # there up to date) and runs linux/install.sh, which does everything else and says what it

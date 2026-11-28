@@ -136,6 +136,34 @@ if [ -n "$usb" ]; then
 fi
 line ""
 
+# ---- Tom's own files, and the phone screen ---------------------------------
+docs="$HOME/Documents/GigRig"
+count() { find "$1" -maxdepth 1 -type f -name '*.txt' 2>/dev/null | wc -l; }
+if [ -d "$docs" ]; then
+    songs="$(count "$docs/Songs")"; presets="$(count "$docs/Effect presets")"; mixes="$(find "$docs/Mixer" -type f -name '*.txt' 2>/dev/null | wc -l)"
+    line "Your files in Documents/GigRig: $songs songs, $presets effect presets, $mixes mixer set-ups"
+    if [ "$songs" -eq 0 ] && [ "$presets" -eq 0 ]; then
+        line "      None yet: bring them across from the laptop (docs/linux-setup.md, B4)."
+    fi
+else
+    line "Your files: no Documents/GigRig folder yet (the app makes it the first time it opens)."
+fi
+chains="$HOME/.config/GigRig/effects-rack.txt"
+if [ -f "$chains" ]; then line "      The app's remembered chains and sockets are here (effects-rack.txt)."
+else line "      No remembered chains yet (effects-rack.txt comes across from the laptop, B4)."; fi
+
+address="$(hostname -I 2>/dev/null | awk '{print $1}')"
+remote="$HOME/.config/GigRig/remote.txt"
+if [ -n "$address" ]; then line "Network: this computer's address is $address"
+else line "Network: not connected (fine at a gig; the phone screen and updates need it)"; fi
+if grep -qsE '^on *= *1' "$remote"; then
+    port="$(grep -sE '^port *=' "$remote" | head -1 | cut -d= -f2 | tr -d ' ')"
+    line "      Phone screen: switched on. On the phone, open http://${address:-<address>}:${port:-8080}/"
+else
+    line "      Phone screen: switched off (the Remote screen tab in the app switches it on)."
+fi
+line ""
+
 # ---- Claude Code ---------------------------------------------------------
 if command -v claude > /dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; then pass "Claude Code installed"
 else line "      Claude Code not installed (optional: see the guide)"; fi
