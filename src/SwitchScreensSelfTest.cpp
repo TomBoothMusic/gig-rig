@@ -339,7 +339,7 @@ void runSwitchScreensSelfTest (const std::function<void (bool, const juce::Strin
                && SwitchScreens::chainColour ("Bass") == colours::bass && SwitchScreens::chainColour ("Stomp") == colours::stomp
                && SwitchScreens::chainColour ("Duo vocal") == colours::duo
                && screens.face (4).tile.border == colours::bass && screens.face (3).tile.border == colours::acoustic,
-               "switch screens: the chain colours are red vocal, yellow acoustic, blue electric, orange bass, green stomp and purple duo, taken from the chain's name");
+               "switch screens: the chain colours are red vocal, yellow acoustic, blue electric, orange bass, purple stomp and green duo, taken from the chain's name");
 
         const auto& h = screens.face (1).tile;
         check (h.background == colours::black && h.border == colours::vocal && firstWords (h) == "Harmony" && h.numItems == 2 && juce::String (h.items[1].text) == "Key of G",

@@ -50,8 +50,8 @@ namespace colours
     constexpr Colour acoustic = yellow;
     constexpr Colour electric = rgb (0x2f, 0x7b, 0xff);
     constexpr Colour bass     = rgb (0xf0, 0x7a, 0x1a);
-    constexpr Colour stomp    = rgb (0x34, 0xd2, 0x7b);    // a stand-in, undecided
-    constexpr Colour duo      = rgb (0xc0, 0x8c, 0xff);    // a stand-in, undecided
+    constexpr Colour stomp    = rgb (0xc0, 0x8c, 0xff);    // purple (Tom, 28 Nov 2026)
+    constexpr Colour duo      = rgb (0x34, 0xd2, 0x7b);    // green (Tom, 28 Nov 2026)
 }
 
 enum ItemKind  { itemNone = 0, itemWords = 1, itemLanes = 2, itemPedal = 3 };

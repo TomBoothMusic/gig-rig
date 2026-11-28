@@ -60,7 +60,7 @@ namespace
     {
         return c == colours::blue ? "blue" : c == colours::red ? "red" : c == colours::green ? "green" : c == colours::yellow ? "yellow"
              : c == colours::white ? "white" : c == colours::purple ? "purple" : c == colours::dim ? "dim grey" : c == colours::black ? "black"
-             : c == colours::electric ? "blue" : c == colours::bass ? "orange" : c == colours::stomp ? "green" : c == colours::duo ? "light purple" : "grey";
+             : c == colours::electric ? "blue" : c == colours::bass ? "orange" : c == colours::stomp ? "light purple" : c == colours::duo ? "green" : "grey";
     }
 
     /** "purple", "black with a yellow border", "red, flashing". */

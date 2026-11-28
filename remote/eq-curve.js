@@ -224,24 +224,61 @@ GR.eqCurve = (key, block, o, rta) =>
 
     const where = (ev) => { const r = svg.getBoundingClientRect(); return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H }; };
 
+    // Two fingers on the graph set the width of the picked point: apart is wider, together is
+    // narrower, as on the Wing. The first finger may be holding the point or be anywhere.
+    const fingers = new Map();
+    let pinch = null, busy = false;
+
+    const begin = () =>
+    {
+        if (busy) return;
+        busy = true;
+        GR.dragging++;
+        box.classList.add ('moving');
+    };
+
+    const spread = () => { const [a, b] = [...fingers.values()]; return Math.hypot (a.x - b.x, a.y - b.y); };
+
     svg.addEventListener ('pointerdown', (ev) =>
     {
+        fingers.set (ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+        if (fingers.size === 2 && bands[picked].q && spread() >= 20)
+        {
+            ev.preventDefault();
+            svg.setPointerCapture (ev.pointerId);
+            pinch = { start: spread(), q: Number (v[bands[picked].q]) };
+            if (hold) hold.pinched = hold.moved = true;
+            begin();
+            return;
+        }
+
+        if (fingers.size !== 1) return;
         const at = where (ev), i = nearest (at.x, at.y);
         if (i < 0) return;
         ev.preventDefault();
         svg.setPointerCapture (ev.pointerId);
         const p = place (bands[i]);
-        hold = { i, dx: p.x - at.x, dy: p.y - at.y, x: ev.clientX, y: ev.clientY, moved: false };
+        hold = { i, id: ev.pointerId, dx: p.x - at.x, dy: p.y - at.y, x: ev.clientX, y: ev.clientY, moved: false, pinched: false };
         picked = i;
         GR.ui.eqBand[key] = i;
-        GR.dragging++;
-        box.classList.add ('moving');
+        begin();
         draw();
     });
 
     svg.addEventListener ('pointermove', (ev) =>
     {
-        if (! hold) return;
+        if (fingers.has (ev.pointerId)) fingers.set (ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+        if (pinch && fingers.size === 2)
+        {
+            const b = bands[picked];
+            set (b.q, Math.round (limit (b.q, pinch.q * pinch.start / Math.max (10, spread())) * 100) / 100);
+            draw();
+            return;
+        }
+
+        if (! hold || hold.pinched || ev.pointerId !== hold.id) return;
         if (! hold.moved && Math.hypot (ev.clientX - hold.x, ev.clientY - hold.y) < 5) return;
         hold.moved = true;
         const b = bands[hold.i], at = where (ev);
@@ -252,22 +289,26 @@ GR.eqCurve = (key, block, o, rta) =>
 
     const release = (ev) =>
     {
-        if (! hold) return;
+        fingers.delete (ev.pointerId);
+        if (fingers.size < 2) pinch = null;
+        if (fingers.size > 0 || ! busy) return;       // the other finger of a pinch is still down
+
         const was = hold;
         hold = null;
+        busy = false;
         GR.dragging = Math.max (0, GR.dragging - 1);
         box.classList.remove ('moving');
 
         // Two taps on a point put it back: a band to no boost or cut, a cut to off.
         const now = Date.now();
-        if (! was.moved && ev.type === 'pointerup' && lastTap.key === key && lastTap.i === was.i && now - lastTap.at < 400)
+        if (was && ! was.moved && ev.type === 'pointerup' && lastTap.key === key && lastTap.i === was.i && now - lastTap.at < 400)
         {
             const b = bands[was.i];
             if (b.g) set (b.g, 0); else set (b.f, b.kind === 'lowcut' ? 20 : 20000);
             lastTap = { key: '', i: -1, at: 0 };
         }
         else
-            lastTap = was.moved ? { key: '', i: -1, at: 0 } : { key, i: was.i, at: now };
+            lastTap = ! was || was.moved ? { key: '', i: -1, at: 0 } : { key, i: was.i, at: now };
 
         GR.render();
     };

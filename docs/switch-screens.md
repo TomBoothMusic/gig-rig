@@ -66,7 +66,7 @@ with colour because the screens share one backlight.
 **The three off looks** (Tom is choosing between them on the bench):
 
 - **A border in the chain's colour, black inside.** Red vocal, yellow acoustic, blue electric,
-  orange bass (green stomp and purple duo partner are stand-ins). The border stays when the
+  orange bass (purple stomp and green duo partner, Tom's choice of 28 Nov 2026). The border stays when the
   effect is on. The chain's colour comes from the chain's name on the Effects tab.
 - **A white outline, black inside.**
 - **White all over.**

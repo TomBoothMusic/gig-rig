@@ -195,7 +195,7 @@ orders as before, and nothing about the sound.
   down the left and one block at a time on the right.
 - **Effects.** The chain is a pedalboard picture, and each effect has its own page. It looks
   different from a mixer channel on purpose, so nobody mistakes one for the other.
-- **One colour for one sound.** `chainColours` in `remote/screens.js` holds Tom's chain colours, the same ones planned for the foot switch screens. `tint` sets `--chain` on a strip, a page or the pedalboard and the last rules of `remote/app.css` paint it. The stomp's green and the duo partner's purple are stand-ins until Tom chooses.
+- **One colour for one sound.** `chainColours` in `remote/screens.js` holds Tom's chain colours, the same ones planned for the foot switch screens. `tint` sets `--chain` on a strip, a page or the pedalboard and the last rules of `remote/app.css` paint it. The stomp is purple and the duo partner green (Tom's choice, 28 Nov 2026).
 - **The drawings are stand-ins.** A pedal's drawing is a shape and a colour chosen in
   `pedalLook` in `remote/screens.js`, not a likeness. The finished look of each piece of gear
   comes last (see "The gear look sample" below).
@@ -223,8 +223,12 @@ the recording mix.
 - **Tap a point twice** to put it back: a band to no boost or cut, a cut to off. **Flat** does
   that for every point at once, after asking.
 - **Under the graph** the picked band has big sliders: Freq, Gain, and Q for the
-  bells (higher is narrower). The row of names picks a band without touching the graph. With a
-  mouse, the wheel over the graph sets the picked bell's width.
+  bells (higher is narrower). The row of names picks a band without touching the graph.
+- **Two fingers on the graph set the picked bell's Q** (Tom's ask, 28 Nov 2026): spread them
+  apart for wider, squeeze them together for narrower. The first finger may be holding the point
+  or both may be anywhere on the graph. It suits a phone on its side and bigger screens; with a
+  phone upright the graph is narrow, so use the Q slider. With a mouse, the wheel over the
+  graph does the same.
 - **RTA**, the live picture of the sound (channels and outputs): the blue shape behind the curve shows how
   loud the sound is from the lowest notes on the left to the highest on the right. Choose
   **Pre** (before the EQ), **Post** (after it) or **Off**. It jumps up at once and falls back slowly, so
@@ -250,8 +254,7 @@ What it is and is not:
   in `src/effects/mixer/MixerBlockChecks.cpp` holds the real EQ to those sums, so the two cannot
   drift apart unnoticed. The picture: `src/Spectrum.*` and `Mixer::lookAt` / `Mixer::picture`,
   order `mix.rta`, `rta` in the live data (`db` = one level per sixth of an octave from `lowHz`).
-- Not built: width by pinching with two fingers (use the Width slider; on the finished board the
-  Adjust knob will do it), a point for each feedback notch, and the curve in the app's own Mixer tab.
+- Not built: a point for each feedback notch, and the curve in the app's own Mixer tab.
 
 ## Not built yet
 
