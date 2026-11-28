@@ -53,7 +53,10 @@ Real audio and MIDI are proven only on Tom's hardware.
 
 - Set up by `linux/install.sh`; everything it changes is listed at the end of
   `docs/linux-setup.md`. Health check: `linux/rig-check.sh` (changes nothing).
-- Ubuntu 24.04 LTS, kernel options `preempt=full threadirqs usbcore.autosuspend=-1`,
+- Tom's one-sitting page for setting up and proving the mini PC is the "Mini PC set-up day"
+  artifact in the project, https://claude.ai/artifact/QK1T9rBayzL7Q3ZL7Fsf78 (source in the project files, `mini-pc/`). It follows
+  `docs/linux-setup.md` Parts B to D: keep the two in step. Not yet done on hardware until Tom says so.
+- Ubuntu 24.04 LTS (not 26.04: untried, and the set-up relies on the X11 desktop), kernel options `preempt=full threadirqs usbcore.autosuspend=-1`,
   PipeWire masked so the app opens the interface directly through ALSA.
 - Builds: `~/gigrig/builds/<tag>/GigRig`, the one in use at `~/gigrig/current`.
   Launcher `~/.local/bin/gigrig` (restarts after a crash). Logs: `~/gigrig/logs/`.
