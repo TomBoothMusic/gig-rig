@@ -1353,8 +1353,65 @@ float Mixer::outputLimiterDb (int o) const
     return e != nullptr && now.output[(size_t) o].chain.slots[outLimiter].on ? e->meterValue() : 0.0f;
 }
 
+void Mixer::lookAt (Look what, int index, bool beforeEq, juce::uint32 nowMs)
+{
+    const int most = what == Look::channel ? numMixChannels : what == Look::output ? numMixOutputs : 0;
+
+    if (index < 0 || index >= most)
+        what = Look::nothing;
+
+    if (what != Look::nothing && (what != look || index != lookIndex || beforeEq != lookBefore))
+        ++lookCount;
+
+    look = what;
+    lookIndex = what == Look::nothing ? 0 : index;
+    lookBefore = what != Look::nothing && beforeEq;
+    lookAskedAt = nowMs;
+    lookCode.store (what == Look::nothing ? -1 : (lookIndex | (lookBefore ? 8 : 0) | (what == Look::output ? 16 : 0)));
+}
+
+void Mixer::stopLookingIfUnasked (juce::uint32 nowMs)
+{
+    if (look != Look::nothing && nowMs - lookAskedAt > (juce::uint32) lookTimeoutMs)
+        lookAt (Look::nothing, 0, false, nowMs);
+}
+
+const std::vector<float>& Mixer::picture()
+{
+    if (look == Look::nothing)
+    {
+        pictureDb.clear();
+        return pictureDb;
+    }
+
+    const auto nowMs = juce::Time::getMillisecondCounter();
+
+    if (! pictureDb.empty() && nowMs - pictureAt < 60)
+        return pictureDb;
+
+    pictureAt = nowMs;
+    const auto written = lookTap.written();
+
+    // No new sound since the last look (the mixer is off, or the channel is): after a moment the picture is empty, not stuck.
+    pictureIdle = written == pictureWritten ? pictureIdle + 1 : 0;
+    pictureWritten = written;
+
+    if (pictureIdle >= 3)
+    {
+        pictureDb.assign ((size_t) spectrumBandCount, -100.0f);
+        return pictureDb;
+    }
+
+    pictureSamples.resize ((size_t) spectrumWindow (rate));
+    lookTap.latest (pictureSamples.data(), (int) pictureSamples.size());
+    pictureDb = spectrumBands (pictureSamples.data(), rate);
+    return pictureDb;
+}
+
 void Mixer::tick()
 {
+    stopLookingIfUnasked (juce::Time::getMillisecondCounter());
+
     for (auto& c : chans)   { c.strip.collectGarbage(); c.strip2.collectGarbage(); }
     for (auto& f : fxs)     f.chain.collectGarbage();
     for (auto& side : recOut.chain) side.collectGarbage();
@@ -1586,6 +1643,12 @@ juce::String Mixer::reportText() const
     if (lastVenueNote.isNotEmpty())
         t << "Last venue load: " << lastVenueNote << "\n";
 
+    t << "EQ curve's live picture (phone and tablet screen): asked for " << lookCount << " time" << (lookCount == 1 ? "" : "s") << " since the app started";
+    if (look != Look::nothing)
+        t << "; now looking at " << (look == Look::channel ? "channel " + juce::String (lookIndex + 1) : mixOutputName (lookIndex))
+          << (lookBefore ? ", before its EQ" : ", after its EQ");
+    t << ".\n";
+
     for (int c = 0; c < numMixChannels; ++c)
     {
         const auto& ch = now.channel[(size_t) c];
@@ -1798,9 +1861,17 @@ const float* const* Mixer::stripChannels (const float* const* feed, int numIns, 
         for (int i = 0; i < n; ++i)
             pre[i] = live[i] * (start + step * (float) i);
 
+        // The EQ curve's live picture: a copy of this channel for the screen, read only (Spectrum.h).
+        const int looking = lookCode.load (std::memory_order_relaxed);
+        if (looking == (c | 8))
+            lookTap.write (pre, nullptr, n);
+
         juce::FloatVectorOperations::copy (post, pre, n);
         ch.strip.process (post, n);
         juce::FloatVectorOperations::copy (mid, post, n);
+
+        if (looking == c)
+            lookTap.write (mid, nullptr, n);
         ch.strip2.process (post, n);
         stripped[(size_t) c] = true;
 
@@ -2095,6 +2166,10 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
 
         const int sides = mono ? 1 : 2;
         float* const bus[2] { left, right };
+        const int looking = lookCode.load (std::memory_order_relaxed);
+
+        if (looking == (o | 16 | 8))
+            lookTap.write (left, mono ? nullptr : right, n);
 
         if (o == 0)
         {
@@ -2154,6 +2229,9 @@ void Mixer::process (const float* const* raw, const float* const* feed, int numI
 
             raise (out.peak[(size_t) s], peakOf (to, n));
         }
+
+        if (looking == (o | 16))
+            lookTap.write (out.buf[0].data(), out.buf[1].data(), n);
     }
 
     if (rec.wants (recSlotMain))

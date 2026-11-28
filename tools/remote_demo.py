@@ -12,7 +12,9 @@
       machine at hand does not have Tom's songs: keeps everything remote/demo-data.js has and
       adds only the parts it lacks, from a running GigRig (any one, a fresh install will do).
       It also adds the description of every effect "Add an effect" offers, by adding each to
-      the first chain for a moment, so never run it against a rig that is in use.
+      the first chain for a moment, so never run it against a rig that is in use. And where the
+      app now describes an effect differently (a setting gained, a range widened), the demo's
+      description of it is replaced.
 
   python3 tools/remote_demo.py build out.html
       Joins remote/index.html and its files into one file with no outside links, set to run
@@ -107,9 +109,17 @@ def top_up(base):
             types[entry["id"]] = seen[entry["id"]]
             described += 1
 
+    # An effect whose description changed in the app (a setting gained, a range widened) is described afresh.
+    refreshed = []
+    for kind, facts in ask(base, "/api/state")["s"]["types"].items():
+        if kind in types and types[kind] != facts:
+            types[kind] = facts
+            refreshed.append(kind)
+
     out = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     path.write_text(HEAD + "window.GIGRIG_DEMO = " + out + ";\n" + TAIL, encoding="utf-8")
-    print(f"Topped up remote/demo-data.js: added {sorted(set(added)) or 'nothing'}, described {described} more effects, {len(out) // 1024} KB")
+    print(f"Topped up remote/demo-data.js: added {sorted(set(added)) or 'nothing'}, described {described} more effects, "
+          f"described afresh {sorted(refreshed) or 'none'}, {len(out) // 1024} KB")
 
 
 def build(out):

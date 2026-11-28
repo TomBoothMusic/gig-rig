@@ -179,7 +179,9 @@ python3 tools/remote_demo.py top-up http://127.0.0.1:8080
 ```
 
 It keeps everything `remote/demo-data.js` has, adds only the parts it lacks, and describes
-every effect in `fxCatalogue` so the demo can add any of them.
+every effect in `fxCatalogue` so the demo can add any of them. Where the app now describes
+an effect differently from the demo's copy (a setting gained, a range widened), it replaces that
+description too.
 
 ## Pages inside a screen (28 Nov 2026)
 
@@ -204,6 +206,53 @@ orders as before, and nothing about the sound.
   build one. A new kind of page should start with `pageHead` so the way back is always in the
   same place.
 
+## The EQ curve (28 Nov 2026)
+
+Tom's ask (27 and 28 Nov 2026): the mixer's EQ as a curve with a point to drag for each band, as
+on the CQ12T and the Behringer Wing, with a live picture of the sound behind it. It is on every
+page that shows the mixer's EQ: each channel, each output, the EQ in front of a mixer effect and
+the recording mix.
+
+**To use it:** Mixer, **Open** on a fader, then **EQ** in the strip down the left.
+
+- **Drag a point** sideways for its frequency and up or down to boost or cut. The graph never
+  scrolls the page, so a drag is always a drag. The numbers above the graph follow the point.
+- There are **eight points**: **LC** (low cut) and **HC** (high cut) on their own row near the
+  bottom, **L** and **H** (the shelves) and **1** to **4** (the bells). A cut at the very end of
+  its travel (20 Hz, 20 kHz) is off and is drawn faint.
+- **Tap a point twice** to put it back: a band to no boost or cut, a cut to off. **Flat** does
+  that for every point at once, after asking.
+- **Under the graph** the picked band has big sliders: Frequency, Boost or cut, and Width for the
+  bells (higher is narrower). The row of names picks a band without touching the graph. With a
+  mouse, the wheel over the graph sets the picked bell's width.
+- **Live picture of the sound** (channels and outputs): the blue shape behind the curve shows how
+  loud the sound is from the lowest notes on the left to the highest on the right. Choose
+  **Before the EQ**, **After the EQ** or **Off**. It jumps up at once and falls back slowly, so
+  a short hit (the stomp) can be read. A channel's picture is its live sound, not its loops: a
+  loop was recorded after the EQ, so the EQ no longer changes it.
+
+What it is and is not:
+
+- It changes the same settings as the sliders it replaced, through the same order (`mix.param`).
+  **Nothing about the sound or the saved files changed**, except that every band can now be
+  moved anywhere from 20 Hz to 20 kHz (they used to stop part of the way). Old settings mean
+  what they did.
+- The live picture only looks. The rig copies the sound for it and never writes to it (a check
+  in the self-test holds a rig that is being looked at to exactly the sound of one that is not).
+  It runs only while a screen with an EQ on it asks, and stops by itself five seconds after the
+  last ask.
+- With the mixer switched off there is no sound in the mixer, so there is no picture.
+- In the demo the picture is a pretend sound, shaped by the curve. It shows what the screen does,
+  not what anything sounds like.
+- For a developer: `remote/eq-curve.js` (`GR.eqCurve`, called by `blockItem` in
+  `remote/screens.js` for a `mixeq` block). The curve is worked out in the page with the same
+  sums as `MixEq` in `src/effects/mixer/MixerBlocks.cpp`; the check "the curve the screen draws"
+  in `src/effects/mixer/MixerBlockChecks.cpp` holds the real EQ to those sums, so the two cannot
+  drift apart unnoticed. The picture: `src/Spectrum.*` and `Mixer::lookAt` / `Mixer::picture`,
+  order `mix.rta`, `rta` in the live data (`db` = one level per sixth of an octave from `lowHz`).
+- Not built: width by pinching with two fingers (use the Width slider; on the finished board the
+  Adjust knob will do it), a point for each feedback notch, and the curve in the app's own Mixer tab.
+
 ## Not built yet
 
 - A password or a "look but do not touch" mode.
@@ -217,6 +266,7 @@ orders as before, and nothing about the sound.
 remote/index.html, app.css      the page and its look
 remote/core.js                  what every screen shares: talking to the rig, drawing, faders, sheets
 remote/screens.js               Looper, Songs, Effects, Mixer, Tools, Rig
+remote/eq-curve.js              the mixer EQ as a curve with draggable points and the live picture behind it
 remote/builder.js               the arrangement builder
 remote/demo.js                  the pretend rig (answers the same three questions as the real one)
 remote/demo-data.js             the demo's copy of a real state. MADE BY tools/remote_demo.py, never by hand
@@ -270,6 +320,7 @@ The orders (`RemoteApi::command`; the demo answers the same ones in `remote/demo
 | `mix.out` | `o`, `key` (`level`, `mute`), `value` |
 | `mix.fx` | `f`, `key` (`ret`, `on`, `mon0`, `mon1`, `lowCut`, `highCut`, `recLevel`), `value` |
 | `mix.param` | `where` (`ch`, `out`, `fx`, `fxeq`, `rec` for the recording mix's own chain), `i`, `slot`, `id` (`on` switches the block), `value` |
+| `mix.rta` | The EQ curve's live picture. `where` (`ch`, `out`, or `off` to stop), `i`, `before` (true = before its EQ). The page asks again every two seconds; the rig stops five seconds after the last ask. The picture comes in the live data as `rta` |
 | `mix.preset` | `kind` (`act`, `venue`, `monitors`), `name` |
 | `mix.save` | `kind` (`act`, `venue`, `monitors`), `name` |
 | `mix.keepFx` | `f` |
