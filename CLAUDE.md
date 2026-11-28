@@ -162,6 +162,10 @@ page works the curve out with the same sums as `MixEq`, and a check in `MixerBlo
 ("the curve the screen draws") holds the real EQ to them, so change both or neither. Its live
 picture (`src/Spectrum.*`, `Mixer::lookAt`, order `mix.rta`) only ever copies the sound: **a rig
 that is being looked at must send every return exactly what one that is not sends** (a check).
+Since 29 Nov 2026 the laptop's Mixer tab has the same curve (`src/EqCurveView.*`, Tom's ask): it
+only draws and reports, `MixerPanel` writes the settings as its sliders did. The sums are one
+C++ file, `src/effects/mixer/EqCurveMath.h`, used by the tab and by that check; the page's
+JavaScript copy must match it. One live picture at a time: the last screen to ask gets it.
 The demo's looper is a stand-in, never evidence about timing. Nothing in the remote screen may
 run on the audio thread, and the looper engine was not changed for it.
 

@@ -274,6 +274,9 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
             m.slots[(size_t) block].on = blockOn.getToggleState();
             setCurrentChain (m);
 
+            if (eqView != nullptr)
+                eqView->setDimmed (! blockOn.getToggleState());
+
             for (int b = 0; b < blockButtons.size(); ++b)
                 blockButtons[b]->setButtonText (blockName (m.slots[(size_t) b].type) + (m.slots[(size_t) b].on ? ": on" : ": off"));
         }
@@ -354,6 +357,8 @@ juce::String MixerPanel::reportText() const
         }
     }
 
+    t << "EQ curve on the Mixer tab: " << (eqMoves + (eqView != nullptr ? eqView->changesMade() : 0)) << " changes made on it since the app started; its RTA is set to "
+      << (eqRta == 0 ? "Off" : eqRta == 1 ? "Pre" : "Post") << ".\n";
     return t;
 }
 
@@ -871,6 +876,14 @@ void MixerPanel::rebuildDetail()
 
 void MixerPanel::rebuildGrid()
 {
+    if (eqView != nullptr)
+        eqMoves += eqView->changesMade();
+
+    eqView.reset();
+    eqPointBox = nullptr;
+    eqFreq = eqGain = eqQ = nullptr;
+    eqFlat = nullptr;
+    eqFlatArmed = 0;
     gridLabels.clear();
     gridControls.clear();
 
@@ -881,7 +894,7 @@ void MixerPanel::rebuildGrid()
     if (block >= (int) chain.slots.size())
     {
         blockHint.setText ({}, juce::dontSendNotification);
-        layoutDetail();
+        resized();
         return;
     }
 
@@ -890,6 +903,13 @@ void MixerPanel::rebuildGrid()
     blockHint.setText (blockWords (slot.type), juce::dontSendNotification);
     gridColumns = slot.type == "notches" ? 4 : 3;
     const int b = block;
+
+    if (slot.type == "mixeq" && ! isFx)
+    {
+        buildEqCurve (slot, b);
+        resized();          // the faders give the curve some of their height
+        return;
+    }
 
     for (const auto& info : paramsOf (slot.type))
     {
@@ -948,7 +968,158 @@ void MixerPanel::rebuildGrid()
         }
     }
 
-    layoutDetail();
+    resized();
+}
+
+//==============================================================================
+void MixerPanel::buildEqCurve (const fx::SlotModel& slot, int b)
+{
+    const auto& infos = paramsOf (slot.type);
+    eqView = std::make_unique<EqCurveView>();
+    eqView->setRate (engine.sampleRate());
+    eqView->setDimmed (! slot.on);
+
+    for (const auto& info : infos)
+    {
+        eqView->setRange (info.id, info.min, info.max);
+        eqView->setValue (info.id, slot.param (info.id, info.def));
+    }
+
+    const auto write = [this, b] (const std::string& id, float v)
+    {
+        auto m = currentChain();
+
+        if (b < (int) m.slots.size())
+        {
+            m.slots[(size_t) b].setParam (id, v);
+            setCurrentChain (m);
+        }
+    };
+
+    eqView->onChange = write;
+    eqView->onPicked = [this] { syncEqSide(); };
+    addAndMakeVisible (*eqView);
+
+    const auto addRow = [this] (const juce::String& text, juce::Component* control)
+    {
+        auto* label = gridLabels.add (new juce::Label());
+        small (*label, text, style::textMain);
+        addAndMakeVisible (label);
+        gridControls.add (control);
+        addAndMakeVisible (control);
+    };
+
+    eqPointBox = new juce::ComboBox();
+    style::combo (*eqPointBox);
+    for (int i = 0; i < EqCurveView::numPoints; ++i)
+        eqPointBox->addItem (EqCurveView::points()[(size_t) i].name, i + 1);
+    eqPointBox->onChange = [this]
+    {
+        if (eqView != nullptr && eqPointBox != nullptr)
+        {
+            eqView->pick (eqPointBox->getSelectedId() - 1);
+            syncEqSide();
+        }
+    };
+    addRow ("Point", eqPointBox);
+
+    // The picked point's own three settings. Which setting each slider writes changes with the point.
+    const auto makeSlider = [this, write, addRow] (const juce::String& text, int which)
+    {
+        auto* slider = new juce::Slider();
+        styleBar (*slider);
+        slider->onValueChange = [this, slider, write, which]
+        {
+            if (eqView == nullptr)
+                return;
+
+            const auto& p = EqCurveView::points()[(size_t) eqView->picked()];
+            const char* id = which == 0 ? p.f : which == 1 ? p.g : p.q;
+
+            if (id != nullptr)
+            {
+                eqView->setValue (id, (float) slider->getValue());
+                write (id, (float) slider->getValue());
+                ++eqMoves;
+            }
+        };
+        addRow (text, slider);
+        return slider;
+    };
+
+    eqFreq = makeSlider ("Freq", 0);
+    eqGain = makeSlider ("Gain", 1);
+    eqQ = makeSlider ("Q", 2);
+
+    auto* rta = new juce::ComboBox();
+    style::combo (*rta);
+    rta->addItem ("Off", 1);
+    rta->addItem ("Pre", 2);
+    rta->addItem ("Post", 3);
+    rta->setSelectedId (eqRta + 1, juce::dontSendNotification);
+    rta->onChange = [this, rta] { eqRta = juce::jlimit (0, 2, rta->getSelectedId() - 1); };
+    addRow ("RTA", rta);
+
+    eqFlat = new juce::TextButton ("Flat");
+    styleButton (*eqFlat);
+    eqFlat->onClick = [this]
+    {
+        if (eqView == nullptr || eqFlat == nullptr)
+            return;
+
+        if (eqFlatArmed <= 0)
+        {
+            // A whole EQ is a lot to lose to one stray click: the second press does it.
+            eqFlatArmed = 45;
+            eqFlat->setButtonText ("Press again to flatten the EQ");
+            return;
+        }
+
+        for (int i = 0; i < EqCurveView::numPoints; ++i)
+            eqView->resetPoint (i);
+
+        eqFlatArmed = 0;
+        eqFlat->setButtonText ("Flat");
+        syncEqSide();
+    };
+    addRow ({}, eqFlat);
+
+    syncEqSide();
+}
+
+void MixerPanel::syncEqSide()
+{
+    if (eqView == nullptr || eqFreq == nullptr || eqGain == nullptr || eqQ == nullptr || eqPointBox == nullptr)
+        return;
+
+    const auto& p = EqCurveView::points()[(size_t) eqView->picked()];
+    eqPointBox->setSelectedId (eqView->picked() + 1, juce::dontSendNotification);
+
+    const auto setUp = [this] (juce::Slider& slider, const char* id, const juce::String& suffix)
+    {
+        slider.setEnabled (id != nullptr);
+        slider.setAlpha (id != nullptr ? 1.0f : 0.35f);
+
+        if (id == nullptr)
+            return;
+
+        for (const auto& info : paramsOf ("mixeq"))
+            if (info.id == id)
+            {
+                const auto range = info.max - info.min;
+                slider.setNormalisableRange (juce::NormalisableRange<double> (info.min, info.max, range > 2000.0f ? 1.0 : range > 20.0f ? 0.1 : 0.01));
+                if (info.unit == "Hz" && info.min > 0.0f)
+                    slider.setSkewFactorFromMidPoint (std::sqrt ((double) info.min * (double) info.max));
+                slider.setTextValueSuffix (suffix);
+                slider.setDoubleClickReturnValue (true, info.def);
+            }
+
+        slider.setValue (eqView->value (id), juce::dontSendNotification);
+    };
+
+    setUp (*eqFreq, p.f, " Hz");
+    setUp (*eqGain, p.g, " dB");
+    setUp (*eqQ, p.q, {});
 }
 
 //==============================================================================
@@ -980,6 +1151,25 @@ void MixerPanel::timerCallback()
     }
 
     repaint (stripsArea);
+
+    // The live picture behind the EQ curve: asked for only while the curve is on screen, and the
+    // mixer only ever copies the sound for it (Mixer::lookAt). It stops by itself when this stops asking.
+    if (eqView != nullptr)
+    {
+        const auto& s = strips[(size_t) chosen];
+        const auto what = s.kind == Kind::channel ? Mixer::Look::channel : Mixer::Look::output;
+
+        if (eqRta != 0 && mixer.isOn() && isShowing() && s.kind != Kind::fx)
+        {
+            mixer.lookAt (what, s.index, eqRta == 1);
+            eqView->setPicture (mixer.picture());
+        }
+        else
+            eqView->setPicture ({});
+
+        if (eqFlatArmed > 0 && --eqFlatArmed == 0 && eqFlat != nullptr)
+            eqFlat->setButtonText ("Flat");
+    }
 
     if (ticks % 3 == 0)
     {
@@ -1143,7 +1333,8 @@ void MixerPanel::resized()
 
     // ---- the strips ----
     area.removeFromTop (2);
-    stripsArea = area.removeFromTop (juce::jmax (150, area.getHeight() - 330));
+    // The EQ curve wants height to drag in, so the faders give it some while it is on screen.
+    stripsArea = area.removeFromTop (juce::jmax (150, area.getHeight() - (eqView != nullptr ? 430 : 330)));
     auto stripRow = stripsArea.withTrimmedTop (18).reduced (2, 2);
     const int groupGap = 12;
     const int width = (stripRow.getWidth() - 2 * groupGap) / numStrips;
@@ -1215,6 +1406,24 @@ void MixerPanel::layoutDetail()
 
     blockHint.setBounds (area.removeFromTop (blockHint.getText().isEmpty() ? 0 : 18));
     area.removeFromTop (2);
+
+    if (eqView != nullptr)
+    {
+        // The curve takes the room, the picked point's settings go in one column on its right.
+        auto side = area.removeFromRight (juce::jmin (300, area.getWidth() / 3));
+        area.removeFromRight (10);
+        eqView->setBounds (area);
+        const int rowHeight = juce::jlimit (21, 28, side.getHeight() / juce::jmax (1, gridControls.size()));
+
+        for (int i = 0; i < gridControls.size(); ++i)
+        {
+            auto cell = side.removeFromTop (rowHeight).withTrimmedBottom (2);
+            gridLabels[i]->setBounds (cell.removeFromLeft (46));
+            gridControls[i]->setBounds (cell);
+        }
+
+        return;
+    }
 
     const int columns = juce::jmax (1, gridColumns);
     const int cellWidth = area.getWidth() / columns;
