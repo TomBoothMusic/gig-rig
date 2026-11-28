@@ -227,7 +227,7 @@ says how its effect works; the points a future session needs:
   delay network with a Householder mix. Both add the wet to the untouched dry, so Reverb at 0
   is exactly the input. Their checks measure the ring time (5 to 35 dB down, times two).
 - **`peq`** uses state-variable filters (Simper's), which stay stable while their settings
-  glide. Low cut at 20 Hz and High cut at 20 kHz move right out of the audible range ("off").
+  glide. HPF (the low cut) at 20 Hz and LPF (the high cut) at 20 kHz move right out of the audible range ("off").
 - **`body`** is Claude's own voicing of a BodyRez-style effect: fixed band-passes blended in
   and out (GE-7 style, so the knob never clicks) and a squeeze of the 2 kHz region on hard
   playing. It is not a measured copy. The measured copy is a response file:

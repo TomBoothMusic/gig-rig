@@ -38,12 +38,12 @@ RecordingsPanel::RecordingsPanel (AudioEngine& e) : engine (e)
 {
     addAndMakeVisible (status);
 
-    small (heading, "Recordings on the rig's drive, newest first", style::textMain, 14.0f);
+    small (heading, "Recordings (newest first)", style::textMain, 14.0f);
     small (chosenLabel, {}, style::textMain, 14.0f);
     small (room, {});
     small (driveLabel, "USB drive:");
     small (note, {});
-    small (checkHelp, "A soundcheck plays the recording's raw files into the sockets they came from, through today's effects, looper and mixer. Those sockets do not hear what is plugged in until Stop.");
+    small (checkHelp, "Raw files replace their live inputs until Stop.");
     checkHelp.setJustificationType (juce::Justification::topLeft);
     checkHelp.setMinimumHorizontalScale (1.0f);
     note.setMinimumHorizontalScale (1.0f);
@@ -212,7 +212,7 @@ void RecordingsPanel::refresh()
     for (size_t i = 0; i < driveList.size(); ++i)
         driveBox.addItem (driveList[i].name, (int) i + 1);
 
-    driveBox.setTextWhenNothingSelected ("no USB drive is plugged in");
+    driveBox.setTextWhenNothingSelected ("no USB drive");
 
     if (! driveList.empty())
     {
@@ -241,7 +241,7 @@ void RecordingsPanel::showChosen()
     const bool copying = engine.recordings().progress().running;
     const bool haveDrive = ! driveList.empty();
 
-    small (chosenLabel, i == nullptr ? juce::String ("No recording is chosen") : i->name + ": " + juce::String (i->files) + " files, " + lengthText (i->seconds) + ", " + sizeText (i->bytes),
+    small (chosenLabel, i == nullptr ? juce::String ("None selected") : i->name + ": " + juce::String (i->files) + " files, " + lengthText (i->seconds) + ", " + sizeText (i->bytes),
            style::textMain, 14.0f);
 
     loading = true;
@@ -360,7 +360,7 @@ void RecordingsPanel::resized()
     right.removeFromTop (4);
     loopBox.setBounds (right.removeFromTop (24));
     loopsBox.setBounds (right.removeFromTop (24));
-    checkHelp.setBounds (right.removeFromTop (52));
+    checkHelp.setBounds (right.removeFromTop (20));
     right.removeFromTop (6);
     keepBox.setBounds (right.removeFromTop (24));
     right.removeFromTop (6);

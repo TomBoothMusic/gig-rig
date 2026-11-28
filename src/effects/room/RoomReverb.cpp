@@ -24,7 +24,7 @@ RoomReverb::RoomReverb()
     pSize   = addChoice ("size",  "Size", { "Small room", "Room", "Hall" }, 1);
     pDecay  = addParam ("decay",  "Decay",   "",   0.0f, 10.0f, 5.0f);
     pTone   = addParam ("tone",   "Tone",    "",   0.0f, 10.0f, 5.0f);
-    pLowCut = addParam ("lowcut", "Low cut", "Hz", 20.0f, 500.0f, 120.0f);
+    pLowCut = addParam ("lowcut", "HPF",     "Hz", 20.0f, 500.0f, 120.0f);
 }
 
 void RoomReverb::onPrepare (double rate, int)

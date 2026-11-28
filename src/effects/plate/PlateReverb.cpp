@@ -9,7 +9,7 @@ PlateReverb::PlateReverb()
     pDecay  = addParam ("decay",    "Decay",     "",   0.0f, 10.0f, 5.0f);
     pPre    = addParam ("predelay", "Pre-delay", "ms", 0.0f, 150.0f, 30.0f, 0.0f);     // glides on its own
     pTone   = addParam ("tone",     "Tone",      "",   0.0f, 10.0f, 6.0f);
-    pLowCut = addParam ("lowcut",   "Low cut",   "Hz", 20.0f, 500.0f, 180.0f);
+    pLowCut = addParam ("lowcut",   "HPF",       "Hz", 20.0f, 500.0f, 180.0f);
 }
 
 void PlateReverb::onPrepare (double rate, int)

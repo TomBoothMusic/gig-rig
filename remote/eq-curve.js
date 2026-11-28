@@ -23,14 +23,14 @@ const s = (tag, attrs) => { const e = document.createElementNS (svgNS, tag); for
 
 // The eight points, in the order the sound meets them. `f`, `g` and `q` name the block's settings.
 const bands = [
-    { id: 'lc', mark: 'LC', name: 'Low cut',    kind: 'lowcut',  f: 'lowcut',  colour: '#9aa7b4' },
-    { id: 'ls', mark: 'L',  name: 'Low shelf',  kind: 'lowshelf', f: 'lsf', g: 'lsg', colour: '#ff7a45' },
-    { id: 'b1', mark: '1',  name: 'Band 1',     kind: 'bell', f: 'b1f', g: 'b1g', q: 'b1q', colour: '#ffd23f' },
-    { id: 'b2', mark: '2',  name: 'Band 2',     kind: 'bell', f: 'b2f', g: 'b2g', q: 'b2q', colour: '#34d27b' },
-    { id: 'b3', mark: '3',  name: 'Band 3',     kind: 'bell', f: 'b3f', g: 'b3g', q: 'b3q', colour: '#46b3ff' },
-    { id: 'b4', mark: '4',  name: 'Band 4',     kind: 'bell', f: 'b4f', g: 'b4g', q: 'b4q', colour: '#a98bff' },
-    { id: 'hs', mark: 'H',  name: 'High shelf', kind: 'highshelf', f: 'hsf', g: 'hsg', colour: '#ff6fb1' },
-    { id: 'hc', mark: 'HC', name: 'High cut',   kind: 'highcut', f: 'highcut', colour: '#9aa7b4' },
+    { id: 'lc', mark: 'HP', name: 'HPF',        kind: 'lowcut',  f: 'lowcut',  colour: '#9aa7b4' },
+    { id: 'ls', mark: 'L',  name: 'LS',         kind: 'lowshelf', f: 'lsf', g: 'lsg', colour: '#ff7a45' },
+    { id: 'b1', mark: '1',  name: 'B1',         kind: 'bell', f: 'b1f', g: 'b1g', q: 'b1q', colour: '#ffd23f' },
+    { id: 'b2', mark: '2',  name: 'B2',         kind: 'bell', f: 'b2f', g: 'b2g', q: 'b2q', colour: '#34d27b' },
+    { id: 'b3', mark: '3',  name: 'B3',         kind: 'bell', f: 'b3f', g: 'b3g', q: 'b3q', colour: '#46b3ff' },
+    { id: 'b4', mark: '4',  name: 'B4',         kind: 'bell', f: 'b4f', g: 'b4g', q: 'b4q', colour: '#a98bff' },
+    { id: 'hs', mark: 'H',  name: 'HS',         kind: 'highshelf', f: 'hsf', g: 'hsg', colour: '#ff6fb1' },
+    { id: 'hc', mark: 'LP', name: 'LPF',        kind: 'highcut', f: 'highcut', colour: '#9aa7b4' },
 ];
 
 // ---------------------------------------------------------------- the sums (the same as MixEq's)
@@ -186,7 +186,7 @@ GR.eqCurve = (key, block, o, rta) =>
             h ('i', { style: { background: b.colour } }), h ('b', { text: b.name }),
             h ('span', { text: isOff (b) ? 'off' : hzText (v[b.f]) }),
             b.g ? h ('span', { text: dbText (v[b.g]) }) : null,
-            b.q ? h ('span', { text: 'width ' + Number (v[b.q]).toFixed (2) }) : null);
+            b.q ? h ('span', { text: 'Q ' + Number (v[b.q]).toFixed (2) }) : null);
     };
 
     const size = () =>
@@ -370,13 +370,13 @@ GR.eqCurve = (key, block, o, rta) =>
         if (done && ! GR.dragging) GR.render();
     }) : null;
 
-    const flat = () => GR.ask ('Set every band back to no boost and no cut, and both cuts to off? The frequencies stay where they are.', 'Make it flat', () =>
+    const flat = () => GR.ask ('Flatten the EQ? Gains to 0 dB, HPF and LPF off.', 'Flat', () =>
     {
         bands.forEach ((x) => { if (x.g) set (x.g, 0); else set (x.f, x.kind === 'lowcut' ? 20 : 20000); });
         GR.render();
     });
 
-    const liveWords = { ch: { before: 'Before the EQ', after: 'After the EQ' }, out: { before: 'Going in', after: 'Going out' } };
+    const liveWords = { ch: { before: 'Pre', after: 'Post' }, out: { before: 'Pre', after: 'Post' } };
 
     return [
         h ('div', { class: 'row between wrap' },
@@ -386,15 +386,14 @@ GR.eqCurve = (key, block, o, rta) =>
         box,
         h ('div', { class: 'chips eq-bands' }, chipEls),
         h ('div', { class: 'eq-band' },
-            slider (b.f, b.kind === 'lowcut' ? 'Cuts below (20 Hz is off)' : b.kind === 'highcut' ? 'Cuts above (20 kHz is off)' : 'Frequency'),
-            b.g ? slider (b.g, 'Boost or cut') : null,
-            b.q ? slider (b.q, 'Width (higher is narrower)') : null),
+            slider (b.f, 'Freq'),
+            b.g ? slider (b.g, 'Gain') : null,
+            b.q ? slider (b.q, 'Q') : null),
         rta ? h ('div', { class: 'eq-rta' },
-            h ('span', { class: 'hint', text: 'Live picture of the sound' }),
+            h ('span', { class: 'hint', text: 'RTA' }),
             GR.chips ([{ id: 'off', label: 'Off' }, { id: 'before', label: liveWords[rta.where].before }, { id: 'after', label: liveWords[rta.where].after }], mode,
                 (m) => { GR.remember ('rta', m); asked = { key: '', at: 0 }; GR.render(); }),
-            ! GR.state.mixer.on ? h ('p', { class: 'hint', text: 'The mixer is switched off, so there is no sound here to show.' }) : null) : null,
-        h ('p', { class: 'hint', text: 'Drag a point: sideways for its frequency, up or down to boost or cut. Tap a point twice to put it back.' }),
+            ! GR.state.mixer.on ? h ('p', { class: 'hint', text: 'Mixer off: no signal.' }) : null) : null,
     ];
 };
 })();

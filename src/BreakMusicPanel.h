@@ -39,7 +39,7 @@ private:
                      upButton { "Bring the music up" }, downButton { "Fade it down" },
                      turnLeft { "Turn left" }, turnRight { "Turn right" }, push { "Push" }, hold { "Hold" };
     juce::Slider levelSlider, downSlider, upSlider, soundSlider;
-    juce::ToggleButton switchBox { "a footswitch is pressed" }, songBox { "a song loads" }, soundBox { "an input is louder than" };
+    juce::ToggleButton switchBox { "Footswitch" }, songBox { "Song load" }, soundBox { "Input above" };
     juce::TextEditor reportView;
 
     juce::StringArray shownMixes;

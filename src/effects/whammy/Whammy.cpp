@@ -68,9 +68,9 @@ Whammy::Whammy()
 {
     pMode  = addChoice ("mode", "Mode", modeNames(), 0);
     // The pedal and its glide are handled per sample below, so no glide from the base class.
-    pPedal = addParam ("pedal", "Pedal (heel to toe)", "%", 0.0f, 100.0f, 0.0f, 0.0f);
-    pGlide = addParam ("glide", "Bend time", "ms", 20.0f, 2000.0f, 60.0f, 0.0f);
-    pMix   = addParam ("mix", "Bent sound", "%", 0.0f, 100.0f, 100.0f);
+    pPedal = addParam ("pedal", "Pedal", "%", 0.0f, 100.0f, 0.0f, 0.0f);
+    pGlide = addParam ("glide", "Glide", "ms", 20.0f, 2000.0f, 60.0f, 0.0f);
+    pMix   = addParam ("mix", "Mix", "%", 0.0f, 100.0f, 100.0f);
 }
 
 void Whammy::onPrepare (double rate, int)

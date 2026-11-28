@@ -42,8 +42,8 @@ Comp1176::Comp1176()
 {
     pInput   = addParam ("input",   "Input",   "dB", -20.0f, 30.0f, 0.0f);
     pOutput  = addParam ("output",  "Output",  "dB", -30.0f, 20.0f, 0.0f);
-    pAttack  = addParam ("attack",  "Attack (7 fastest)",  "", 1.0f, 7.0f, 3.0f);
-    pRelease = addParam ("release", "Release (7 fastest)", "", 1.0f, 7.0f, 5.0f);
+    pAttack  = addParam ("attack",  "Attack (7 = fast)",  "", 1.0f, 7.0f, 3.0f);
+    pRelease = addParam ("release", "Release (7 = fast)", "", 1.0f, 7.0f, 5.0f);
     pRatio   = addChoice ("ratio",  "Ratio", { "4", "8", "12", "20", "All" }, 0);
     pMix     = addParam ("mix",     "Mix",     "%", 0.0f, 100.0f, 100.0f);
 }

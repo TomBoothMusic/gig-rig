@@ -57,13 +57,13 @@ private:
     StatusRow status;
     juce::TextButton recordButton { "Record" }, folderButton { "Open the recordings folder" }, copyButton { "Copy recording report" };
     juce::Label clock, help, tracksHeading, pointHeading, levelHeading, panHeading, mixHeading, mixLevelLabel, blockHint, roomLabel;
-    juce::ToggleButton mainBox { "Main mix (stereo, as the PA gets it)" }, mixBox { "Recording mix (stereo, set below)" }, fxBox { "Each mixer reverb and delay as a file of its own" },
+    juce::ToggleButton mainBox { "Main mix" }, mixBox { "Rec mix" }, fxBox { "FX returns (one file each)" },
                        checkBox { "A raw copy of every socket, for a virtual soundcheck" };
     std::array<ChannelRow, numMixChannels> rows;
     std::array<FxRow, numMixFx> fxRows;
     juce::Slider mixLevel;
     std::array<juce::TextButton, numRecBlocks> blockButtons;
-    juce::ToggleButton blockOn { "This block on" };
+    juce::ToggleButton blockOn { "On" };
     juce::OwnedArray<juce::Label> gridLabels;
     juce::OwnedArray<juce::Component> gridControls;
     juce::Rectangle<int> gridArea, leftArea, rightArea;

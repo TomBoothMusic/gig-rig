@@ -102,9 +102,9 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     addAndMakeVisible (nameEditor);
 
     style::body (inLabel, "Input");
-    style::body (outLabel, "Out to");
-    style::body (looperLabel, "Looper hears it as");
-    style::body (listenLabel, "Listen to");
+    style::body (outLabel, "Output");
+    style::body (looperLabel, "Looper in");
+    style::body (listenLabel, "Monitor");
     style::body (modelLabel, "Model");
     style::combo (modelBox);
     modelFolderButton.onClick = [this]
@@ -116,9 +116,9 @@ EffectsPanel::EffectsPanel (AudioEngine& e)
     for (auto* c : std::initializer_list<juce::Component*> { &modelLabel, &modelBox, &modelFolderButton })
         addChildComponent (c);
     style::body (levelLabel, "Chain level");
-    style::heading (slotsLabel, "EFFECTS IN THIS CHAIN, IN ORDER (CLICK ONE TO SET IT UP)");
+    style::heading (slotsLabel, "CHAIN");
     style::heading (presetLabel, "PRESETS");
-    style::heading (pedalLabel, "SWITCHES FOR THE EFFECTS (FIRST 2 OF 6: THE REST ARE ON THE SONGS TAB)");
+    style::heading (pedalLabel, "FX SWITCHES (1-2 OF 6, REST ON SONGS TAB)");
     style::body (statusLabel, {});
     style::body (descriptionLabel, {});
     dim (descriptionLabel);
@@ -532,7 +532,7 @@ void EffectsPanel::rebuildEditor()
 
     if (! has)
     {
-        descriptionLabel.setText (m.slots.empty() ? "No effects in this chain yet: pick one on the right and press Add." : "", juce::dontSendNotification);
+        descriptionLabel.setText (m.slots.empty() ? "Empty chain." : "", juce::dontSendNotification);
         resized();
         return;
     }
@@ -540,7 +540,7 @@ void EffectsPanel::rebuildEditor()
     const auto& slot = m.slots[(size_t) slotIndex];
     const auto* type = fx::findEffectType (slot.type);
     typeBox.setSelectedId (type != nullptr ? (int) (type - fx::effectTypes().data()) + 1 : 0, juce::dontSendNotification);
-    descriptionLabel.setText (type != nullptr ? juce::String (type->description) + "  (double-click a slider for its default)" : "", juce::dontSendNotification);
+    descriptionLabel.setText (type != nullptr ? juce::String (type->description) : "", juce::dontSendNotification);
 
     auto* fx = ch.effect (slotIndex);
 

@@ -18,13 +18,13 @@ double Wah::peakHz (double heelHz, double toeHz, double pedal) noexcept
 Wah::Wah()
 {
     // The pedal travels on its own (Sweep time), so no glide from the base class.
-    pPedal = addParam ("pedal", "Pedal (heel to toe)", "%", 0.0f, 100.0f, 0.0f, 0.0f);
-    pHeel  = addParam ("heel",  "Heel frequency", "Hz", 200.0f, 900.0f, 400.0f);
-    pToe   = addParam ("toe",   "Toe frequency", "Hz", 1000.0f, 4000.0f, 2200.0f);
-    pQ     = addParam ("q",     "Q (peak sharpness)", "", 1.0f, 15.0f, 6.0f);
-    pDepth = addParam ("depth", "Peak depth", "dB", 0.0f, 24.0f, 16.0f);
+    pPedal = addParam ("pedal", "Pedal", "%", 0.0f, 100.0f, 0.0f, 0.0f);
+    pHeel  = addParam ("heel",  "Heel Freq", "Hz", 200.0f, 900.0f, 400.0f);
+    pToe   = addParam ("toe",   "Toe Freq", "Hz", 1000.0f, 4000.0f, 2200.0f);
+    pQ     = addParam ("q",     "Q", "", 1.0f, 15.0f, 6.0f);
+    pDepth = addParam ("depth", "Peak", "dB", 0.0f, 24.0f, 16.0f);
     pLevel = addParam ("level", "Level", "dB", -12.0f, 12.0f, 0.0f);
-    pGlide = addParam ("glide", "Sweep time", "ms", 20.0f, 2000.0f, 30.0f, 0.0f);
+    pGlide = addParam ("glide", "Glide", "ms", 20.0f, 2000.0f, 30.0f, 0.0f);
 }
 
 void Wah::onPrepare (double, int)

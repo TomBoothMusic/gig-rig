@@ -5,14 +5,14 @@ namespace gigrig::fx
 
 DigitalDelay::DigitalDelay()
 {
-    pFollow   = addToggle ("follow",   "Follow tempo", true);
-    pDivision = addChoice ("division", "Note value", sync::names(), 0);
+    pFollow   = addToggle ("follow",   "Sync", true);
+    pDivision = addChoice ("division", "Div", sync::names(), 0);
     pTime     = addParam ("time",      "Time",     "ms", 20.0f, 1500.0f, 375.0f, 0.0f);   // crossfades on its own
-    pFeedback = addParam ("feedback",  "Repeats",  "%",  0.0f, 95.0f, 30.0f);
+    pFeedback = addParam ("feedback",  "Fdbk",     "%",  0.0f, 95.0f, 30.0f);
     pMix      = addParam ("mix",       "Mix",      "%",  0.0f, 100.0f, 30.0f);
     pTone     = addParam ("tone",      "Tone",     "",   0.0f, 10.0f, 8.0f);
     pMod      = addParam ("mod",       "Mod depth", "",  0.0f, 10.0f, 2.0f);
-    pModRate  = addParam ("modrate",   "Mod speed", "Hz", 0.1f, 5.0f, 0.6f);
+    pModRate  = addParam ("modrate",   "Mod rate", "Hz", 0.1f, 5.0f, 0.6f);
     // New settings go at the end. The order of these three is saved in presets: never change it.
     pThrow    = addChoice ("throw",    "Throw", { "Off: the delay is always on", "Ready: clean until the switch is held", "Catching: the switch is held" }, 0);
 }

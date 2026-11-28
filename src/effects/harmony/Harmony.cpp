@@ -73,13 +73,13 @@ Harmony::Harmony()
     // Ids never change: they are saved in presets and songs.
     pKey   = addChoice ("key",   "Key",   keyNames(), 0);
     pVoice = addChoice ("voice", "Voice", voiceNames(), 6);
-    pLevel = addParam ("level",  "Harmony level", "dB", -30.0f, 6.0f, -6.0f);
+    pLevel = addParam ("level",  "Level", "dB", -30.0f, 6.0f, -6.0f);
     // The second voice (added 26 Nov 2026, so after the others: older presets load with it Off).
-    pVoice2 = addChoice ("voice2", "Second voice", secondVoiceNames(), 0);
-    pLevel2 = addParam ("level2",  "Second voice level", "dB", -30.0f, 6.0f, -6.0f);
+    pVoice2 = addChoice ("voice2", "Voice 2", secondVoiceNames(), 0);
+    pLevel2 = addParam ("level2",  "Level 2", "dB", -30.0f, 6.0f, -6.0f);
     // Harmony only while a switch is held (added 26 Nov 2026). Laid out like the delay's
     // "throw": the held switch moves it from Ready to Singing and back (EffectsRack::holdHarmony).
-    pHold = addChoice ("hold", "On a held switch", { "Off: the harmony always sings", "Ready: silent until the switch is held", "Singing: the switch is held" }, 0);
+    pHold = addChoice ("hold", "Hold", { "Off: the harmony always sings", "Ready: silent until the switch is held", "Singing: the switch is held" }, 0);
 }
 
 std::string Harmony::status() const

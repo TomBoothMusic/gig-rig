@@ -12,7 +12,7 @@ namespace gigrig::fx
 Warmth::Warmth()
 {
     pDrive  = addParam ("drive", "Drive", "", 0.0f, 10.0f, 3.0f);
-    pColour = addParam ("colour", "Colour (valve)", "", 0.0f, 10.0f, 4.0f);
+    pColour = addParam ("colour", "Colour", "", 0.0f, 10.0f, 4.0f);
     pLevel  = addParam ("level", "Level", "dB", -12.0f, 12.0f, 0.0f);
     pMix    = addParam ("mix", "Mix", "%", 0.0f, 100.0f, 100.0f);
 }

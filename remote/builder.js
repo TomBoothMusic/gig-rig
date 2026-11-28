@@ -76,26 +76,25 @@ function trackCard (d, i)
     const lengths = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
     if (! lengths.includes (t.bars)) lengths.push (t.bars);
 
-    const stops = [{ id: 0, label: 'At once' }, { id: 2, label: 'At the end of its loop' }];
-    if (t.stop === 1) stops.splice (1, 0, { id: 1, label: 'Fades out (kept from the old layout)' });
+    const stops = [{ id: 0, label: 'Immediate' }, { id: 2, label: 'Loop end' }];
+    if (t.stop === 1) stops.splice (1, 0, { id: 1, label: 'Fade out (old layout)' });
 
     return h ('section', { class: 'card track-card' },
         h ('div', { class: 'row between' },
             h ('h3', {}, 'Track ' + (i + 1)),
-            h ('span', { class: 'tag' + (lanes > 1 ? '' : ' dim'), text: lanes === 0 ? 'records nothing' : lanes === 1 ? '1 lane' : Math.min (lanes, s.maxLanes) + ' lanes' })),
-        h ('div', { class: 'label', text: 'What it records' }),
+            h ('span', { class: 'tag' + (lanes > 1 ? '' : ' dim'), text: lanes === 0 ? 'no input' : lanes === 1 ? '1 lane' : Math.min (lanes, s.maxLanes) + ' lanes' })),
+        h ('div', { class: 'label', text: 'Inputs' }),
         h ('div', { class: 'chips' }, s.sources.map ((src) =>
             h ('button', { class: 'chip' + (t.inputs & src.bit ? ' on' : ''), onclick: () => change ((x) => { x.tracks[i].inputs ^= src.bit; }) }, src.name))),
-        lanes > 1 ? h ('p', { class: 'hint', text: 'Each source on its own socket gets its own lane: it loops side by side with the others and comes back on its own mixer channel.' }) : null,
-        lanes > s.maxLanes ? h ('div', { class: 'note', text: 'This track listens to ' + lanes + ' sockets and a track keeps ' + s.maxLanes + ' lanes, so the last sources share the last lane: they loop together and come back on one mixer channel.' }) : null,
+        lanes > s.maxLanes ? h ('div', { class: 'note', text: lanes + ' inputs, ' + s.maxLanes + ' lanes max: the last inputs share a lane and a mixer channel.' }) : null,
         h ('div', { class: 'grid2' },
             h ('label', { class: 'field' }, 'Length',
-                GR.select (lengths.map ((b) => ({ id: b, label: b === 0 ? 'Free (as long as you play)' : b + (b === 1 ? ' bar' : ' bars') })), t.bars, (v) => change ((x) => { x.tracks[i].bars = Number (v); }), 'Length')),
-            h ('label', { class: 'field' }, 'When started again it comes back',
-                GR.select ([{ id: 0, label: 'In place (as if it never stopped)' }, { id: 1, label: 'From its first bar' }, { id: 2, label: 'From its first note' }], t.ret, (v) => change ((x) => { x.tracks[i].ret = Number (v); }), 'Comes back')),
-            h ('label', { class: 'field' }, 'When stopped it stops',
+                GR.select (lengths.map ((b) => ({ id: b, label: b === 0 ? 'Free' : b + (b === 1 ? ' bar' : ' bars') })), t.bars, (v) => change ((x) => { x.tracks[i].bars = Number (v); }), 'Length')),
+            h ('label', { class: 'field' }, 'Restart',
+                GR.select ([{ id: 0, label: 'In place' }, { id: 1, label: 'First bar' }, { id: 2, label: 'First note' }], t.ret, (v) => change ((x) => { x.tracks[i].ret = Number (v); }), 'Comes back')),
+            h ('label', { class: 'field' }, 'Stop',
                 GR.select (stops, t.stop, (v) => change ((x) => { x.tracks[i].stop = Number (v); }), 'Stops')),
-            h ('label', { class: 'field' }, 'Playback level (100 is as recorded)',
+            h ('label', { class: 'field' }, 'Level (100 = unity)',
                 h ('input', { type: 'number', min: 0, max: 200, step: 1, value: String (t.level),
                     onchange: (ev) => change ((x) => { x.tracks[i].level = GR.clamp (Math.round (Number (ev.target.value) || 0), 0, 200); }) }))));
 }
@@ -144,15 +143,15 @@ function switchSheet (bank, sw)
                     GR.select ([0, 1, 2, 3, 4, 5].map ((n) => ({ id: n, label: 'Track ' + (n + 1) + ' (' + GR.sourceNames (d.tracks[n].inputs) + ')' })).concat ([{ id: -1, label: 'The current track (the one last used)' }]),
                         track, (v) => setFn (fnId, Number (v)), 'Track')) : null,
                 now.fn && now.fn.index === 26 && now.track === -1 ? h ('p', { class: 'hint', text: 'For the current track the nearest the RC-600 has is play or stop with undo on a hold, so that is what is saved.' }) : null,
-            ] : h ('p', { class: 'hint', text: 'The CTL switches have no action of their own in a bank. Give them one below; it works in both banks.' }),
+            ] : h ('p', { class: 'hint', text: 'CTL: no bank action. Add one below (both banks).' }),
             h ('div', { class: 'label', text: sw < 9 ? 'Also, on the same press' : 'What this switch does' }),
             extras.map (({ l, i }) => h ('div', { class: 'row link-row' },
                 targetPicker (l.tgt, (tgt) => change ((x) => { x.links[i].tgt = tgt; })),
                 h ('button', { class: 'btn tiny danger-ghost', onclick: () => change ((x) => { x.links.splice (i, 1); }) }, 'Remove'))),
             d.links.length < s.maxLinks
-                ? h ('button', { class: 'btn', onclick: () => change ((x) => { x.links.push ({ src, tgt: 1 }); }) }, sw < 9 ? 'Add another action to this press' : 'Add an action')
-                : h ('p', { class: 'hint', text: 'A layout can hold ' + s.maxLinks + ' extra actions and this one is full.' }),
-            use ? h ('div', { class: 'note', text: 'The effects also use this switch: ' + use + '. That is set in the song\'s sounds, not here.' }) : null,
+                ? h ('button', { class: 'btn', onclick: () => change ((x) => { x.links.push ({ src, tgt: 1 }); }) }, 'Add action')
+                : h ('p', { class: 'hint', text: 'Full (' + s.maxLinks + ' extra actions).' }),
+            use ? h ('div', { class: 'note', text: 'Also used by FX: ' + use + ' (set in the song\'s sounds).' }) : null,
         ];
     } });
 }
@@ -179,7 +178,6 @@ function switchesTab (d)
         h ('div', { class: 'row between' },
             GR.chips ([{ id: 0, label: 'Bank 1' }, { id: 1, label: 'Bank 2' }], bank, (b) => { GR.ui.buildBank = b; GR.render(); }),
             h ('button', { class: 'btn tiny ghost', onclick: () => GR.ask ('Copy every switch of bank ' + (bank + 1) + ' onto bank ' + (2 - bank) + '?', 'Copy the bank', () => change ((x) => { x.banks[1 - bank] = x.banks[bank].slice(); })) }, 'Copy to bank ' + (2 - bank))),
-        h ('p', { class: 'hint', text: 'Tap a switch to choose what it does. The nine are laid out as on the RC-600.' }),
         h ('div', { class: 'pads' }, [0, 1, 2, 3, 4, 5, 6, 7, 8].map (tile)),
         h ('div', { class: 'pads ctl' }, tile (9), tile (10)),
     ];
@@ -196,18 +194,17 @@ function linksTab (d)
         .concat ([0, 1, 2, 3, 4, 5].map ((n) => ({ id: 6 + n, label: 'When track ' + (n + 1) + ' starts to play' })));
 
     return [
-        h ('p', { class: 'hint', text: 'A link makes one track do something when another starts. For example: when track 1 starts to play, track 3 starts to record.' }),
-        mine.length === 0 ? h ('p', { class: 'hint pad', text: 'This layout has no links between tracks.' }) : null,
+        mine.length === 0 ? h ('p', { class: 'hint pad', text: 'No links.' }) : null,
         mine.map (({ l, i }) => h ('div', { class: 'card link-card' },
             GR.select (whens, l.src, (v) => change ((x) => { x.links[i].src = Number (v); }), 'When'),
             h ('div', { class: 'row link-row' },
                 targetPicker (l.tgt, (tgt) => change ((x) => { x.links[i].tgt = tgt; })),
                 h ('button', { class: 'btn tiny danger-ghost', onclick: () => change ((x) => { x.links.splice (i, 1); }) }, 'Remove')))),
         d.links.length < s.maxLinks
-            ? h ('button', { class: 'btn', onclick: () => change ((x) => { x.links.push ({ src: 6, tgt: 22 }); }) }, 'Add a link between tracks')
-            : h ('p', { class: 'hint', text: 'A layout can hold ' + s.maxLinks + ' links and extra switch actions together, and this one is full.' }),
+            ? h ('button', { class: 'btn', onclick: () => change ((x) => { x.links.push ({ src: 6, tgt: 22 }); }) }, 'Add link')
+            : h ('p', { class: 'hint', text: 'Full (' + s.maxLinks + ' links and extra actions).' }),
         others.length ? h ('div', { class: 'card' },
-            h ('div', { class: 'label', text: 'Extra actions on switches (changed on the Switches page)' }),
+            h ('div', { class: 'label', text: 'Extra switch actions (Switches page)' }),
             others.map (({ l }) => h ('p', { class: 'hint', text: linkSource (l.src) + ': ' + GR.linkTarget (l.tgt) }))) : null,
         h ('p', { class: 'hint', text: d.links.length + ' of ' + s.maxLinks + ' used.' }),
     ];
@@ -219,19 +216,18 @@ function optionsTab (d)
 {
     return [
         h ('section', { class: 'card' },
-            h ('label', { class: 'field' }, 'Beats in a bar',
+            h ('label', { class: 'field' }, 'Beats / bar',
                 GR.select ([2, 3, 4, 5, 6, 7, 8, 9, 12].concat ([2, 3, 4, 5, 6, 7, 8, 9, 12].includes (d.beats) ? [] : [d.beats]).map ((b) => ({ id: b, label: String (b) })), d.beats, (v) => change ((x) => { x.beats = Number (v); }), 'Beats')),
-            h ('label', { class: 'field' }, 'After recording, a track goes to',
-                GR.select ([{ id: 1, label: 'Play, then overdub on the next press' }, { id: 0, label: 'Overdub, then play on the next press' }], d.recThenPlay ? 1 : 0, (v) => change ((x) => { x.recThenPlay = v === '1'; }), 'Order')),
-            h ('label', { class: 'field' }, 'A new track, once the first loop is going',
-                GR.select ([{ id: 1, label: 'Waits for the next bar to start recording' }, { id: 0, label: 'Starts recording at once' }], d.quantise ? 1 : 0, (v) => change ((x) => { x.quantise = v === '1'; }), 'New track'))),
+            h ('label', { class: 'field' }, 'After rec',
+                GR.select ([{ id: 1, label: 'Rec > Play > Dub' }, { id: 0, label: 'Rec > Dub > Play' }], d.recThenPlay ? 1 : 0, (v) => change ((x) => { x.recThenPlay = v === '1'; }), 'Order')),
+            h ('label', { class: 'field' }, 'Rec start (later tracks)',
+                GR.select ([{ id: 1, label: 'Next bar (quantised)' }, { id: 0, label: 'Immediate' }], d.quantise ? 1 : 0, (v) => change ((x) => { x.quantise = v === '1'; }), 'New track'))),
         h ('section', { class: 'card' },
-            h ('label', { class: 'inline between' }, 'Save a tempo with the song',
+            h ('label', { class: 'inline between' }, 'Song tempo',
                 GR.toggle (!! GR.ui.draftTempo, (on) => { GR.ui.draftTempo = on; if (on && ! (d.tempo >= 30)) d.tempo = 120; touch(); GR.render(); }, 'Save a tempo')),
-            GR.ui.draftTempo ? h ('label', { class: 'field' }, 'Tempo (beats a minute)',
+            GR.ui.draftTempo ? h ('label', { class: 'field' }, 'BPM',
                 h ('input', { type: 'number', min: 30, max: 300, step: 0.5, value: String (d.tempo),
-                    onchange: (ev) => change ((x) => { x.tempo = GR.clamp (Number (ev.target.value) || 120, 30, 300); }) })) : null,
-            h ('p', { class: 'hint', text: 'The tempo does not make a click. It helps the looper count how many bars the first loop is, so a loop of two bars is not taken for one.' })),
+                    onchange: (ev) => change ((x) => { x.tempo = GR.clamp (Number (ev.target.value) || 120, 30, 300); }) })) : null),
     ];
 }
 
@@ -242,13 +238,12 @@ function saveAsSheet()
     let name = '', program = 0;
 
     GR.openSheet ({ small: true, title: 'Save as a new song', build: (close) => [
-        h ('p', { class: 'hint', text: 'The new song gets this layout and the sounds that are loaded now. Give it the program number Songbook Pro sends for it, or leave 0 for none.' }),
         h ('label', { class: 'field' }, 'Name', h ('input', { type: 'text', value: name, oninput: (ev) => { name = ev.target.value; } })),
-        h ('label', { class: 'field' }, 'Program number', h ('input', { type: 'number', min: 0, max: 128, value: String (program), oninput: (ev) => { program = Number (ev.target.value) || 0; } })),
+        h ('label', { class: 'field' }, 'PC (0 = none)', h ('input', { type: 'number', min: 0, max: 128, value: String (program), oninput: (ev) => { program = Number (ev.target.value) || 0; } })),
         h ('div', { class: 'row end' }, h ('button', { class: 'btn', onclick: close }, 'Cancel'),
             h ('button', { class: 'btn primary', onclick: async () =>
             {
-                if (! name.trim()) return GR.toast ('Give the song a name first.', true);
+                if (! name.trim()) return GR.toast ('Name it first.', true);
                 const r = await GR.send ({ op: 'layout.saveAs', name: name.trim(), program, layout: GR.ui.draft, withTempo: !! GR.ui.draftTempo });
                 if (r.ok) { GR.ui.draftDirty = false; close(); }
             } }, 'Save the new song')),
@@ -257,8 +252,8 @@ function saveAsSheet()
 
 function copySheet()
 {
-    GR.openSheet ({ title: 'Start from another song\'s layout', build: (close) =>
-        [h ('p', { class: 'hint', text: 'This copies that song\'s looper layout into the draft. The other song is not changed, and nothing is saved until you save.' }),
+    GR.openSheet ({ title: 'Copy a layout', build: (close) =>
+        [h ('p', { class: 'hint', text: 'Copies into the draft. Nothing is saved yet.' }),
          h ('div', { class: 'songs' }, GR.state.songs.map ((song, i) => h ('button', { class: 'song', onclick: async () =>
          {
              const r = await GR.send ({ op: 'layout.of', index: i }, true);
@@ -292,14 +287,14 @@ GR.screens.build = (root) =>
     root.append (
         h ('section', { class: 'card now' },
             h ('div', { class: 'card-title' }, h ('small', { text: 'Looper layout for' }), h ('h2', { text: cur.name })),
-            h ('p', { class: 'hint', text: ui.draftDirty ? 'The draft has changes that are not saved' + (ui.draftFrom !== cur.name ? ' (it was started on "' + ui.draftFrom + '")' : '') + '.'
-                                                   : s.layoutTried ? 'The looper is trying a layout that is not saved yet.'
-                                                   : s.layoutOwn ? 'This song has its own layout, saved in its song file.' : 'This song uses the layout "' + s.layout.name + '" that is built into the rig.' }),
+            h ('p', { class: 'hint', text: ui.draftDirty ? 'Unsaved draft' + (ui.draftFrom !== cur.name ? ' (from "' + ui.draftFrom + '")' : '') + '.'
+                                                   : s.layoutTried ? 'Layout on trial, not saved.'
+                                                   : s.layoutOwn ? 'Own layout (song file).' : 'Built-in layout "' + s.layout.name + '".' }),
             h ('div', { class: 'row wrap' },
                 h ('button', { class: 'btn primary', onclick: tryIt }, 'Try it'),
                 h ('button', { class: 'btn', onclick: save }, 'Save to this song'),
-                h ('button', { class: 'btn', onclick: saveAsSheet }, 'Save as a new song'),
-                h ('button', { class: 'btn ghost', onclick: copySheet }, 'Start from another song'),
+                h ('button', { class: 'btn', onclick: saveAsSheet }, 'Save as new song'),
+                h ('button', { class: 'btn ghost', onclick: copySheet }, 'Copy from song'),
                 ui.draftDirty ? h ('button', { class: 'btn ghost', onclick: () => GR.ask ('Throw away the changes in the draft?', 'Throw them away', () => { ui.draft = null; ui.draftDirty = false; GR.render(); }, { danger: true }) }, 'Undo my changes') : null,
                 s.layoutOwn || s.layoutTried ? h ('button', { class: 'btn danger-ghost', onclick: () => guard (s.layoutOwn ? 'Take this song\'s own layout out of its file, so it goes back to the one it had before?' : 'Stop trying and go back to the saved layout?', 'Go back',
                     async () => { const r = await GR.send ({ op: 'layout.forget' }); if (r.ok) { ui.draft = null; ui.draftDirty = false; } }) }, s.layoutOwn ? 'Go back to the built-in layout' : 'Stop trying') : null)),
@@ -309,8 +304,8 @@ GR.screens.build = (root) =>
             : ui.buildTab === 'switches' ? switchesTab (d)
             : ui.buildTab === 'links' ? linksTab (d)
             : optionsTab (d)),
-        h ('details', { class: 'card' }, h ('summary', { text: 'How this layout is written in the song file' }),
-            h ('pre', { class: 'words', text: ui.draftDirty ? 'Save or try the draft to see its lines.' : (s.layoutWords || '') })));
+        h ('details', { class: 'card' }, h ('summary', { text: 'Song file lines' }),
+            h ('pre', { class: 'words', text: ui.draftDirty ? 'Save or try the draft first.' : (s.layoutWords || '') })));
 };
 
 })();

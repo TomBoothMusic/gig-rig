@@ -6,7 +6,7 @@ namespace gigrig::fx
 AnalogDelay::AnalogDelay()
 {
     pTime     = addParam ("time",     "Time",     "ms", 40.0f, 600.0f, 120.0f, 0.0f);   // glides on its own
-    pFeedback = addParam ("feedback", "Repeats",  "%",  0.0f, 95.0f, 25.0f);
+    pFeedback = addParam ("feedback", "Fdbk",     "%",  0.0f, 95.0f, 25.0f);
     pMix      = addParam ("mix",      "Mix",      "%",  0.0f, 100.0f, 35.0f);
     pTone     = addParam ("tone",     "Tone",     "",   0.0f, 10.0f, 5.0f);
     pMod      = addParam ("mod",      "Mod",      "",   0.0f, 10.0f, 2.0f);

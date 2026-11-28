@@ -329,13 +329,13 @@ juce::var RemoteApi::mixerJson()
         r->setProperty ("chain", chainJson (now.rec.chain));
 
         juce::Array<juce::var> points, files;
-        static const char* const labels[numRecordPoints] { "Nothing", "The plain socket", "After its effects", "After the looper", "After the looper, with its EQ and compressors" };
+        static const char* const labels[numRecordPoints] { "Off", "Raw input", "Post FX", "Post looper", "Post EQ/comp" };
         static const char* const more[numRecordPoints] {
-            "This channel gets no file of its own.",
-            "Straight from the input, before any effect. The safest thing to keep: anything can be redone from it.",
-            "After the guitar or vocal effects, before the looper. No loops in it.",
-            "The live sound and its loops together, before the channel's own gate, EQ and compressors.",
-            "The live sound and its loops together, after the channel's gate, EQ and compressors, before its fader." };
+            "No file.",
+            "Pre everything.",
+            "Post effects chain, pre looper.",
+            "Live + loops, pre channel processing.",
+            "Live + loops, post channel processing, pre-fader." };
 
         for (int p = 0; p < numRecordPoints; ++p)
         {

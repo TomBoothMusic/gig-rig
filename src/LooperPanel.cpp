@@ -187,7 +187,7 @@ LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse, Song
         addAndMakeVisible (box);
     }
 
-    style::body (outLabel, "Loops play on");
+    style::body (outLabel, "Loop output");
     outBox.addItem ("returns 5+6 (the CQ's USB channel)", 1);
     outBox.addItem ("vocal loops on 3+4 (ST1), the rest on 5+6", 2);
     outBox.addItem ("two-source tracks split: first on 3+4, second on 5+6", 3);
@@ -206,8 +206,8 @@ LooperPanel::LooperPanel (AudioEngine& engineToUse, PedalInput& pedalToUse, Song
     trimSlider.setTooltip ("Leave at 0 unless loops sound early or late against your live playing. Plus moves the loop earlier. Double-click to go back to 0.");
     trimSlider.onValueChange = [this] { engine.setLoopTrimMs (trimSlider.getValue()); slowUpdate(); repaint (stripArea); };
 
-    style::heading (descriptionHeading, "How this song is set up");
-    style::heading (logHeading, "What the looper did");
+    style::heading (descriptionHeading, "Song layout");
+    style::heading (logHeading, "Looper log");
     style::readOnlyEditor (descriptionView);
     style::readOnlyEditor (logView);
     descriptionView.setMultiLine (true, true);

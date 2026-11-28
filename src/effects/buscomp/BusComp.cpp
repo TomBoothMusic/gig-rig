@@ -21,12 +21,12 @@ namespace
 
 BusComp::BusComp()
 {
-    pThreshold = addParam ("threshold", "Threshold", "dB", -40.0f, 0.0f, -14.0f);
+    pThreshold = addParam ("threshold", "Thresh", "dB", -40.0f, 0.0f, -14.0f);
     pRatio     = addChoice ("ratio", "Ratio", { "2", "4", "10" }, 1);
     pAttack    = addChoice ("attack", "Attack", { "0.1 ms", "0.3 ms", "1 ms", "3 ms", "10 ms", "30 ms" }, 4);
     pRelease   = addChoice ("release", "Release", { "0.1 s", "0.3 s", "0.6 s", "1.2 s", "Auto" }, 4);
-    pMakeup    = addParam ("makeup", "Make-up", "dB", 0.0f, 15.0f, 0.0f);
-    pListenCut = addParam ("listencut", "Ignore bass below", "Hz", 20.0f, 250.0f, 60.0f);
+    pMakeup    = addParam ("makeup", "Makeup", "dB", 0.0f, 15.0f, 0.0f);
+    pListenCut = addParam ("listencut", "SC HPF", "Hz", 20.0f, 250.0f, 60.0f);
     pMix       = addParam ("mix", "Mix", "%", 0.0f, 100.0f, 100.0f);
 }
 
