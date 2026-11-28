@@ -10,8 +10,14 @@ project's instructions). Read it before design decisions; the code follows it.
 
 ## Working rules
 
-- **Plain language for Tom.** Anything he reads (README, guides, the app's own
-  words, PR descriptions) uses full sentences and no jargon. Click-by-click steps.
+- **Plain language for Tom.** Anything he reads (README, guides, PR descriptions)
+  uses full sentences and no programmer's jargon. Click-by-click steps.
+- **Short labels on screen** (Tom, 28 Nov 2026: he knows live sound). Controls carry the
+  short names a sound desk uses (HPF, LPF, Freq, Gain, Q, Thresh, Pre, Post) and no
+  explaining tips: space goes to the controls. Explanations live in the guides, and
+  **`docs/labels.md` is the key to every short label: add to it when you add one.**
+  Warnings, and questions asked before something is lost, stay in full sentences. Only
+  labels change: ids, file words and the report's own lines are never renamed.
 - **The app reports, Tom pastes.** New features get a line in the app's report
   (the **Copy report** button) so results come back as text, not descriptions.
 - **The self-test grows with the code.** `GigRig --self-test <file>` runs on

@@ -364,7 +364,7 @@ GR.param = (p, value, change) =>
     return h ('div', { class: 'param' },
         h ('label', {}, p.label, out),
         slider,
-        h ('button', { class: 'btn tiny ghost', title: 'Back to where it starts', onclick: () => change (p.def, true) }, 'Reset'));
+        h ('button', { class: 'btn tiny ghost', title: 'Default', onclick: () => change (p.def, true) }, 'Reset'));
 };
 
 /** One effect block (a pedal in a chain, or a block of a mixer channel): its name, on/off, and its settings when opened. */
@@ -386,7 +386,7 @@ GR.block = (key, block, o) =>
             if (done && ! GR.dragging) GR.render();
         })),
         block.t ? Object.keys (block.t).filter ((k) => block.t[k]).map ((k) => h ('p', { class: 'hint', text: k + ': ' + block.t[k] })) : null,
-        type.params.length === 0 ? h ('p', { class: 'hint', text: 'This one has no settings.' }) : null,
+        type.params.length === 0 ? h ('p', { class: 'hint', text: 'No settings.' }) : null,
         o.tools ? h ('div', { class: 'row wrap block-tools' }, o.tools) : null) : null;
 
     return h ('div', { class: 'block' + (block.on ? '' : ' off') }, head, body);

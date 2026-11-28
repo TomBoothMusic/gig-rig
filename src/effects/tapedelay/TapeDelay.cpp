@@ -5,10 +5,10 @@ namespace gigrig::fx
 
 TapeDelay::TapeDelay()
 {
-    pFollow   = addToggle ("follow",   "Follow tempo", false);
-    pDivision = addChoice ("division", "Note value", sync::names(), 0);
+    pFollow   = addToggle ("follow",   "Sync", false);
+    pDivision = addChoice ("division", "Div", sync::names(), 0);
     pTime     = addParam ("time",      "Time",     "ms", 60.0f, 1000.0f, 300.0f, 0.0f);    // glides on its own
-    pFeedback = addParam ("feedback",  "Repeats",  "%",  0.0f, 95.0f, 35.0f);
+    pFeedback = addParam ("feedback",  "Fdbk",     "%",  0.0f, 95.0f, 35.0f);
     pMix      = addParam ("mix",       "Mix",      "%",  0.0f, 100.0f, 30.0f);
     pWow      = addParam ("wow",       "Wow",      "",   0.0f, 10.0f, 3.0f);
     pFlutter  = addParam ("flutter",   "Flutter",  "",   0.0f, 10.0f, 3.0f);

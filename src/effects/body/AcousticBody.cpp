@@ -24,7 +24,7 @@ namespace
 AcousticBody::AcousticBody()
 {
     pBody  = addParam ("body",  "Body",  "",   0.0f, 10.0f, 5.0f);
-    pPhase = addToggle ("phase", "Flip phase (feedback)", false);
+    pPhase = addToggle ("phase", "Phase inv", false);
     pLevel = addParam ("level", "Level", "dB", -15.0f, 15.0f, 0.0f);
 }
 

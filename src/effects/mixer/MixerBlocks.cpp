@@ -63,30 +63,30 @@ void MixSvf::highShelf (double rate, double hz, double db) noexcept
 MixEq::MixEq()
 {
     // Ids never change: they are saved in the mixer's presets.
-    pLowCut  = addParam ("lowcut",  "Low cut",       "Hz", 20.0f, 400.0f, 20.0f);
+    pLowCut  = addParam ("lowcut",  "HPF",           "Hz", 20.0f, 400.0f, 20.0f);
     // Since 28 Nov 2026 every band can go anywhere from 20 Hz to 20 kHz, so a point on the EQ curve
     // can be dragged to wherever it is needed, as on the CQ12T and the Wing. Only the ranges grew:
     // every value saved before means what it did.
-    pLsf     = addParam ("lsf",     "Low shelf at",  "Hz", 20.0f, 2000.0f, 100.0f);
-    pLsg     = addParam ("lsg",     "Low shelf",     "dB", -15.0f, 15.0f, 0.0f);
+    pLsf     = addParam ("lsf",     "LS Freq",       "Hz", 20.0f, 2000.0f, 100.0f);
+    pLsg     = addParam ("lsg",     "LS Gain",       "dB", -15.0f, 15.0f, 0.0f);
 
     static const struct { const char* f; const char* g; const char* q; const char* name; float lo, hi, def; } bands[numBells] {
-        { "b1f", "b1g", "b1q", "Band 1", 20.0f, 20000.0f, 250.0f },
-        { "b2f", "b2g", "b2q", "Band 2", 20.0f, 20000.0f, 800.0f },
-        { "b3f", "b3g", "b3q", "Band 3", 20.0f, 20000.0f, 2500.0f },
-        { "b4f", "b4g", "b4q", "Band 4", 20.0f, 20000.0f, 6000.0f } };
+        { "b1f", "b1g", "b1q", "B1", 20.0f, 20000.0f, 250.0f },
+        { "b2f", "b2g", "b2q", "B2", 20.0f, 20000.0f, 800.0f },
+        { "b3f", "b3g", "b3q", "B3", 20.0f, 20000.0f, 2500.0f },
+        { "b4f", "b4g", "b4q", "B4", 20.0f, 20000.0f, 6000.0f } };
 
     for (int b = 0; b < numBells; ++b)
     {
         const auto& band = bands[b];
-        pF[(size_t) b] = addParam (band.f, std::string (band.name) + " at",    "Hz", band.lo, band.hi, band.def);
-        pG[(size_t) b] = addParam (band.g, band.name,                          "dB", -15.0f, 15.0f, 0.0f);
-        pQ[(size_t) b] = addParam (band.q, std::string (band.name) + " width (high = narrow)", "", 0.3f, 10.0f, 1.0f);
+        pF[(size_t) b] = addParam (band.f, std::string (band.name) + " Freq",   "Hz", band.lo, band.hi, band.def);
+        pG[(size_t) b] = addParam (band.g, std::string (band.name) + " Gain",  "dB", -15.0f, 15.0f, 0.0f);
+        pQ[(size_t) b] = addParam (band.q, std::string (band.name) + " Q", "", 0.3f, 10.0f, 1.0f);
     }
 
-    pHsf     = addParam ("hsf",     "High shelf at", "Hz", 500.0f, 20000.0f, 8000.0f);
-    pHsg     = addParam ("hsg",     "High shelf",    "dB", -15.0f, 15.0f, 0.0f);
-    pHighCut = addParam ("highcut", "High cut",      "Hz", 2000.0f, 20000.0f, 20000.0f);
+    pHsf     = addParam ("hsf",     "HS Freq",      "Hz", 500.0f, 20000.0f, 8000.0f);
+    pHsg     = addParam ("hsg",     "HS Gain",       "dB", -15.0f, 15.0f, 0.0f);
+    pHighCut = addParam ("highcut", "LPF",           "Hz", 2000.0f, 20000.0f, 20000.0f);
 }
 
 void MixEq::onPrepare (double, int)     { onReset(); }
@@ -126,12 +126,12 @@ void MixEq::processChunk (float* const* ch, int numCh, int n) noexcept
 //==============================================================================
 MixComp::MixComp()
 {
-    pThreshold = addParam ("threshold", "Threshold", "dB", -60.0f, 0.0f, -18.0f);
+    pThreshold = addParam ("threshold", "Thresh",    "dB", -60.0f, 0.0f, -18.0f);
     pRatio     = addParam ("ratio",     "Ratio",     ":1", 1.0f, 20.0f, 3.0f);
     pAttack    = addParam ("attack",    "Attack",    "ms", 0.1f, 100.0f, 10.0f);
     pRelease   = addParam ("release",   "Release",   "ms", 20.0f, 1000.0f, 150.0f);
-    pKnee      = addParam ("knee",      "Knee (0 = hard)", "dB", 0.0f, 12.0f, 6.0f);
-    pMakeup    = addParam ("makeup",    "Make-up gain", "dB", 0.0f, 24.0f, 0.0f);
+    pKnee      = addParam ("knee",      "Knee", "dB", 0.0f, 12.0f, 6.0f);
+    pMakeup    = addParam ("makeup",    "Makeup", "dB", 0.0f, 24.0f, 0.0f);
 }
 
 void MixComp::onPrepare (double, int)   { onReset(); }
@@ -189,11 +189,11 @@ Notches::Notches()
     for (int k = 0; k < count; ++k)
     {
         const auto number = std::to_string (k + 1);
-        pF[(size_t) k]   = addParam ("n" + number + "f", "Notch " + number + " at", "Hz", 40.0f, 12000.0f, starts[k]);
-        pCut[(size_t) k] = addParam ("n" + number + "g", "Notch " + number,         "dB", -24.0f, 0.0f, 0.0f);
+        pF[(size_t) k]   = addParam ("n" + number + "f", "N" + number + " Freq", "Hz", 40.0f, 12000.0f, starts[k]);
+        pCut[(size_t) k] = addParam ("n" + number + "g", "N" + number + " Cut",        "dB", -24.0f, 0.0f, 0.0f);
     }
 
-    pWidth = addParam ("width", "Width (narrow up)", "", 2.0f, 30.0f, 10.0f);
+    pWidth = addParam ("width", "Q", "", 2.0f, 30.0f, 10.0f);
 }
 
 void Notches::onPrepare (double, int)   { onReset(); }
@@ -334,8 +334,8 @@ void LineDelay::processChunk (float* const* ch, int numCh, int n) noexcept
 //==============================================================================
 WetFilter::WetFilter()
 {
-    pLowCut  = addParam ("lowcut",  "Low cut",  "Hz", 20.0f, 1000.0f, 20.0f);
-    pHighCut = addParam ("highcut", "High cut", "Hz", 1000.0f, 20000.0f, 20000.0f);
+    pLowCut  = addParam ("lowcut",  "HPF",      "Hz", 20.0f, 1000.0f, 20.0f);
+    pHighCut = addParam ("highcut", "LPF",      "Hz", 1000.0f, 20000.0f, 20000.0f);
 }
 
 void WetFilter::onPrepare (double, int) { onReset(); }

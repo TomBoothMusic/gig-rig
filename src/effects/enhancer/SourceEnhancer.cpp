@@ -22,10 +22,10 @@ namespace
 
 SourceEnhancer::SourceEnhancer()
 {
-    pThreshold = addParam ("threshold", "Threshold", "dB", -70.0f, 0.0f, -38.0f);
+    pThreshold = addParam ("threshold", "Thresh", "dB", -70.0f, 0.0f, -38.0f);
     pDepth     = addParam ("depth", "Depth", "dB", 0.0f, 20.0f, 8.0f);
-    pTime      = addChoice ("time", "Time", { "A (fastest)", "B", "C", "D", "E", "F (slowest)" }, 2);
-    pMode      = addChoice ("mode", "Listens to", { "RMS (loudness)", "Peak" }, 0);
+    pTime      = addChoice ("time", "Time", { "A (fast)", "B", "C", "D", "E", "F (slow)" }, 2);
+    pMode      = addChoice ("mode", "Detect", { "RMS", "Peak" }, 0);
 }
 
 void SourceEnhancer::onPrepare (double, int)    { onReset(); }

@@ -13,10 +13,10 @@ static constexpr double heelSilentDb = -80.0;
 
 VolumePedal::VolumePedal()
 {
-    pPedal = addParam ("pedal", "Pedal position", "", 0.0f, 100.0f, 100.0f, 30.0f);
-    pHeel  = addParam ("heel", "Quietest level", "dB", (float) heelSilentDb, 0.0f, (float) heelSilentDb);
-    pReverse = addToggle ("reverse", "Reversed (heel is loud)", false);
-    pCurve = addChoice ("curve", "Travel", { "Volume pedal", "Blend (even loudness)" }, 0);
+    pPedal = addParam ("pedal", "Pedal", "", 0.0f, 100.0f, 100.0f, 30.0f);
+    pHeel  = addParam ("heel", "Min", "dB", (float) heelSilentDb, 0.0f, (float) heelSilentDb);
+    pReverse = addToggle ("reverse", "Reverse", false);
+    pCurve = addChoice ("curve", "Curve", { "Volume", "Blend" }, 0);
 }
 
 double VolumePedal::gainFor (double pedal, double heelDb, bool blend) noexcept

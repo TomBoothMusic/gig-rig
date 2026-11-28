@@ -24,9 +24,7 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     if (BreakMusic::memoryOnDisk.load() && BreakMusic::stateFile().existsAsFile())
         music.loadStateText (BreakMusic::stateFile().loadFileAsString());
 
-    style::body (help, "Music between sets, played by the rig itself. Put your mixes (WAV, FLAC or MP3 files) in the break music folder, choose one and press Play. "
-                       "It plays round and round. It fades down by itself when you start playing and keeps going silently; it only comes back up when you say so. "
-                       "It is never recorded into a loop or a recording, and nothing plays until you press Play.");
+    style::body (help, {});
     help.setColour (juce::Label::textColourId, style::textDim);
     help.setJustificationType (juce::Justification::topLeft);
     help.setMinimumHorizontalScale (1.0f);
@@ -34,7 +32,7 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     style::body (playLabel, "Play");
     style::combo (mixBox);
     mixBox.setTooltip ("Every music file in the break music folder. On the rig computer the phone is in the list too.");
-    mixBox.setTextWhenNothingSelected ("No mixes in the folder yet");
+    mixBox.setTextWhenNothingSelected ("No mixes");
 
     const auto say = [this] (const juce::String& line)
     {
@@ -61,14 +59,14 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     downButton.onClick = [this] { music.fadeDown(); shownStatus.clear(); };
 
     const auto s = music.settings();
-    style::body (downLabel, "Fade down takes");
-    style::body (upLabel, "Fade up takes");
+    style::body (downLabel, "Fade down");
+    style::body (upLabel, "Fade up");
     setUpSlider (downSlider, 0.5, 15.0, 0.5, s.fadeDownSeconds, " s", "How long the music takes to fade away when you start playing");
     setUpSlider (upSlider, 0.5, 15.0, 0.5, s.fadeUpSeconds, " s", "How long the music takes to come back when you bring it up");
     downSlider.onValueChange = [this] { pushSettings(); };
     upSlider.onValueChange = [this] { pushSettings(); };
 
-    style::body (whenLabel, "Fade down by itself when");
+    style::body (whenLabel, "Auto fade down on");
 
     for (auto* b : { &switchBox, &songBox, &soundBox })
     {
@@ -82,7 +80,7 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     setUpSlider (soundSlider, -60.0, 0.0, 1.0, s.soundDb, " dB", "How loud an input has to be, for about a sixth of a second, to count");
     soundSlider.onValueChange = [this] { pushSettings(); };
 
-    style::body (pairLabel, "With the mixer off it plays on");
+    style::body (pairLabel, "Output (mixer off)");
     style::combo (pairBox);
 
     for (int pair = 0; pair < 4; ++pair)
@@ -91,7 +89,7 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     pairBox.setTooltip ("With the mixer on, the break music always goes to the main output. With the mixer off it goes straight to this pair of returns.");
     pairBox.onChange = [this] { pushSettings(); };
 
-    style::body (knobLabel, "Knob (ENC 5)");
+    style::body (knobLabel, "ENC 5");
     knobLabel.setTooltip ("These buttons stand in for the fifth knob on the board. It rests on PA/venue. Hold hands it to the break music: Turn is then the level and Push fades it up or down.");
     knobScreen.setFont (style::monoFont (13.0f));
     knobScreen.setColour (juce::Label::textColourId, style::textMain);
@@ -109,7 +107,7 @@ BreakMusicPanel::BreakMusicPanel (AudioEngine& engineToUse)
     push.onClick = [this, knob]        { knob (engine.venueKnob().push (juce::Time::getMillisecondCounterHiRes())); };
     hold.onClick = [this, knob]        { knob (engine.venueKnob().hold (juce::Time::getMillisecondCounterHiRes())); };
 
-    style::heading (reportHeading, "What the report says about the break music");
+    style::heading (reportHeading, "Report");
     style::readOnlyEditor (reportView);
 
     for (auto* c : std::initializer_list<juce::Component*> { &status, &help, &playLabel, &mixBox, &playButton, &restartButton, &stopButton, &folderButton,
@@ -248,8 +246,7 @@ void BreakMusicPanel::resized()
 
     status.setBounds (area.removeFromTop (68));
     area.removeFromTop (6);
-    help.setBounds (area.removeFromTop (58));
-    area.removeFromTop (4);
+    // The help paragraph went on 28 Nov 2026 (Tom: short labels, no tips); docs/break-music.md says it all.
 
     auto row = area.removeFromTop (28);
     playLabel.setBounds (row.removeFromLeft (44));

@@ -34,11 +34,11 @@ Each mixer channel chooses one. In the file names they are the words in brackets
 
 | Choice | File name says | What is in the file |
 | --- | --- | --- |
-| Nothing | (no file) | |
-| The plain socket | `raw` | The input itself, before any effect. Anything can be redone from it. |
-| After its effects | `after effects` | After the guitar or vocal effects chain, before the looper. No loops. |
-| After the looper | `after looper` | The live sound and its loops together, before the channel's own gate, EQ and compressors. This is what a channel starts on. |
-| After the looper, with its EQ and compressors | `after channel processing` | The live sound and its loops together, after the channel's gate, EQ and compressors, before its fader. |
+| Off | (no file) | |
+| Raw input | `raw` | The input itself, before any effect. Anything can be redone from it. |
+| Post FX | `after effects` | After the guitar or vocal effects chain, before the looper. No loops. |
+| Post looper | `after looper` | The live sound and its loops together, before the channel's own gate, EQ and compressors. This is what a channel starts on. |
+| Post EQ/comp | `after channel processing` | The live sound and its loops together, after the channel's gate, EQ and compressors, before its fader. |
 
 Three things to know:
 
@@ -51,7 +51,7 @@ Three things to know:
   2026), so the loops inside an "after looper" file already carry the EQ and compressors they
   were played with. Only the live sound in that file is without them.
 - The mixer's reverbs and delays come after all of these, so no channel file has reverb in it.
-  To keep the reverbs, tick **Reverbs and delays**: each one is written as a file of its own
+  To keep the reverbs, tick **FX returns**: each one is written as a file of its own
   (only its wet sound, at the level it has in the main mix), ready to sit under the dry channels.
 
 ## The mixes
@@ -59,9 +59,9 @@ Three things to know:
 | Tick box | File | What it is |
 | --- | --- | --- |
 | **Main mix** | `Main mix.wav`, stereo | Exactly what the PA was sent: the venue's EQ, limiter and level included. If the main output is set to mono, both sides are the same. |
-| **Recording mix** | `Recording mix.wav`, stereo | The second mix, below. |
-| **Reverbs and delays** | `Effect 1 Vocal plate.wav` and so on | Each mixer effect that is on, alone. |
-| **A raw copy of every socket** (on to begin with) | `Vocal (raw for soundcheck).wav` and so on | Each socket in use, plain, before any effect. This is what a virtual soundcheck plays back. A channel already recorded raw needs no second file. |
+| **Rec mix** | `Recording mix.wav`, stereo | The second mix, below. |
+| **FX returns** | `Effect 1 Vocal plate.wav` and so on | Each mixer effect that is on, alone. |
+| **A raw copy of every socket** (on to begin with; **Raw inputs** on the phone) | `Vocal (raw for soundcheck).wav` and so on | Each socket in use, plain, before any effect. This is what a virtual soundcheck plays back. A channel already recorded raw needs no second file. |
 
 Break music is never in any of them.
 
@@ -110,7 +110,7 @@ heard as it would be live.
 
 1. Open the **Recordings** tab (on the phone: **Record**, then **Recordings**).
 2. Click a recording. Its line says how many sockets it can play, or "no raw files".
-3. Click **Play as a soundcheck**. Click it again to stop.
+3. Click **Play as a soundcheck** (on the phone: **Virtual soundcheck**). Click it again to stop.
 
 What to know:
 
@@ -118,7 +118,7 @@ What to know:
   effects in it. That is what the **raw copy** tick box on the Recording tab is for.
 - While it plays, those sockets do **not** hear what is plugged into them. Every other socket
   stays live, so Tom can play along on something that was not recorded.
-- **Round and round** (ticked to begin with) starts the recording again when it ends.
+- **Loop** (ticked to begin with) starts the recording again when it ends.
 - Loops can be recorded from it, songs can be changed, the mixer can be worked on, and Record
   can be pressed, which mixes an old take again with today's settings.
 - The files are 48 kHz and are brought back up to the rig's rate as they play.
@@ -153,11 +153,11 @@ saved loop already has the EQ and compressors of the night in it. Instead:
 
 What to know:
 
-- It is the **With its loops, kicks and switches** tick box next to Play (ticked to begin
+- It is the **Replay footwork (loops, kicks, switches)** tick box next to Play (ticked to begin
   with). Unticked, the soundcheck plays and the looper, the kick, the switches and the pedal
   are left alone.
 - A loop that is already going round keeps the sound it was recorded with, as it does live.
-  With **Round and round** the loops are cleared each time the recording comes back to its
+  With **Loop** the loops are cleared each time the recording comes back to its
   start and are built again, so a change is in every loop one pass later.
 - The song the recording was made with is loaded first, unless it is the one loaded already
   (then it is left alone, with whatever has been changed in it). A song change during the

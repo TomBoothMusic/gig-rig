@@ -51,15 +51,15 @@ void ChannelEq::Svf::highShelf (double rate, double hz, double db) noexcept
 ChannelEq::ChannelEq()
 {
     // Ids never change: they are saved in presets and songs.
-    pLowCut  = addParam ("lowcut",  "Low cut",          "Hz", 20.0f, 400.0f, 20.0f);
-    pHighCut = addParam ("highcut", "High cut",         "Hz", 2000.0f, 20000.0f, 20000.0f);
-    pLow     = addParam ("low",     "Low (120 Hz)",     "dB", -15.0f, 15.0f, 0.0f);
-    pHigh    = addParam ("high",    "High (7 kHz)",     "dB", -15.0f, 15.0f, 0.0f);
-    pLmf     = addParam ("lmf",     "Low-mid at",       "Hz", 100.0f, 1500.0f, 300.0f);
-    pLmg     = addParam ("lmg",     "Low-mid",          "dB", -15.0f, 15.0f, 0.0f);
-    pHmf     = addParam ("hmf",     "High-mid at",      "Hz", 800.0f, 8000.0f, 3000.0f);
-    pHmg     = addParam ("hmg",     "High-mid",         "dB", -15.0f, 15.0f, 0.0f);
-    pWidth   = addParam ("width",   "Mid width",        "",   0.0f, 10.0f, 5.0f);
+    pLowCut  = addParam ("lowcut",  "HPF",              "Hz", 20.0f, 400.0f, 20.0f);
+    pHighCut = addParam ("highcut", "LPF",              "Hz", 2000.0f, 20000.0f, 20000.0f);
+    pLow     = addParam ("low",     "LF 120 Hz",        "dB", -15.0f, 15.0f, 0.0f);
+    pHigh    = addParam ("high",    "HF 7 kHz",         "dB", -15.0f, 15.0f, 0.0f);
+    pLmf     = addParam ("lmf",     "LMF Freq",         "Hz", 100.0f, 1500.0f, 300.0f);
+    pLmg     = addParam ("lmg",     "LMF Gain",         "dB", -15.0f, 15.0f, 0.0f);
+    pHmf     = addParam ("hmf",     "HMF Freq",         "Hz", 800.0f, 8000.0f, 3000.0f);
+    pHmg     = addParam ("hmg",     "HMF Gain",         "dB", -15.0f, 15.0f, 0.0f);
+    pWidth   = addParam ("width",   "Mid Q",            "",   0.0f, 10.0f, 5.0f);
     pLevel   = addParam ("level",   "Level",            "dB", -15.0f, 15.0f, 0.0f);
 }
 

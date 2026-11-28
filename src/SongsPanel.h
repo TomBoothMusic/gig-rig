@@ -51,7 +51,7 @@ private:
                      windowButton { "Open in its own window" },
                      moveButton { "Move reverbs and delays to the mixer" }, backButton { "Put the songs back" },
                      tidyButton { "Tidy unused presets" }, untidyButton { "Put the presets back" };
-    juce::ToggleButton tailsBox { "Delays and reverbs ring out when the sound changes" };
+    juce::ToggleButton tailsBox { "Spillover (delay and reverb tails)" };
     std::array<juce::ComboBox, EffectsRack::numPedalAssigns> switchBoxes, actionBoxes;
     juce::String said, shownNotes, shownFile;
     int copiedTicks = 0, ticks = 0;

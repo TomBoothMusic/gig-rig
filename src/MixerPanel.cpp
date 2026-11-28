@@ -48,17 +48,17 @@ namespace
     juce::String blockName (const std::string& type)
     {
         if (type == "gate")         return "Gate";
-        if (type == "comp")         return "1176 style";
-        if (type == "la2a")         return "LA-2A style";
+        if (type == "comp")         return "1176";
+        if (type == "la2a")         return "LA-2A";
         if (type == "warmth")       return "Warmth";
         if (type == "enhancer")     return "Enhancer";
         if (type == "buscomp")      return "Bus comp";
         if (type == "tape")         return "Tape";
         if (type == "mixeq")        return "EQ";
-        if (type == "mixcomp")      return "Compressor";
+        if (type == "mixcomp")      return "Comp";
         if (type == "notches")      return "Notches";
         if (type == "limiter")      return "Limiter";
-        if (type == "linedelay")    return "Speaker delay";
+        if (type == "linedelay")    return "Delay";
 
         if (const auto* t = fx::findEffectType (type))
             return t->name;
@@ -66,23 +66,10 @@ namespace
         return type;
     }
 
+    /** The line under a block's name. Tom knows the gear (28 Nov 2026), so only what is particular to this rig is said. */
     juce::String blockWords (const std::string& type)
     {
-        if (type == "gate")         return "Shuts the channel when nothing is played, so a quiet stage stays quiet. Threshold is how loud a sound must be to open it.";
-        if (type == "comp")         return "An analog-style insert after the EQ and compressor: the 1176-style compressor from the effects list, for a voice or a bass that should sound pressed and forward.";
-        if (type == "la2a")         return "A slow, smooth valve-studio leveller with two knobs, kind to a voice or a bass. Turn Peak reduction up until the amber bar moves, then make the level up with Gain.";
-        if (type == "enhancer")     return "The gentle gate for a voice: untouched while you sing, turned down by Depth between phrases, never shut. Set Threshold just under your quietest singing; Time is how slowly it closes.";
-        if (type == "warmth")       return "A touch of valve-desk colour before the EQ: Drive adds the harmonics, Colour leans it dark or bright, and the loudness stays about where it was.";
-        if (type == "buscomp")      return "The desk-style compressor that glues a whole mix together. A few dB of movement on the amber bar is plenty; Mix blends the untouched sound back in.";
-        if (type == "tape")         return "A tape machine across the whole mix: gentle squeeze on the peaks, a low bump and a softer top. Drive pushes the tape harder.";
-        if (type == "mixeq")        return "Low cut, low shelf, four bells you can sweep (where, how much, how wide), high shelf, high cut. Double-click a slider for its starting point.";
-        if (type == "mixcomp")      return "Evens out the loud and the quiet. Lower the Threshold until the strip's amber bar moves on the loud notes; Ratio is how firmly it holds them.";
-        if (type == "notches")      return "Six narrow cuts for feedback notes and room booms. A notch at 0 dB does nothing.";
-        if (type == "limiter")      return "Nothing leaves louder than the Ceiling. Set it just under where the speaker's own limiter starts, so this one catches the peaks first.";
-        if (type == "linedelay")    return "Holds this output back to line a far speaker up with the near ones: about 3 ms for every metre.";
-
-        if (const auto* t = fx::findEffectType (type))
-            return juce::String (t->description) + "  Only its wet sound is used here; the channel faders carry the dry.";
+        if (type == "linedelay")    return "3 ms per metre";
 
         return {};
     }
@@ -210,7 +197,7 @@ MixerPanel::MixerPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
     }
 
     // ---- the venue knob ----
-    style::body (venueKnobLabel, "Venue knob (ENC 5)");
+    style::body (venueKnobLabel, "ENC 5");
     venueKnobLabel.setTooltip ("These buttons stand in for the fifth knob on the board. Turning only shows names; nothing changes until Push. Hold hands the knob to the break music (Turn is then its level, Push fades it up or down); Hold again, or starting to play, hands it back.");
     venueScreen.setFont (style::monoFont (13.0f));
     venueScreen.setColour (juce::Label::textColourId, style::textMain);
@@ -344,7 +331,7 @@ juce::String MixerPanel::socketNote (int socket) const
 
         if (r.on && r.source == socket && r.looperHears == -1)
             return "the " + (r.name.isNotEmpty() ? "'" + r.name + "'" : "chain " + juce::String (c + 1)) + " effects chain on socket " + juce::String (socket + 1)
-                   + " is set to 'Not recorded' on the Effects tab, so the mixer gets the plain socket without its effects. Set 'Looper hears it as' to its own socket there.";
+                   + " is set to 'Not recorded' on the Effects tab, so the mixer gets the plain socket without its effects. Set 'Looper in' to its own socket there.";
     }
 
     return {};
@@ -625,9 +612,9 @@ void MixerPanel::rebuildDetail()
         const auto& c = now.channel[(size_t) index];
         const bool rightSide = index > 0 && now.channel[(size_t) index - 1].link;
         const int lead = rightSide ? index - 1 : index;
-        detailTitle.setText ("Channel " + juce::String (index + 1) + ": " + c.name + (c.on ? "" : "  (off)")
-                             + (rightSide ? "   (the right side of a stereo pair with channel " + juce::String (index) + ": they share every setting but the name and the socket)"
-                                : c.link ? "   (the left side of a stereo pair with channel " + juce::String (index + 2) + ")" : juce::String()), juce::dontSendNotification);
+        detailTitle.setText ("Ch " + juce::String (index + 1) + ": " + c.name + (c.on ? "" : "  (off)")
+                             + (rightSide ? "   (R of ch " + juce::String (index) + ")"
+                                : c.link ? "   (L, linked with ch " + juce::String (index + 2) + ")" : juce::String()), juce::dontSendNotification);
 
         const auto change = [this, index] (std::function<void (MixChannelSetup&)> edit)
         {
@@ -638,28 +625,28 @@ void MixerPanel::rebuildDetail()
         };
 
         addText (0, 120, "Name", c.name, [change] (juce::String t) { change ([&t] (MixChannelSetup& n) { n.name = t; }); });
-        addToggle (0, 64, "In use", "On", c.on, [change, later] (bool on) { change ([on] (MixChannelSetup& n) { n.on = on; }); later(); });
+        addToggle (0, 64, "Ch", "On", c.on, [change, later] (bool on) { change ([on] (MixChannelSetup& n) { n.on = on; }); later(); });
 
-        std::vector<std::pair<int, juce::String>> sockets { { noneId, "No socket" } };
+        std::vector<std::pair<int, juce::String>> sockets { { noneId, "None" } };
         const int count = engine.isCQ() ? 10 : engine.isOpen() ? juce::jmin (numMixSockets, engine.numInputs()) : numMixSockets;
         for (int i = 0; i < juce::jmax (count, c.socket + 1); ++i)
             sockets.push_back ({ i + 1, socketName (i) });
 
-        addCombo (0, 250, "Comes from (after its effects chain)", sockets, c.socket >= 0 ? c.socket + 1 : noneId,
+        addCombo (0, 250, "Source", sockets, c.socket >= 0 ? c.socket + 1 : noneId,
                   [change] (int id) { change ([id] (MixChannelSetup& n) { n.socket = id == noneId ? -1 : id - 1; }); });
         addSlider (0, 100, "Trim", -24.0, 24.0, 0.1, " dB", c.trimDb, 0.0, [change] (float v) { change ([v] (MixChannelSetup& n) { n.trimDb = v; }); });
         auto* pan = addSlider (0, 100, "Pan", -1.0, 1.0, 0.01, {}, c.pan, 0.0, [change] (float v) { change ([v] (MixChannelSetup& n) { n.pan = v; }); });
-        pan->textFromValueFunction = [] (double v) { return std::abs (v) < 0.005 ? juce::String ("centre") : juce::String (juce::roundToInt (std::abs (v) * 100.0)) + (v < 0.0 ? "% left" : "% right"); };
+        pan->textFromValueFunction = [] (double v) { return std::abs (v) < 0.005 ? juce::String ("C") : (v < 0.0 ? "L" : "R") + juce::String (juce::roundToInt (std::abs (v) * 100.0)); };
         pan->updateText();
-        addCombo (0, 150, "When recording, record", { { 1, "Nothing" }, { 2, "The plain socket" }, { 3, "After its effects" }, { 4, "After the looper" }, { 5, "After the looper, with EQ and compressors" } }, (int) c.record + 1,
+        addCombo (0, 150, "Rec point", { { 1, "Off" }, { 2, "Raw input" }, { 3, "Post FX" }, { 4, "Post looper" }, { 5, "Post EQ/comp" } }, (int) c.record + 1,
                   [change] (int id) { change ([id] (MixChannelSetup& n) { n.record = (RecordPoint) juce::jlimit (0, numRecordPoints - 1, id - 1); }); });
-        addCombo (0, 150, "Direct out for a sound crew", returns, c.directReturn >= 0 ? c.directReturn + 1 : noneId,
+        addCombo (0, 150, "Direct out", returns, c.directReturn >= 0 ? c.directReturn + 1 : noneId,
                   [change] (int id) { change ([id] (MixChannelSetup& n) { n.directReturn = id == noneId ? -1 : id - 1; }); });
 
         for (int m = 0; m < numMixMonitors; ++m)
         {
             const auto& out = now.output[(size_t) m + 1];
-            addSend (1, 150, "To monitor " + juce::String (m + 1) + (out.name.isNotEmpty() ? " (" + out.name + ")" : juce::String()), c.monDb[(size_t) m],
+            addSend (1, 150, "Mon " + juce::String (m + 1) + (out.name.isNotEmpty() ? " " + out.name : juce::String()), c.monDb[(size_t) m],
                      [change, m] (float v) { change ([v, m] (MixChannelSetup& n) { n.monDb[(size_t) m] = v; }); });
         }
 
@@ -668,7 +655,7 @@ void MixerPanel::rebuildDetail()
             songs = songs || mixer.hasSongSend (lead, f);
 
         for (int f = 0; f < numMixFx; ++f)
-            addSend (1, 150, "To " + now.fx[(size_t) f].name + (mixer.hasSongSend (lead, f) ? " (song)" : ""), mixer.sendDb (index, f),
+            addSend (1, 150, now.fx[(size_t) f].name + (mixer.hasSongSend (lead, f) ? " (song)" : ""), mixer.sendDb (index, f),
                      [this, change, f, lead] (float v)
                      {
                          if (mixer.hasSongSend (lead, f))   mixer.setSongSend (lead, f, v);
@@ -676,10 +663,10 @@ void MixerPanel::rebuildDetail()
                      });
 
         if (! rightSide && index + 1 < numMixChannels)
-            addToggle (2, 230, "Stereo (keys, a backing track)", "Stereo with channel " + juce::String (index + 2), c.link,
+            addToggle (2, 150, "Stereo link", "Link ch " + juce::String (index + 2), c.link,
                        [change, later] (bool on) { change ([on] (MixChannelSetup& n) { n.link = on; }); later(); });
 
-        addToggle (2, 330, "Reverb and delay sends (the four on the right above)", "Belong to this song, not the act", songs, [this, lead, later] (bool on)
+        addToggle (2, 190, "FX sends", "Per song (not act)", songs, [this, lead, later] (bool on)
         {
             for (int f = 0; f < numMixFx; ++f)
             {
@@ -696,7 +683,7 @@ void MixerPanel::rebuildDetail()
     else if (s.kind == Kind::fx)
     {
         const auto& f = now.fx[(size_t) index];
-        detailTitle.setText ("Mixer effect " + juce::String (index + 1) + ": " + f.name + "   (after the looper: never recorded into a loop)", juce::dontSendNotification);
+        detailTitle.setText ("FX " + juce::String (index + 1) + ": " + f.name + "   (post looper)", juce::dontSendNotification);
 
         const auto change = [this, index] (std::function<void (MixFxSetup&)> edit)
         {
@@ -717,7 +704,7 @@ void MixerPanel::rebuildDetail()
                 selected = (int) k + 1;
         }
 
-        addCombo (0, 200, mixer.hasSongFx (index) ? "Effect (this song's)" : "Effect", kinds, selected, [this, index, change, later] (int id)
+        addCombo (0, 200, mixer.hasSongFx (index) ? "Type (song)" : "Type", kinds, selected, [this, index, change, later] (int id)
         {
             if (id >= 1 && id <= (int) mixerFxChoices().size())
             {
@@ -738,7 +725,7 @@ void MixerPanel::rebuildDetail()
             }
         });
 
-        addToggle (2, 360, "Which reverb or delay this is, and its own settings", "Belong to this song, not the venue", mixer.hasSongFx (index), [this, index, later] (bool on)
+        addToggle (2, 190, "Type + settings", "Per song (not venue)", mixer.hasSongFx (index), [this, index, later] (bool on)
         {
             if (on)     mixer.setSongFx (index, mixer.effectNow (index));
             else        mixer.clearSongFx (index);
@@ -764,13 +751,13 @@ void MixerPanel::rebuildDetail()
             later();
         });
 
-        auto* low = addSlider (0, 150, "Low cut on the wet sound", 20.0, 1000.0, 1.0, " Hz", f.lowCutHz, 20.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.lowCutHz = v; }); });
+        auto* low = addSlider (0, 150, "HPF (wet)", 20.0, 1000.0, 1.0, " Hz", f.lowCutHz, 20.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.lowCutHz = v; }); });
         low->setSkewFactorFromMidPoint (140.0);
-        auto* high = addSlider (0, 150, "High cut on the wet sound", 1000.0, 20000.0, 10.0, " Hz", f.highCutHz, 20000.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.highCutHz = v; }); });
+        auto* high = addSlider (0, 150, "LPF (wet)", 1000.0, 20000.0, 10.0, " Hz", f.highCutHz, 20000.0, [change] (float v) { change ([v] (MixFxSetup& n) { n.highCutHz = v; }); });
         high->setSkewFactorFromMidPoint (4500.0);
 
         for (int m = 0; m < numMixMonitors; ++m)
-            addSend (0, 140, "Into monitor " + juce::String (m + 1), f.monDb[(size_t) m], [change, m] (float v) { change ([v, m] (MixFxSetup& n) { n.monDb[(size_t) m] = v; }); });
+            addSend (0, 140, "To mon " + juce::String (m + 1), f.monDb[(size_t) m], [change, m] (float v) { change ([v, m] (MixFxSetup& n) { n.monDb[(size_t) m] = v; }); });
 
         // The EQ on what goes into the effect (Tom, 27 Nov 2026): the low and high cuts above do the
         // filtering, these shape what the reverb or delay is fed.
@@ -794,17 +781,17 @@ void MixerPanel::rebuildDetail()
             };
         };
 
-        addSlider (1, 130, "Into it: low shelf", -15.0, 15.0, 0.1, " dB", eqNow ("lsg", 0.0f), 0.0, eqSet ("lsg"));
-        addSlider (1, 130, "Into it: band A at", 150.0, 3000.0, 1.0, " Hz", eqNow ("b2f", 800.0f), 800.0, eqSet ("b2f"))->setSkewFactorFromMidPoint (700.0);
-        addSlider (1, 130, "Band A", -15.0, 15.0, 0.1, " dB", eqNow ("b2g", 0.0f), 0.0, eqSet ("b2g"));
-        addSlider (1, 130, "Into it: band B at", 500.0, 8000.0, 1.0, " Hz", eqNow ("b3f", 2500.0f), 2500.0, eqSet ("b3f"))->setSkewFactorFromMidPoint (2500.0);
-        addSlider (1, 130, "Band B", -15.0, 15.0, 0.1, " dB", eqNow ("b3g", 0.0f), 0.0, eqSet ("b3g"));
-        addSlider (1, 130, "Into it: high shelf", -15.0, 15.0, 0.1, " dB", eqNow ("hsg", 0.0f), 0.0, eqSet ("hsg"));
+        addSlider (1, 130, "Send EQ: LS", -15.0, 15.0, 0.1, " dB", eqNow ("lsg", 0.0f), 0.0, eqSet ("lsg"));
+        addSlider (1, 130, "A Freq", 150.0, 3000.0, 1.0, " Hz", eqNow ("b2f", 800.0f), 800.0, eqSet ("b2f"))->setSkewFactorFromMidPoint (700.0);
+        addSlider (1, 130, "A Gain", -15.0, 15.0, 0.1, " dB", eqNow ("b2g", 0.0f), 0.0, eqSet ("b2g"));
+        addSlider (1, 130, "B Freq", 500.0, 8000.0, 1.0, " Hz", eqNow ("b3f", 2500.0f), 2500.0, eqSet ("b3f"))->setSkewFactorFromMidPoint (2500.0);
+        addSlider (1, 130, "B Gain", -15.0, 15.0, 0.1, " dB", eqNow ("b3g", 0.0f), 0.0, eqSet ("b3g"));
+        addSlider (1, 130, "HS", -15.0, 15.0, 0.1, " dB", eqNow ("hsg", 0.0f), 0.0, eqSet ("hsg"));
     }
     else
     {
         const auto& o = now.output[(size_t) index];
-        detailTitle.setText (mixOutputName (index) + " output" + (index == 0 ? "   (its processing and level, and the mixer effects, are the venue preset)" : "   (both monitors are the monitor set-up)"),
+        detailTitle.setText (mixOutputName (index) + " output" + (index == 0 ? "   (venue preset)" : "   (monitor preset)"),
                              juce::dontSendNotification);
 
         const auto change = [this, index] (std::function<void (MixOutputSetup&)> edit)
@@ -816,18 +803,18 @@ void MixerPanel::rebuildDetail()
         };
 
         if (index > 0)
-            addText (0, 110, "Whose it is", o.name, [change] (juce::String t) { change ([&t] (MixOutputSetup& n) { n.name = t; }); });
+            addText (0, 110, "Name", o.name, [change] (juce::String t) { change ([&t] (MixOutputSetup& n) { n.name = t; }); });
 
-        returns[0].second = "Not connected";
-        addCombo (0, 200, "Goes out on", returns, o.firstReturn >= 0 ? o.firstReturn + 1 : noneId,
+        returns[0].second = "None";
+        addCombo (0, 200, "Output", returns, o.firstReturn >= 0 ? o.firstReturn + 1 : noneId,
                   [change] (int id) { change ([id] (MixOutputSetup& n) { n.firstReturn = id == noneId ? -1 : id - 1; }); });
-        addToggle (0, 150, "Two returns", "And the next one", o.pair, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.pair = on; }); });
+        addToggle (0, 90, "Pair", "Stereo", o.pair, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.pair = on; }); });
         addToggle (0, 80, "Width", "Mono", o.mono, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.mono = on; }); });
 
         if (index > 0)
         {
-            addToggle (0, 150, "Its sends are taken", "Before the faders", o.preFader, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.preFader = on; }); });
-            addCombo (0, 190, "From where in each channel", { { 1, "Before its processing" }, { 2, "After its gate and EQ" }, { 3, "After its compressors" } }, (int) o.tap + 1,
+            addToggle (0, 90, "Sends", "Pre-fader", o.preFader, [change] (bool on) { change ([on] (MixOutputSetup& n) { n.preFader = on; }); });
+            addCombo (0, 120, "Tap", { { 1, "Pre all" }, { 2, "Post EQ" }, { 3, "Post comp" } }, (int) o.tap + 1,
                       [change] (int id) { change ([id] (MixOutputSetup& n) { n.tap = (TapPoint) juce::jlimit (0, 2, id - 1); }); });
         }
 
@@ -836,7 +823,7 @@ void MixerPanel::rebuildDetail()
         for (int i = 0; i < list.size(); ++i)
             names.push_back ({ i + 1, list[i] });
 
-        outputPresetBox = addCombo (1, 220, "Output processing preset (loads into any output)", names, 0, nullptr);
+        outputPresetBox = addCombo (1, 220, "Output preset", names, 0, nullptr);
         outputPresetBox->setEditableText (true);
         addButton (1, 60, "Load", [this, index, later]
         {
@@ -998,7 +985,7 @@ void MixerPanel::timerCallback()
     {
         const auto l = mixer.load();
         juce::String status = mixer.isOn() ? "Mixing. " : "Off. ";
-        status << "Processor: " << juce::String (l.average * 100.0, 1) << "% of each block (busiest " << juce::String (l.busiest * 100.0, 1) << "%).  " << mixer.recorder().statusText();
+        status << "DSP " << juce::String (l.average * 100.0, 1) << "% (peak " << juce::String (l.busiest * 100.0, 1) << "%).  " << mixer.recorder().statusText();
 
         recordButton.setButtonText (mixer.recorder().isRecording() ? "Stop recording" : "Record");
         recordButton.setColour (juce::TextButton::buttonColourId, mixer.recorder().isRecording() ? style::red.withAlpha (0.7f) : style::panel);
@@ -1053,8 +1040,8 @@ void MixerPanel::paint (juce::Graphics& g)
         g.fillRoundedRectangle (a.toFloat().expanded (2.0f, 2.0f), 4.0f);
         g.setColour (style::textDim);
     };
-    heading (0, numMixChannels - 1, "CHANNELS (each with its own loops)");
-    heading (numMixChannels, numMixChannels + numMixFx - 1, "REVERBS AND DELAYS");
+    heading (0, numMixChannels - 1, "INPUTS");
+    heading (numMixChannels, numMixChannels + numMixFx - 1, "FX");
     heading (numMixChannels + numMixFx, numStrips - 1, "OUTPUTS");
 
     for (int i = 0; i < numStrips; ++i)
@@ -1226,7 +1213,7 @@ void MixerPanel::layoutDetail()
         blockOn.setBounds (blockRow.removeFromLeft (130));
     }
 
-    blockHint.setBounds (area.removeFromTop (18));
+    blockHint.setBounds (area.removeFromTop (blockHint.getText().isEmpty() ? 0 : 18));
     area.removeFromTop (2);
 
     const int columns = juce::jmax (1, gridColumns);

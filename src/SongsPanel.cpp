@@ -21,12 +21,11 @@ SongsPanel::SongsPanel (AudioEngine& e, SongBook& b)
     style::body (songLabel, "Song");
     style::body (statusLabel, {});
     style::body (programLabel, "Try a program number");
-    style::body (newLabel, "New entry (this looper layout, these sounds)");
-    style::heading (switchHeading, "SWITCHES THE EFFECTS USE IN THIS SONG (THE LOOPER DOES NOT HEAR THEM)");
+    style::body (newLabel, "New entry");
+    style::heading (switchHeading, "FX SWITCHES (THIS SONG)");
     style::heading (fileHeading, "THIS SONG'S FILE");
     style::heading (notesHeading, "WHAT HAPPENED");
-    style::body (helpLabel, "Set the chains up on the Effects tab with Load and Add to chain, then come back and press Keep. "
-                            "A song names its presets, so changing a preset changes every song that uses it.");
+    style::body (helpLabel, {});
     helpLabel.setColour (juce::Label::textColourId, style::textDim);
     helpLabel.setFont (juce::Font (juce::FontOptions (12.5f)));
     statusLabel.setColour (juce::Label::textColourId, style::green);
@@ -262,8 +261,7 @@ void SongsPanel::resized()
     untidyButton.setBounds (moving.removeFromLeft (juce::jmin (170, moving.getWidth())));
 
     area.removeFromTop (4);
-    helpLabel.setBounds (area.removeFromTop (20));
-    area.removeFromTop (6);
+    // The help line went on 28 Nov 2026 (Tom: short labels, no tips); docs/songs.md says it all.
 
     auto fresh = area.removeFromTop (28);
     newLabel.setBounds (fresh.removeFromLeft (290));

@@ -113,7 +113,7 @@ private:
     juce::Label detailTitle, blockHint;
     std::vector<Field> fields;
     juce::OwnedArray<juce::TextButton> blockButtons;
-    juce::ToggleButton blockOn { "This block on" };
+    juce::ToggleButton blockOn { "On" };
     juce::OwnedArray<juce::Label> gridLabels;
     juce::OwnedArray<juce::Component> gridControls;
     int gridColumns = 3;

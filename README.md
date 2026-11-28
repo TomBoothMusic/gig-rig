@@ -27,6 +27,10 @@ The app is built in stages. Each stage adds to the same app, `GigRig`.
 The sections after it are the test steps for each stage in the order they were built. They are
 kept as a record and for checking one part by itself.
 
+**The labels are short since 28 Nov 2026** (HPF, LPF, Freq, Gain, Q, Thresh and so on, with most
+on-screen tips gone). Older steps below may still use a long name for a setting:
+[docs/labels.md](docs/labels.md) is the key.
+
 The rig computer itself runs Linux. [docs/linux-setup.md](docs/linux-setup.md) sets one up with a
 single script, including a free trial on the laptop from a USB stick.
 
@@ -211,23 +215,23 @@ the RC-600 set to send the pedal as a controller (in the RC-600's ASSIGN setting
 ### Part F: the phone app, second phase (30 minutes)
 
 1. On the **Remote screen** tab tick the box and open the address on your phone, as before.
-2. Tap **Effects** at the bottom, then a chain. Tap **Add an effect**, then **Tremolo**. It
+2. Tap **Effects** at the bottom, then a chain. Tap **Add effect**, then **Tremolo**. It
    appears at the end of the chain, opened, and you should hear it.
-3. In the opened effect tap **Move earlier** twice. It moves up the list and the sound changes
+3. In the opened effect tap **◂ Move** twice. It moves up the list and the sound changes
    to match. Look at the laptop's **Effects** tab: it shows the same order.
 4. Tap **Remove**, then **Remove it**. It is gone on both screens.
-5. Change a setting or two, then tap **Save as a preset**, type `Phone test` and tap **Save
+5. Change a setting or two, then tap **Presets**, **Save as**, type `Phone test` and tap **Save
    it**. On the laptop the preset is in the list. Load it onto another chain to prove it.
-6. Load one of your own presets from the phone, change one setting, and tap **Update its
-   preset**. Read the question carefully (every song that uses the preset gets the change),
+6. Load one of your own presets from the phone, change one setting, and tap **Presets**, then
+   **Update**. Read the question carefully (every song that uses the preset gets the change),
    then tap **Update**. If you would rather not change a real preset, do this on `Phone test`.
-7. Tap **Mixer** (switch the mixer on if asked). Move a fader, tap **Set-ups**, and under
-   **Act** tap **Save as a new one**, type `Phone act`, **Save it**. It should be in the list
+7. Tap **Mixer** (switch the mixer on if asked). Move a fader, tap **Presets**, and under
+   **Act** tap **Save as**, type `Phone act`, **Save**. It should be in the list
    on both screens.
 8. Tap **Tools**. Switch the **Tuner** on and play a string: the phone fills with the purple
    strobe tuner. It runs a moment behind the laptop's, which is normal over Wi-Fi. Say whether
    it is usable. **Done** switches the tuner off.
-9. Still on **Tools**: choose a mix, **Play**, **Fade it down**, **Bring the music up**, move
+9. Still on **Tools**: choose a mix, **Play**, **Fade down**, **Fade up**, move
    **Level**, **Stop**. Each should do on the rig what the same button on the laptop does.
 10. Try the four knob buttons at the bottom of **Tools**, as in Part D.
 11. Click **Copy report** on the laptop and paste.
@@ -495,7 +499,7 @@ the Dream's input, and the Dream's output straight into CQ socket 8.
 4. Click **Chain 2**. Tick **This chain on**. Set:
    - Input: **Socket 10**
    - Out to: **Returns 5+6 (the USB stereo channel)**
-   - Looper hears it as: **Not recorded**
+   - Looper in: **Not recorded**
    - The box beside the **Reference** button: **Socket 8** (the real Dream)
 5. In Chain 2, choose **Amp model (NAM)** on the right and press **Add**. Click its box: the
    **Model** list shows the three Dream captures. Pick the one that matches how the Dream is
@@ -814,7 +818,7 @@ comes with the real board; for now Key is the box on screen.
 1. Click a spare chain, tick **This chain on**, name it **Bass**. Set its **Input to the same
    socket as the Acoustic chain**: two chains can share a socket. Load
    **Starter - Bass (Bass9 copy)**.
-2. Set **Looper hears it as** to socket 9 (where your real Bass9 is plugged in), so bass loops
+2. Set **Looper in** to socket 9 (where your real Bass9 is plugged in), so bass loops
    land on the track they always have. Out to = Returns 5+6.
 3. To compare with the real Bass9: set Reference to the Bass9's socket and flip
    **Effects / Reference**. A take makes this easy: both hear the same notes.
@@ -931,8 +935,8 @@ changed**: use the app exactly as before until you want to try it.
 3. Click **Compressor: off**, tick **This block on**, and lower **Threshold** until the thin
    amber bar beside the Vocal meter moves when you sing loudly.
 4. Still on Vocal: raise **To Vocal plate** to about -10 dB. You should hear reverb on the
-   voice. Then click the **Vocal plate** strip and move **High cut on the wet sound** and
-   **Low cut on the wet sound**: the reverb gets darker or thinner, the voice itself does not.
+   voice. Then click the **Vocal plate** strip and move **LPF (wet)** and
+   **HPF (wet)** (its high cut and low cut): the reverb gets darker or thinner, the voice itself does not.
    (If your vocal effects chain still has its own Plate reverb switched on, switch that one
    off on the Effects tab first, or you will hear two.)
 
@@ -1128,7 +1132,7 @@ arrangement builder), **Effects**, **Mixer** and **Rig**.
 2. On **Tracks**, change what track 2 records (tap the source buttons) and set its length to **4 bars**.
 3. Tap **Switches**, tap switch **5**, and choose a different action and track. Tap **Close**.
 4. Tap **Try it** (and **Try it** again in the box that asks). Go to **Looper** and play it.
-5. Back on **Build**, tap **Save as a new song**, give it a name, tap **Save the new song**.
+5. Back on **Build**, tap **Save as new song**, give it a name, tap **Save the new song**.
 6. On the laptop, open the Songs tab: the new song should be in the list.
 7. If you want the old layout back on a song you saved over: **Go back to the built-in layout**.
 

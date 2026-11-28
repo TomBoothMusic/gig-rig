@@ -12,7 +12,7 @@ namespace gigrig::fx
 TapeMachine::TapeMachine()
 {
     pDrive = addParam ("drive", "Drive", "", 0.0f, 10.0f, 4.0f);
-    pSpeed = addChoice ("speed", "Tape speed", { "7.5 (fat and soft)", "15 (the classic)", "30 (clean and open)" }, 1);
+    pSpeed = addChoice ("speed", "Speed", { "7.5 ips", "15 ips", "30 ips" }, 1);
     pLevel = addParam ("level", "Level", "dB", -12.0f, 12.0f, 0.0f);
 }
 

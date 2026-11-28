@@ -68,7 +68,9 @@ The choices are remembered.
 The remote screen shows the same full-screen strobe whenever the tuner is on, whichever screen
 the phone was on. **Done** switches the tuner off. **Options** goes to the **Tools** screen,
 which has the on/off switch, the small needle, and the same choices (the guitar channels are
-buttons: tap one to change it). **Fill the screen with the strobe** brings the big tuner back.
+buttons: tap one to change it). **Full-screen strobe** brings the big tuner back.
+The phone's labels are short: **Mute** is what goes silent while tuning, **Input** is the socket
+it listens to, **A =** is what A is tuned to (`docs/labels.md`).
 
 A phone hears from the rig about eight times a second over Wi-Fi, so its bands run a moment
 behind the rig's own screen and are a little less fine. For the last fraction of a cent, trust

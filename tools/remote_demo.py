@@ -11,10 +11,10 @@
       For when RemoteApi::state gains a part and the self-test says the demo lacks it, and the
       machine at hand does not have Tom's songs: keeps everything remote/demo-data.js has and
       adds only the parts it lacks, from a running GigRig (any one, a fresh install will do).
-      It also adds the description of every effect "Add an effect" offers, by adding each to
+      It also adds the description of every effect "Add effect" offers, by adding each to
       the first chain for a moment, so never run it against a rig that is in use. And where the
-      app now describes an effect differently (a setting gained, a range widened), the demo's
-      description of it is replaced.
+      app now describes an effect differently (a setting gained, renamed, a range widened), the
+      demo's description of it is replaced, as are the names of the record points.
 
   python3 tools/remote_demo.py build out.html
       Joins remote/index.html and its files into one file with no outside links, set to run
@@ -98,16 +98,23 @@ def top_up(base):
     # Every effect that can be added needs its description (its name and settings) in "types".
     types, described = data["state"]["types"], 0
     for entry in real.get("fxCatalogue", []):
-        if entry["id"] in types:
-            continue
+        was = types.get(entry["id"])
         before = len(ask(base, "/api/state")["s"]["effects"]["chains"][0]["slots"])
         if not ask(base, "/api/cmd", {"op": "fx.add", "chain": 0, "type": entry["id"]}).get("ok"):
             sys.exit(f"The rig would not add {entry['id']} to describe it.")
         seen = ask(base, "/api/state")["s"]["types"]
         ask(base, "/api/cmd", {"op": "fx.remove", "chain": 0, "slot": before})
-        if entry["id"] in seen:
+        if entry["id"] in seen and seen[entry["id"]] != was:
             types[entry["id"]] = seen[entry["id"]]
             described += 1
+
+    # Word lists that are the app's own and not Tom's set-up follow the app (the record points' names).
+    try:
+        if data["state"]["mixer"]["rec"]["points"] != real["mixer"]["rec"]["points"]:
+            data["state"]["mixer"]["rec"]["points"] = real["mixer"]["rec"]["points"]
+            added.append("mixer.rec.points (reworded)")
+    except KeyError:
+        pass
 
     # An effect whose description changed in the app (a setting gained, a range widened) is described afresh.
     refreshed = []

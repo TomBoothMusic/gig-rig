@@ -42,15 +42,12 @@ namespace
         styleBar (s);
         s.setRange (lowDb, 12.0, 0.5);
         s.setDoubleClickReturnValue (true, 0.0);
-        s.textFromValueFunction = [] (double v) { return v <= lowDb + 0.05 ? juce::String ("not in it") : (v > 0.04 ? "+" : "") + juce::String (v, 1) + " dB"; };
+        s.textFromValueFunction = [] (double v) { return v <= lowDb + 0.05 ? juce::String ("off") : (v > 0.04 ? "+" : "") + juce::String (v, 1) + " dB"; };
         s.setTooltip (tip);
     }
 
-    const char* const blockNames[numRecBlocks] { "EQ", "Bus compressor", "Limiter" };
-    const char* const blockWords[numRecBlocks] {
-        "The recording mix's own EQ curve: low cut, low shelf, four bells you can sweep, high shelf, high cut. It never touches what the room hears.",
-        "The desk-style compressor that glues a mix together. A few dB is plenty; Mix blends the untouched sound back in.",
-        "Nothing goes into the file louder than the Ceiling, so a loud chorus cannot clip the recording." };
+    const char* const blockNames[numRecBlocks] { "EQ", "Bus comp", "Limiter" };
+    const char* const blockWords[numRecBlocks] { "", "", "" };      // Tom knows the gear: no tips (28 Nov 2026)
 
     juce::String clockText (double seconds)
     {
@@ -84,19 +81,18 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
     small (roomLabel, {});
     addAndMakeVisible (roomLabel);
 
-    style::body (help, "Every file of a recording starts at the same moment, so they line up in any recording program. "
-                       "The recorder only copies sound that is already there: it never changes what the room or the in-ears hear, and the drive is written to away from the sound.");
+    style::body (help, {});
     help.setColour (juce::Label::textColourId, style::textDim);
     help.setJustificationType (juce::Justification::topLeft);
     help.setMinimumHorizontalScale (1.0f);
     addAndMakeVisible (help);
 
     style::heading (tracksHeading, "Channels");
-    small (pointHeading, "Record this channel", style::textMain);
-    small (levelHeading, "In the recording mix (against the main mix)", style::textMain);
-    small (panHeading, "Pan in the recording mix", style::textMain);
-    style::heading (mixHeading, "Mixes to write, and the recording mix");
-    small (mixLevelLabel, "Recording mix level", style::textMain);
+    small (pointHeading, "Rec point", style::textMain);
+    small (levelHeading, "Rec mix level (vs main)", style::textMain);
+    small (panHeading, "Rec mix pan", style::textMain);
+    style::heading (mixHeading, "Mix files and rec mix");
+    small (mixLevelLabel, "Rec mix level", style::textMain);
     small (blockHint, {});
     blockHint.setMinimumHorizontalScale (1.0f);
 
@@ -131,11 +127,11 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
         auto& row = rows[(size_t) c];
         small (row.name, {}, style::textMain);
         style::combo (row.point);
-        row.point.addItem ("Nothing", 1);
-        row.point.addItem ("The plain socket (no effects)", 2);
-        row.point.addItem ("After its effects, before the looper", 3);
-        row.point.addItem ("After the looper, before the channel's EQ and compressors", 4);
-        row.point.addItem ("After the looper, with the channel's EQ and compressors", 5);
+        row.point.addItem ("Off", 1);
+        row.point.addItem ("Raw input", 2);
+        row.point.addItem ("Post FX", 3);
+        row.point.addItem ("Post looper", 4);
+        row.point.addItem ("Post EQ/comp", 5);
         row.point.setTooltip ("Where in its path this channel is copied to its file. The two 'after the looper' points hold the live sound and its loops together.");
         row.point.onChange = [this, c]
         {
@@ -161,7 +157,7 @@ RecordingPanel::RecordingPanel (AudioEngine& e) : engine (e), mixer (e.mixer())
         styleBar (row.pan);
         row.pan.setRange (-1.0, 1.0, 0.05);
         row.pan.setDoubleClickReturnValue (true, 0.0);
-        row.pan.textFromValueFunction = [] (double v) { return std::abs (v) < 0.02 ? juce::String ("centre") : juce::String (juce::roundToInt (std::abs (v) * 100.0)) + (v < 0.0 ? "% left" : "% right"); };
+        row.pan.textFromValueFunction = [] (double v) { return std::abs (v) < 0.02 ? juce::String ("C") : (v < 0.0 ? "L" : "R") + juce::String (juce::roundToInt (std::abs (v) * 100.0)); };
         row.pan.setTooltip ("Where this channel sits, left to right, in the recording mix only. Double-click for the centre.");
         row.pan.onValueChange = [this, c]
         {
@@ -445,8 +441,8 @@ void RecordingPanel::timerCallback()
     if (ticks % 30 == 0 || roomLabel.getText().isEmpty())
     {
         const auto room = mixer.recordRoom (Mixer::recordingFolder());
-        roomLabel.setText (juce::String (room.freeGb, 1) + " GB free on the recordings drive: about " + juce::String (room.hours, 1) + " hours of these files ("
-                           + juce::String (room.gbPerHour, 2) + " GB an hour). A recording stops by itself before the drive is full.", juce::dontSendNotification);
+        roomLabel.setText (juce::String (room.freeGb, 1) + " GB free, about " + juce::String (room.hours, 1) + " h ("
+                           + juce::String (room.gbPerHour, 2) + " GB/h).", juce::dontSendNotification);
         roomLabel.setColour (juce::Label::textColourId, room.hours < 1.0 ? style::amber : style::textDim);
     }
 
@@ -490,7 +486,7 @@ void RecordingPanel::resized()
     auto left = leftArea;
     tracksHeading.setBounds (left.removeFromTop (24));
     auto head = left.removeFromTop (18);
-    const int nameWidth = 150, panWidth = 130, levelWidth = 170;
+    const int nameWidth = 125, panWidth = 105, levelWidth = 145;      // the record point needs room for "Post EQ/comp"
     head.removeFromLeft (nameWidth);
     panHeading.setBounds (head.removeFromRight (panWidth));
     head.removeFromRight (6);
@@ -545,7 +541,7 @@ void RecordingPanel::resized()
 
     blockRow.removeFromLeft (8);
     blockOn.setBounds (blockRow.removeFromLeft (130));
-    blockHint.setBounds (right.removeFromTop (34));
+    blockHint.setBounds (right.removeFromTop (blockHint.getText().isEmpty() ? 0 : 34));
     right.removeFromTop (2);
     gridArea = right;
     layoutGrid();

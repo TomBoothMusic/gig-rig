@@ -8,7 +8,7 @@ namespace gigrig::fx
 
 NoiseGate::NoiseGate()
 {
-    pThreshold = addParam ("threshold", "Threshold", "dB", -90.0f, -20.0f, -62.0f);
+    pThreshold = addParam ("threshold", "Thresh",    "dB", -90.0f, -20.0f, -62.0f);
     pRelease   = addParam ("release",   "Release",   "ms", 20.0f, 600.0f, 150.0f);
     pDepth     = addParam ("depth",     "Depth",     "dB", -90.0f, 0.0f, -70.0f);
 }
