@@ -62,6 +62,7 @@ MainComponent::MainComponent()
             expression.handleMidi (deviceName, message);
 
         engine.kick().handleMidi (deviceName, message);     // the kick pad test: a note from the SPD::ONE plays the kick
+        switchScreens.handleMidi (deviceName, message);     // the footswitch screens: the board's controller answering
 
         if (message.isProgramChange())
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this), deviceName, program = message.getProgramChangeNumber() + 1]
@@ -196,12 +197,20 @@ MainComponent::MainComponent()
                                                                       + "  Mixer channels that go silent: " + (engine.tunerChannels (true).isEmpty() ? juce::String ("none") : engine.tunerChannels (true).joinIntoString (", "))
                                                                       + ". Stay live: " + (engine.tunerChannels (false).isEmpty() ? juce::String ("none") : engine.tunerChannels (false).joinIntoString (", ")) + ".\n"; };
 
+    // The footswitch screens: their tab goes last, so the tab numbers before it stay as they were. Sending is off until its box is ticked.
+    if (SwitchScreens::memoryOnDisk.load() && SwitchScreens::stateFile().existsAsFile())
+        switchScreens.loadStateText (SwitchScreens::stateFile().loadFileAsString());
+
+    switchScreens.follow (engine, pedal);
+    tabs.addTab ("Switch screens", style::background, &switchScreensPanel, false);
+    engine.extraReport = [this, rest = engine.extraReport] { return rest() + "\n" + switchScreens.reportText(); };
+
     songsPanel.onWindowButton = [this] { moveSongsPanel (songsWindow == nullptr); };
     songsPanel.refresh();       // the effects panel has read the rack's memory by now
     if (juce::SystemStats::getEnvironmentVariable ("GIGRIG_SONGS_WINDOW", {}).isNotEmpty())
         juce::Timer::callAfterDelay (800, [safe = juce::Component::SafePointer<MainComponent> (this)] { if (safe != nullptr) safe->moveSongsPanel (true); });
 
-    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen, 10 break music, 11 recording, 12 recordings).
+    // For screenshots in the cloud (no mouse there): GIGRIG_TAB=4 opens on the fifth tab (0 audio, 1 pedal, 2 looper, 3 songs, 4 effects, 5 amp capture, 6 device check, 7 mixer, 8 kick pad, 9 remote screen, 10 break music, 11 recording, 12 recordings, 13 switch screens).
     if (const auto tab = juce::SystemStats::getEnvironmentVariable ("GIGRIG_TAB", {}); tab.isNotEmpty())
         tabs.setCurrentTabIndex (tab.getIntValue());
 

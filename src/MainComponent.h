@@ -18,6 +18,7 @@
 #include "SongBook.h"
 #include "SongsPanel.h"
 #include "StrobeTuner.h"
+#include "SwitchScreensPanel.h"
 #include "TunerStrip.h"
 
 namespace gigrig
@@ -64,6 +65,8 @@ private:
     RecordingsPanel recordingsPanel { engine };     // the recordings on the drive: soundcheck, keep, copy to USB, clear
     TunerStrip tunerStrip { engine };                       // the tuner, in the header beside Copy report
     StrobeTuner strobeTuner { engine };                     // the tuner filling the whole window while it is on
+    SwitchScreens switchScreens;                            // the footswitch screens: a tile per switch, sent to the board's controller when switched on
+    SwitchScreensPanel switchScreensPanel { switchScreens };
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::DocumentWindow> songsWindow;      // the Songs tab while it is lifted out; declared after the panel so it goes first
 
