@@ -276,13 +276,13 @@ const typeOf = (id) => (GR.state.types || {})[id] || { name: id, params: [] };
 // Tom's chain colours (28 Nov 2026), the same ones planned for the foot switch screens: red for
 // the vocal, yellow for the acoustic, blue for the electric, orange for the bass. A mixer channel
 // takes the colour of the effects chain on its input socket, so one colour means one sound
-// everywhere. The stomp (green) and the duo partner (purple) are stand-ins until Tom chooses.
-const chainColours = { vocal: '#ff5a52', acoustic: '#ffd23f', electric: '#4c8dff', bass: '#ff9330', stomp: '#34d27b', kick: '#34d27b' };
+// everywhere. The stomp is purple and the duo partner green (Tom, 28 Nov 2026).
+const chainColours = { vocal: '#ff5a52', acoustic: '#ffd23f', electric: '#4c8dff', bass: '#ff9330', stomp: '#c08cff', kick: '#c08cff' };
 
 const colourOfName = (name) =>
 {
     const n = String (name || '').toLowerCase();
-    if (n.startsWith ('duo')) return '#c08cff';
+    if (n.startsWith ('duo')) return '#34d27b';
     return chainColours[Object.keys (chainColours).find ((k) => n.includes (k))] || '';
 };
 
